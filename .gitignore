@@ -1,0 +1,22 @@
+node_modules/
+
+# Segredos — NUNCA commitar
+.env
+**/.env
+*.env.local
+*.env.production
+
+# Dados e sessões
+backend/data/
+backend/data/backups/
+whatsapp-session/
+backend/wwebjs_cache/
+
+# Build
+frontend/dist/
+
+# Logs e temporários
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db

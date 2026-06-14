@@ -1,0 +1,382 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --brand: #f97316;
+    --brand-dim: #ea580c;
+    --brand-bright: #fb923c;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  .dark body {
+    background-color: #0f0f0f;
+    color: #e5e5e5;
+  }
+
+  * { border-color: rgb(229 231 235); }
+  .dark * { border-color: #2a2a2a; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #f97316; }
+}
+
+@layer components {
+
+  /* ── Botões ── */
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
+           transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed
+           focus:outline-none focus:ring-2 focus:ring-offset-1 whitespace-nowrap;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, #f97316 0%, #f59e0b 100%);
+    @apply btn text-white focus:ring-orange-500;
+  }
+  .btn-secondary {
+    @apply btn bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 focus:ring-slate-300 shadow-sm;
+  }
+  .btn-danger {
+    @apply btn bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 focus:ring-red-400;
+  }
+  .btn-ghost {
+    @apply btn text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus:ring-slate-300;
+  }
+  .btn-sm { @apply px-3 py-1.5 text-xs rounded-md; }
+  .btn-icon { @apply p-2 rounded-lg transition-colors; }
+
+  /* ── Inputs ── */
+  .input {
+    @apply w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg
+           focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400
+           placeholder:text-slate-400 transition-colors;
+  }
+  .input-sm { @apply input py-1.5 text-xs; }
+  .label { @apply block text-sm font-medium text-slate-700 mb-1.5; }
+  .label-sm { @apply block text-xs font-medium text-slate-600 mb-1; }
+
+  /* ── Cards ── */
+  .card {
+    @apply bg-white rounded-xl border border-slate-200 shadow-sm;
+  }
+  .card-header {
+    @apply px-6 py-4 border-b border-slate-100 flex items-center justify-between;
+  }
+  .card-body { @apply p-6; }
+
+  /* ── Tabela ── */
+  .table-wrapper { @apply card overflow-hidden; }
+  .table { @apply w-full text-sm min-w-[520px]; }
+  .table thead { @apply bg-slate-50 border-b border-slate-200; }
+  .table th {
+    @apply px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap;
+  }
+  .table th.text-right { text-align: right; }
+  .table th.text-center { text-align: center; }
+  .table td { @apply px-4 py-3 text-slate-700; }
+  .table td.text-right { text-align: right; }
+  .table td.text-center { text-align: center; }
+  .table tbody tr { @apply border-b border-slate-100 hover:bg-orange-50/30 transition-colors last:border-0; }
+  .table td.col-categoria { background-color: rgb(248 250 252); }
+  .table td.col-preco { background-color: rgb(255 247 237); color: rgb(154 52 18); }
+  .table td.col-custo { background-color: rgb(254 243 199); color: rgb(146 64 14); }
+  .table td.col-margem { background-color: rgb(240 253 244); }
+  .table td.col-cmv { background-color: rgb(248 250 252); }
+
+  /* ── Badges ── */
+  .badge { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold; }
+  .badge-green  { @apply badge bg-emerald-100 text-emerald-700; }
+  .badge-yellow { @apply badge bg-amber-100 text-amber-700; }
+  .badge-red    { @apply badge bg-red-100 text-red-700; }
+  .badge-blue   { @apply badge bg-blue-100 text-blue-700; }
+  .badge-gray   { @apply badge bg-slate-100 text-slate-600; }
+  .badge-orange { @apply badge bg-orange-100 text-orange-700; }
+
+  /* ── Page header ── */
+  .page-header { @apply flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6; }
+  .page-title { @apply text-2xl font-bold text-slate-900; }
+  .page-subtitle { @apply text-sm text-slate-500 mt-0.5; }
+
+  /* ── Empty state ── */
+  .empty-state { @apply flex flex-col items-center justify-center py-16 text-center; }
+  .empty-icon  { @apply text-5xl mb-3 opacity-50; }
+  .empty-title { @apply text-base font-semibold text-slate-500; }
+  .empty-sub   { @apply text-sm text-slate-400 mt-1; }
+
+  /* ── Search bar ── */
+  .search-bar { @apply relative; }
+  .search-bar input { @apply pl-9; }
+  .search-icon { @apply absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none; }
+}
+
+/* Btn primary hover */
+.btn-primary:hover { background: linear-gradient(135deg, #ea580c 0%, #d97706 100%); }
+
+/* ═══════════════════════════════════════════
+   DARK MODE — Tema Preto & Laranja
+═══════════════════════════════════════════ */
+
+/* Base */
+.dark .card {
+  background-color: #161616;
+  border-color: #2a2a2a;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+.dark .card:hover { border-color: rgba(249, 115, 22, 0.2); }
+.dark .card-header { border-color: #242424; }
+
+/* Botões */
+.dark .btn-secondary {
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  border-color: #333;
+}
+.dark .btn-secondary:hover { background-color: #2a2a2a; border-color: rgba(249,115,22,0.4); }
+.dark .btn-ghost { color: #888; }
+.dark .btn-ghost:hover { background-color: #1e1e1e; color: #f5f5f5; }
+
+/* Inputs */
+.dark .input {
+  background-color: #1a1a1a;
+  border-color: #333;
+  color: #e5e5e5;
+}
+.dark .input::placeholder { color: #555; }
+.dark .input:focus { border-color: #f97316; box-shadow: 0 0 0 2px rgba(249,115,22,0.2); }
+
+/* Labels */
+.dark .label { color: #a3a3a3; }
+.dark .label-sm { color: #737373; }
+
+/* Page */
+.dark .page-title { color: #f5f5f5; }
+.dark .page-subtitle { color: #666; }
+
+/* Tabela */
+.dark .table thead { background-color: #1a1a1a; border-color: #2a2a2a; }
+.dark .table th { color: #666; }
+.dark .table td { color: #c4c4c4; }
+.dark .table tbody tr { border-color: #1e1e1e; }
+.dark .table tbody tr:hover { background-color: rgba(249, 115, 22, 0.04); }
+.dark .table td.col-categoria { background-color: rgba(30,30,30,0.8); }
+.dark .table td.col-preco { background-color: rgba(249,115,22,0.08); color: #fb923c; }
+.dark .table td.col-custo { background-color: rgba(245,158,11,0.08); color: #fbbf24; }
+.dark .table td.col-margem { background-color: rgba(16,185,129,0.06); }
+.dark .table td.col-cmv { background-color: rgba(30,30,30,0.8); }
+
+/* Badges */
+.dark .badge-green  { background-color: rgba(16,185,129,0.15); color: #34d399; }
+.dark .badge-yellow { background-color: rgba(245,158,11,0.15); color: #fbbf24; }
+.dark .badge-red    { background-color: rgba(239,68,68,0.15); color: #f87171; }
+.dark .badge-blue   { background-color: rgba(59,130,246,0.15); color: #60a5fa; }
+.dark .badge-gray   { background-color: #2a2a2a; color: #888; }
+.dark .badge-orange { background-color: rgba(249,115,22,0.15); color: #fb923c; }
+
+/* Empty */
+.dark .empty-title { color: #555; }
+.dark .empty-sub   { color: #404040; }
+
+/* ── Efeito glow no botão primário no dark ── */
+.dark .btn-primary {
+  box-shadow: 0 0 15px rgba(249, 115, 22, 0.3);
+}
+.dark .btn-primary:hover {
+  box-shadow: 0 0 25px rgba(249, 115, 22, 0.45);
+}
+
+/* ── Scrollbar no dark ── */
+.dark ::-webkit-scrollbar-track { background: #0a0d14; }
+
+/* ═══════════════════════════════════════════════════════════════
+   TEMA ESPACIAL — slate profundo + âmbar  (shell / navegação)
+   Tokens consumidos pelo App.jsx via var(...)
+═══════════════════════════════════════════════════════════════ */
+:root {
+  --space-base:     #0a0d14;   /* fundo mais profundo (céu noturno) */
+  --space-surface:  #0d111a;   /* sidebar / topbar */
+  --space-elev:     #121826;   /* superfícies elevadas */
+  --space-elev-2:   #161d2e;   /* hover */
+  --hairline:       rgba(148,163,184,0.10);  /* traço fino */
+  --hairline-soft:  rgba(148,163,184,0.06);
+  --hairline-strong:rgba(148,163,184,0.16);
+  --txt-strong:     #e8edf6;
+  --txt:            #aab4c5;
+  --txt-dim:        #5b6678;
+  --txt-faint:      #3a4252;
+  --accent:         #f97316;
+  --accent-2:       #f59e0b;
+  --accent-soft:    rgba(249,115,22,0.12);
+  --accent-rgb:     249, 115, 22;   /* componentes RGB do accent (p/ rgba()) */
+  --jade:           #34d399;   /* status / online */
+  --surface-glass:  rgba(13,17,26,0.72);   /* sidebar/topbar translúcido */
+}
+
+/* Helpers de texto por token (flipam com o tema) */
+.t-strong { color: var(--txt-strong); }
+.t-mut    { color: var(--txt); }
+.t-dim    { color: var(--txt-dim); }
+.t-faint  { color: var(--txt-faint); }
+
+/* ── Tema claro: aplica quando NÃO há .dark no <html> ──────────── */
+html:not(.dark) {
+  --space-base:     #eef1f6;
+  --space-surface:  #ffffff;
+  --space-elev:     #f5f7fa;
+  --space-elev-2:   #eceff4;
+  --hairline:       rgba(15,23,42,0.09);
+  --hairline-soft:  rgba(15,23,42,0.05);
+  --hairline-strong:rgba(15,23,42,0.14);
+  --txt-strong:     #1e293b;
+  --txt:            #475569;
+  --txt-dim:        #8a97aa;
+  --txt-faint:      #b6c0cf;
+  --surface-glass:  rgba(255,255,255,0.82);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FUNDO DO APP — camadas animadas suaves atrás de todo o sistema
+═══════════════════════════════════════════════════════════════ */
+.fundo-app {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--space-base);
+  transition: background 0.5s ease;
+}
+.fundo-app > * { position: absolute; }
+
+/* Base de cor por tema */
+[data-fundo="aurora"]   .fundo-app { background: radial-gradient(120% 90% at 50% -10%, #0d1320, var(--space-base) 70%); }
+[data-fundo="estrelas"] .fundo-app { background: radial-gradient(120% 100% at 50% 0%, #0b0f1a, #05070d 80%); }
+[data-fundo="galaxia"]  .fundo-app { background: radial-gradient(130% 110% at 70% 20%, #120a22, #06030f 75%); }
+[data-fundo="terra"]    .fundo-app { background: radial-gradient(120% 120% at 50% -30%, #0a1428, #03060f 70%); }
+[data-fundo="liso"]     .fundo-app { background: var(--space-base); }
+
+/* Tema claro — fundo limpo, esconde as camadas espaciais (brilho em fundo escuro) */
+html:not(.dark) .fundo-app {
+  background: radial-gradient(120% 90% at 50% -10%, #ffffff 0%, #e7ecf4 75%) !important;
+}
+html:not(.dark) .fundo-app > * { display: none !important; }
+
+/* Pausa global da animação */
+[data-animacao="off"] .fundo-app * { animation: none !important; }
+
+/* Estrelas do cardápio público (fixa, leve) */
+.cardapio-estrelas {
+  position: fixed; inset: -50px; z-index: 0; pointer-events: none; opacity: 0.6;
+  background-image:
+    radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,0.7), transparent),
+    radial-gradient(1px 1px at 70% 20%, rgba(255,255,255,0.5), transparent),
+    radial-gradient(1px 1px at 45% 65%, rgba(255,255,255,0.6), transparent),
+    radial-gradient(1px 1px at 85% 55%, rgba(255,255,255,0.4), transparent),
+    radial-gradient(1.5px 1.5px at 33% 85%, rgba(255,255,255,0.5), transparent);
+  background-size: 300px 300px;
+  animation: faDeriva 160s linear infinite, faPisca 8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) { .cardapio-estrelas { animation: none; } }
+
+/* ── Aurora — blobs que respiram e flutuam ─────────────────────── */
+.fa-aurora { inset: -20%; border-radius: 50%; filter: blur(70px); opacity: 0.5; }
+.fa-aurora-1 { width: 55vw; height: 55vw; top: -10%; right: -5%;  background: radial-gradient(circle, rgba(249,115,22,0.28), transparent 65%); animation: faFlutua1 26s ease-in-out infinite; }
+.fa-aurora-2 { width: 50vw; height: 50vw; top: 5%;  left: -8%;    background: radial-gradient(circle, rgba(99,102,241,0.26), transparent 65%); animation: faFlutua2 32s ease-in-out infinite; }
+.fa-aurora-3 { width: 60vw; height: 60vw; bottom: -25%; left: 25%; background: radial-gradient(circle, rgba(245,158,11,0.16), transparent 65%); animation: faFlutua3 38s ease-in-out infinite; }
+@keyframes faFlutua1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-4%, 5%) scale(1.12); } }
+@keyframes faFlutua2 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(6%, -3%) scale(1.1); } }
+@keyframes faFlutua3 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-5%, -4%) scale(1.15); } }
+
+/* ── Campo de estrelas — duas camadas com parallax lento ───────── */
+.fa-estrelas {
+  inset: -50px;
+  background-image:
+    radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,0.9), transparent),
+    radial-gradient(1.5px 1.5px at 70% 20%, rgba(255,255,255,0.7), transparent),
+    radial-gradient(1px 1px   at 40% 70%, rgba(255,255,255,0.8), transparent),
+    radial-gradient(1px 1px   at 85% 60%, rgba(255,255,255,0.6), transparent),
+    radial-gradient(1.5px 1.5px at 55% 45%, rgba(255,255,255,0.75), transparent),
+    radial-gradient(1px 1px   at 10% 80%, rgba(255,255,255,0.6), transparent),
+    radial-gradient(1px 1px   at 90% 85%, rgba(255,255,255,0.7), transparent),
+    radial-gradient(1px 1px   at 33% 12%, rgba(255,255,255,0.6), transparent);
+  background-size: 300px 300px;
+  animation: faDeriva 140s linear infinite, faPisca 6s ease-in-out infinite;
+}
+.fa-estrelas-2 {
+  background-size: 200px 200px;
+  opacity: 0.55;
+  animation: faDeriva2 90s linear infinite, faPisca 9s ease-in-out infinite;
+}
+@keyframes faDeriva  { from { transform: translateY(0); }    to { transform: translateY(-300px); } }
+@keyframes faDeriva2 { from { transform: translateY(0); }    to { transform: translateY(200px); } }
+@keyframes faPisca   { 0%,100% { opacity: 0.85; } 50% { opacity: 0.45; } }
+
+/* ── Galáxia — nebulosa girando devagar + núcleo ───────────────── */
+.fa-nebula { border-radius: 50%; filter: blur(60px); top: 50%; left: 50%; }
+.fa-nebula-1 { width: 90vw; height: 90vw; margin: -45vw 0 0 -45vw; background: conic-gradient(from 0deg, rgba(129,90,248,0.22), rgba(56,189,248,0.10), rgba(236,72,153,0.16), rgba(129,90,248,0.22)); opacity: 0.6; animation: faGira 120s linear infinite; }
+.fa-nebula-2 { width: 60vw; height: 60vw; margin: -30vw 0 0 -30vw; background: conic-gradient(from 180deg, rgba(56,189,248,0.18), transparent, rgba(168,85,247,0.20), transparent); opacity: 0.5; animation: faGiraInv 90s linear infinite; }
+.fa-nucleo { width: 24vw; height: 24vw; top: 50%; left: 50%; margin: -12vw 0 0 -12vw; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.65), rgba(196,181,253,0.25) 40%, transparent 70%); filter: blur(20px); animation: faPulsa 12s ease-in-out infinite; }
+@keyframes faGira    { from { transform: rotate(0); }   to { transform: rotate(360deg); } }
+@keyframes faGiraInv { from { transform: rotate(0); }   to { transform: rotate(-360deg); } }
+@keyframes faPulsa   { 0%,100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.12); opacity: 1; } }
+
+/* ── Planeta Terra — esfera azul com atmosfera, girando a superfície ── */
+.fa-terra-wrap { bottom: -40vw; left: 50%; width: 90vw; height: 90vw; margin-left: -45vw; }
+.fa-terra {
+  position: absolute; inset: 0; border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255,255,255,0.18), transparent 35%),
+    radial-gradient(ellipse 30% 18% at 60% 45%, rgba(74,222,128,0.5), transparent 60%),
+    radial-gradient(ellipse 22% 14% at 30% 65%, rgba(34,197,94,0.45), transparent 60%),
+    radial-gradient(ellipse 18% 12% at 75% 70%, rgba(132,204,22,0.4), transparent 60%),
+    radial-gradient(circle at 50% 50%, #1d4ed8, #0c2a6b 70%, #06173f);
+  background-size: 140% 140%, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+  box-shadow: inset -30px -20px 60px rgba(0,0,0,0.6), inset 20px 15px 50px rgba(96,165,250,0.25);
+  animation: faTerraGira 80s linear infinite;
+}
+.fa-terra-atm {
+  position: absolute; inset: -4%; border-radius: 50%;
+  background: radial-gradient(circle, transparent 60%, rgba(56,189,248,0.28) 72%, transparent 80%);
+  filter: blur(8px); animation: faPulsa 14s ease-in-out infinite;
+}
+@keyframes faTerraGira { from { background-position: 0% 50%, 0 0, 0 0, 0 0, 0 0; } to { background-position: 140% 50%, 0 0, 0 0, 0 0, 0 0; } }
+
+/* ── Estrelas cadentes ─────────────────────────────────────────── */
+.fa-cadentes { inset: 0; }
+.fa-cadente {
+  position: absolute; width: 2px; height: 2px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 4px 1px rgba(255,255,255,0.8);
+  opacity: 0; transform: rotate(18deg);
+  animation-name: faCadente; animation-timing-function: ease-in; animation-iteration-count: infinite;
+}
+.fa-cadente::after {
+  content: ''; position: absolute; top: 0; right: 2px; width: 90px; height: 1px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.85), transparent);
+}
+@keyframes faCadente {
+  0% { opacity: 0; transform: translate(0,0) rotate(18deg); }
+  6% { opacity: 1; }
+  18% { opacity: 1; }
+  26% { opacity: 0; transform: translate(260px, 90px) rotate(18deg); }
+  100% { opacity: 0; transform: translate(260px, 90px) rotate(18deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fundo-app * { animation: none !important; }
+}
+
+/* ── Densidade ───────────────────────────────────────────────── */
+[data-densidade="compacto"]  .main-conteudo { padding: 0.75rem !important; }
+@media (min-width: 1024px) {
+  [data-densidade="compacto"] .main-conteudo { padding: 1rem !important; }
+}
+[data-densidade="compacto"] { --gap-densidade: 0.5rem; }
+[data-densidade="confortavel"] { --gap-densidade: 1rem; }
