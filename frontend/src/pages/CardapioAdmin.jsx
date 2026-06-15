@@ -1425,7 +1425,7 @@ export default function CardapioAdmin() {
       if (!res.ok) throw new Error('Erro ao carregar');
       const data = await res.json();
       setCategorias(data);
-      if (!catAtiva && data.length > 0) setCatAtiva(data[0].id);
+      setCatAtiva(prev => prev || (data[0]?.id ?? null));
     } catch (e) { toast.error(e.message); }
     setLoading(false);
   }, []);
