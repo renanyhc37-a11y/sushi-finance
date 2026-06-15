@@ -496,6 +496,7 @@ export default function PDV() {
   const alarmRef = useRef(null);
   const [tick, setTick] = useState(0);
   const [filtroData, setFiltroData] = useState(hoje());
+  const [busca, setBusca] = useState('');
 
   // ── Config de som / impressão ───────────────────────────────
   const [colunaAtiva, setColunaAtiva] = useState('novo');
@@ -766,9 +767,16 @@ export default function PDV() {
   // Agrupa pedidos por status para o kanban. Nas colunas ATIVAS, ordena por
   // prioridade: quem está esperando há mais tempo aparece em cima (= o que
   // deve sair primeiro). Resolve o "não sei o que sai primeiro" da Saipos.
+  const pedidosFiltrados = busca.trim()
+    ? pedidos.filter(p => {
+        const q = busca.trim().toLowerCase();
+        return String(p.numero).includes(q) || (p.cliente_nome || '').toLowerCase().includes(q);
+      })
+    : pedidos;
+
   const porStatus = Object.fromEntries(
     [...COLUNAS, 'cancelado'].map(s => {
-      let arr = pedidos.filter(p => p.status === s);
+      let arr = pedidosFiltrados.filter(p => p.status === s);
       if (s === 'novo' || s === 'preparando' || s === 'pronto') {
         arr = [...arr].sort((a, b) => new Date(refTempo(a) + 'Z') - new Date(refTempo(b) + 'Z'));
       }
@@ -1304,8 +1312,23 @@ export default function PDV() {
             )}
           </div>
 
+          {/* Busca rápida */}
+          <div className="relative flex-1 max-w-[200px]">
+            <input
+              type="search"
+              placeholder="Buscar #nº ou nome…"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              className="w-full text-xs font-semibold rounded-xl px-3 py-1.5 pl-7 outline-none"
+              style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }}
+            />
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 t-dim pointer-events-none">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </span>
+          </div>
+
           {/* Spacer */}
-          <div className="flex-1" />
+          <div className="flex-1 hidden md:block" />
 
           {/* Controles */}
           <div className="flex items-center gap-2">
