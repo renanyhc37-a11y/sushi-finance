@@ -568,14 +568,27 @@ function ItemModal({ item, onClose, carrinho, onConfirm }) {
   );
 }
 
-// ── TrocoInput: componente estável (memo) para não desmontar o input a cada keystroke ──
-const TrocoInput = React.memo(function TrocoInput({ troco, aPagar, onChange }) {
-  const trocoNum = troco ? Number(String(troco).replace(',', '.')) : 0;
-  const trocoOk = trocoNum >= aPagar;
+// ── TrocoInput: input não-controlado para não fechar teclado mobile ──
+const TrocoInput = React.memo(function TrocoInput({ aPagar, onBlurChange }) {
+  const ref = useRef(null);
+  const feedbackRef = useRef(null);
   const brlLocal = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  let feedback = null;
-  if (troco && trocoOk) feedback = <p className="text-xs text-green-400 font-bold mt-1.5">Troco: {brlLocal(trocoNum - aPagar)}</p>;
-  else if (troco && !trocoOk) feedback = <p className="text-xs text-amber-400 mt-1.5">O valor precisa ser ≥ {brlLocal(aPagar)}</p>;
+
+  function handleInput(e) {
+    const raw = e.target.value;
+    const num = raw ? Number(String(raw).replace(',', '.')) : 0;
+    if (!feedbackRef.current) return;
+    if (raw && num >= aPagar) {
+      feedbackRef.current.textContent = 'Troco: ' + brlLocal(num - aPagar);
+      feedbackRef.current.style.color = '#4ade80';
+    } else if (raw && num < aPagar) {
+      feedbackRef.current.textContent = 'O valor precisa ser ≥ ' + brlLocal(aPagar);
+      feedbackRef.current.style.color = '#fbbf24';
+    } else {
+      feedbackRef.current.textContent = '';
+    }
+  }
+
   return (
     <div className="mt-2.5 rounded-xl p-3" style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}>
       <label className="text-xs text-zinc-500 font-medium flex items-center gap-1.5 mb-2">
@@ -584,18 +597,18 @@ const TrocoInput = React.memo(function TrocoInput({ troco, aPagar, onChange }) {
       <div className="relative">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">R$</span>
         <input
+          ref={ref}
           type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*"
           autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false"
-          placeholder={`Valor exato: ${brlLocal(aPagar)}`}
-          value={troco}
-          onChange={e => onChange(e.target.value)}
+          placeholder={`Deixe em branco se tiver o valor exato`}
+          onInput={handleInput}
+          onBlur={e => onBlurChange(e.target.value)}
           className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm text-white outline-none"
           style={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)' }}
           onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-          onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
         />
       </div>
-      <div style={{ minHeight: '1.25rem' }}>{feedback}</div>
+      <div ref={feedbackRef} className="text-xs mt-1.5" style={{ minHeight: '1.25rem' }} />
     </div>
   );
 });
@@ -709,7 +722,7 @@ export default function Cardapio() {
 
   const [upsellNudge, setUpsellNudge] = useState(false);
   const nudgeTimerRef = useRef(null);
-  const onTrocoChange = useCallback(v => setForm(p => ({ ...p, troco_para: v })), []);
+  const onTrocoBlur = useCallback(v => setForm(p => ({ ...p, troco_para: v })), []);
 
   // Sugestões de upsell: prioriza bebidas/sobremesas/molhos, exclui itens já no carrinho
   function getSugestoes(carr) {
@@ -1142,9 +1155,8 @@ export default function Cardapio() {
         {/* Troco — só para dinheiro */}
         {form.pagamento === 'dinheiro' && (
           <TrocoInput
-            troco={form.troco_para}
             aPagar={totalValor - calcDesconto()}
-            onChange={onTrocoChange}
+            onBlurChange={onTrocoBlur}
           />
         )}
       </div>
