@@ -852,8 +852,8 @@ export default function PDV() {
             const linhas = pedido.observacao.split('\n');
             const obsNormal = linhas.filter(l => !l.startsWith('📩 WhatsApp:')).join(' ').replace(/\s+/g, ' ').trim();
             const wppMsgs = linhas.filter(l => l.startsWith('📩 WhatsApp:')).map(l => l.replace('📩 WhatsApp:', '').trim()).filter(Boolean);
-            const obsTrunc = obsNormal.length > 100 ? obsNormal.slice(0, 100) + '…' : obsNormal;
-            const wppRecentes = wppMsgs.slice(-3);
+            const obsTrunc = obsNormal.length > 60 ? obsNormal.slice(0, 60) + '…' : obsNormal;
+            const wppRecentes = wppMsgs.slice(-2);
             return (<>
               {obsTrunc && (
                 <div className="flex items-start gap-1.5 mb-2 px-2.5 py-1.5 rounded-xl"
