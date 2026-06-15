@@ -27,7 +27,7 @@ export default function ServidorMonitor() {
     async function checar() {
       try {
         const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 5000);
+        const t = setTimeout(() => ctrl.abort(), 12000);
         const r = await fetch('/api/health', { signal: ctrl.signal, cache: 'no-store' });
         clearTimeout(t);
         if (!r.ok) throw new Error('health nao ok');
@@ -46,8 +46,8 @@ export default function ServidorMonitor() {
         }
       } catch {
         falhasRef.current++;
-        // 4 falhas seguidas (≈32s) = considera fora, evita alarme por engasgo
-        if (falhasRef.current >= 4 && !foraRef.current) {
+        // 6 falhas seguidas (≈80s) = considera fora, evita alarme por engasgo
+        if (falhasRef.current >= 6 && !foraRef.current) {
           foraRef.current = true;
           desdeRef.current = new Date();
           setEstado('fora');
@@ -57,7 +57,7 @@ export default function ServidorMonitor() {
     }
 
     checar();
-    const iv = setInterval(checar, 8000);
+    const iv = setInterval(checar, 15000);
     // Enquanto fora E não dispensado, repete o som a cada 20s
     beepIv = setInterval(() => { if (foraRef.current && !dispensadoRef.current) beep(); }, 20000);
 
