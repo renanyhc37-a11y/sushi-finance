@@ -11,265 +11,207 @@ const STATUS = {
 const ETAPAS = ['novo', 'preparando', 'pronto', 'entregue'];
 
 // ── Jogo: Sushi Ninja Cut ────────────────────────────────────
-const SUSHIS = ['🍣','🍱','🥟','🦐','🐟','🍙','🥢'];
+const SUSHIS = ['🍣','🍱','🥟','🦐','🐟','🍙','🌊'];
 const BOMBS  = ['💣'];
 
 function SushiNinja() {
-  const canvasRef = useRef(null);
-  const stateRef  = useRef(null); // game state (mutable, não causa re-render)
-  const rafRef    = useRef(null);
-  const [phase, setPhase]   = useState('idle'); // idle | playing | dead
-  const [score, setScore]   = useState(0);
-  const [lives, setLives]   = useState(3);
-  const [best,  setBest]    = useState(() => Number(localStorage.getItem('sninja_best') || 0));
-  const finalScore = useRef(0);
+  const canvasRef  = useRef(null);
+  const stateRef   = useRef({ running: false, pieces: [], blade: [], particles: [], score: 0, lives: 3, spawnTimer: 0, spawnInterval: 80, frame: 0 });
+  const rafRef     = useRef(null);
+  const phaseRef   = useRef('idle');
+  const [ui, setUi] = useState({ phase: 'idle', score: 0, lives: 3, best: Number(localStorage.getItem('sninja_best') || 0) });
 
-  const initState = () => ({
-    pieces: [],
-    blade: [],         // últimas posições do cursor/touch
-    particles: [],     // pedaços cortados
-    spawnTimer: 0,
-    spawnInterval: 80, // frames entre spawns (vai diminuindo)
-    frame: 0,
-    score: 0,
-    lives: 3,
-    running: true,
-  });
-
-  const spawnPiece = (s, W) => {
+  const spawnPiece = (W, H) => {
     const isBomb = Math.random() < 0.12;
-    const x = W * 0.1 + Math.random() * W * 0.8;
-    const vy = -(12 + Math.random() * 7);
-    const vx = (Math.random() - 0.5) * 3;
-    const emoji = isBomb ? BOMBS[0] : SUSHIS[Math.floor(Math.random() * SUSHIS.length)];
-    return { x, y: s.height ?? 400, vy, vx, rot: Math.random() * 360, rotV: (Math.random()-0.5)*6, emoji, r: 30, isBomb, sliced: false, alpha: 1 };
+    return {
+      x: W * 0.1 + Math.random() * W * 0.8, y: H + 10,
+      vy: -(11 + Math.random() * 6), vx: (Math.random() - 0.5) * 3,
+      rot: Math.random() * 360, rotV: (Math.random() - 0.5) * 6,
+      emoji: isBomb ? BOMBS[0] : SUSHIS[Math.floor(Math.random() * SUSHIS.length)],
+      r: 28, isBomb, sliced: false, alpha: 1,
+    };
   };
 
-  const startGame = () => {
+  const endGame = useCallback((finalScore) => {
+    cancelAnimationFrame(rafRef.current);
+    stateRef.current.running = false;
+    phaseRef.current = 'dead';
+    const best = Number(localStorage.getItem('sninja_best') || 0);
+    const newBest = finalScore > best ? finalScore : best;
+    if (finalScore > best) localStorage.setItem('sninja_best', finalScore);
+    setUi({ phase: 'dead', score: finalScore, lives: 0, best: newBest });
+  }, []);
+
+  const startGame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    stateRef.current = initState();
-    stateRef.current.width  = canvas.width;
-    stateRef.current.height = canvas.height;
-    finalScore.current = 0;
-    setScore(0); setLives(3); setPhase('playing');
-  };
+    cancelAnimationFrame(rafRef.current);
 
-  useEffect(() => {
-    if (phase !== 'playing') return;
-    const canvas = canvasRef.current;
-    const ctx    = canvas.getContext('2d');
-    const s      = stateRef.current;
     const W = canvas.width, H = canvas.height;
-    s.width = W; s.height = H;
+    const s = stateRef.current;
+    s.running = true; s.pieces = []; s.blade = []; s.particles = [];
+    s.score = 0; s.lives = 3; s.spawnTimer = 0; s.spawnInterval = 80; s.frame = 0;
+    phaseRef.current = 'playing';
+    setUi(u => ({ ...u, phase: 'playing', score: 0, lives: 3 }));
+
+    const ctx = canvas.getContext('2d');
+    const G = 0.38;
 
     const loop = () => {
       if (!s.running) return;
       s.frame++;
       ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, W, H);
 
-      // fundo
-      ctx.fillStyle = '#070707';
-      ctx.fillRect(0, 0, W, H);
-
-      // grid sutil
-      ctx.strokeStyle = 'rgba(249,115,22,0.04)';
-      ctx.lineWidth = 1;
-      for (let i = 0; i < W; i += 40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,H); ctx.stroke(); }
-      for (let i = 0; i < H; i += 40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(W,i); ctx.stroke(); }
+      // grid
+      ctx.strokeStyle = 'rgba(249,115,22,0.05)'; ctx.lineWidth = 1;
+      for (let i = 0; i < W; i += 44) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,H); ctx.stroke(); }
+      for (let i = 0; i < H; i += 44) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(W,i); ctx.stroke(); }
 
       // spawn
       s.spawnTimer++;
       if (s.spawnTimer >= s.spawnInterval) {
         s.spawnTimer = 0;
-        s.pieces.push(spawnPiece(s, W));
-        if (s.spawnInterval > 35) s.spawnInterval -= 0.3;
+        s.pieces.push(spawnPiece(W, H));
+        if (s.spawnInterval > 38) s.spawnInterval -= 0.25;
       }
 
-      // física das peças
-      const G = 0.38;
-      s.pieces = s.pieces.filter(p => p.alpha > 0.05);
+      // física
+      s.pieces = s.pieces.filter(p => p.alpha > 0.04);
       for (const p of s.pieces) {
         if (!p.sliced) {
           p.vy += G; p.x += p.vx; p.y += p.vy; p.rot += p.rotV;
-          // caiu sem ser cortado
-          if (p.y > H + 50 && !p.isBomb) {
-            s.lives--;
-            setLives(s.lives);
-            if (s.lives <= 0) { s.running = false; finalScore.current = s.score; setPhase('dead'); return; }
+          if (p.y > H + 60) {
+            if (!p.isBomb) {
+              s.lives = Math.max(0, s.lives - 1);
+              setUi(u => ({ ...u, lives: s.lives }));
+              if (s.lives <= 0) { endGame(s.score); return; }
+            }
             p.alpha = 0;
           }
-          if (p.y > H + 50 && p.isBomb) p.alpha = 0;
-        } else {
-          // pedaço cortado: some
-          p.alpha -= 0.05;
-        }
+        } else { p.alpha -= 0.06; }
       }
 
-      // desenha peças
-      ctx.font = '42px serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      // draw pieces
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       for (const p of s.pieces) {
         if (p.alpha <= 0) continue;
-        ctx.save();
-        ctx.globalAlpha = p.alpha;
-        ctx.translate(p.x, p.y);
-        ctx.rotate((p.rot * Math.PI) / 180);
-        ctx.fillText(p.emoji, 0, 0);
+        ctx.save(); ctx.globalAlpha = p.alpha;
+        ctx.translate(p.x, p.y); ctx.rotate(p.rot * Math.PI / 180);
+        ctx.font = '40px serif'; ctx.fillText(p.emoji, 0, 0);
         ctx.restore();
       }
 
-      // partículas de corte
+      // partículas
       s.particles = s.particles.filter(p => p.life > 0);
       for (const p of s.particles) {
-        p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life--;
-        ctx.save();
-        ctx.globalAlpha = p.life / 20;
-        ctx.font = '22px serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(p.emoji, p.x, p.y);
-        ctx.restore();
+        p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.life--;
+        ctx.save(); ctx.globalAlpha = p.life / 18;
+        ctx.font = '20px serif'; ctx.textAlign = 'center';
+        ctx.fillText(p.emoji, p.x, p.y); ctx.restore();
       }
 
-      // rastro da lâmina
+      // lâmina
       if (s.blade.length > 1) {
         ctx.save();
-        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-        ctx.lineWidth = 3;
-        ctx.lineCap  = 'round';
-        ctx.lineJoin = 'round';
-        ctx.shadowColor = '#f97316';
-        ctx.shadowBlur  = 12;
-        ctx.beginPath();
-        ctx.moveTo(s.blade[0].x, s.blade[0].y);
-        for (let i = 1; i < s.blade.length; i++) {
-          ctx.lineTo(s.blade[i].x, s.blade[i].y);
-        }
-        ctx.stroke();
-        ctx.restore();
-        s.blade = s.blade.slice(-10);
+        const grad = ctx.createLinearGradient(s.blade[0].x, s.blade[0].y, s.blade[s.blade.length-1].x, s.blade[s.blade.length-1].y);
+        grad.addColorStop(0, 'rgba(255,255,255,0)');
+        grad.addColorStop(1, 'rgba(255,200,100,0.9)');
+        ctx.strokeStyle = grad; ctx.lineWidth = 3;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.shadowColor = '#f97316'; ctx.shadowBlur = 14;
+        ctx.beginPath(); ctx.moveTo(s.blade[0].x, s.blade[0].y);
+        for (let i = 1; i < s.blade.length; i++) ctx.lineTo(s.blade[i].x, s.blade[i].y);
+        ctx.stroke(); ctx.restore();
+        s.blade = s.blade.slice(-12);
       }
 
-      // HUD
-      ctx.fillStyle = '#f1f5f9';
-      ctx.font = 'bold 22px system-ui';
-      ctx.textAlign = 'left';
-      ctx.fillText(`${s.score}`, 12, 30);
-      ctx.font = '13px system-ui';
-      ctx.fillStyle = '#64748b';
-      ctx.fillText('pts', 12, 48);
-      // vidas
-      ctx.font = '20px serif';
-      ctx.textAlign = 'right';
-      ctx.fillText('❤️'.repeat(Math.max(0, s.lives)), W - 10, 30);
+      // HUD score
+      ctx.save();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 24px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.shadowColor = '#f97316'; ctx.shadowBlur = 8;
+      ctx.fillText(s.score, 12, 10); ctx.restore();
+      // HUD vidas
+      ctx.font = '18px serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+      ctx.fillText('❤️'.repeat(Math.max(0, s.lives)), W - 8, 10);
 
       rafRef.current = requestAnimationFrame(loop);
     };
-
     rafRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [phase]);
+  }, [endGame]);
 
-  // detecção de corte via mouse/touch
-  const getPos = (e, canvas) => {
+  const getPos = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
     const r = canvas.getBoundingClientRect();
-    const scaleX = canvas.width  / r.width;
-    const scaleY = canvas.height / r.height;
+    const sx = canvas.width / r.width, sy = canvas.height / r.height;
     const src = e.touches ? e.touches[0] : e;
-    return { x: (src.clientX - r.left) * scaleX, y: (src.clientY - r.top) * scaleY };
+    return { x: (src.clientX - r.left) * sx, y: (src.clientY - r.top) * sy };
   };
 
-  const slice = (pos) => {
+  const onMove = useCallback((e) => {
+    e.preventDefault();
+    if (phaseRef.current !== 'playing') return;
+    const pos = getPos(e);
+    if (!pos) return;
     const s = stateRef.current;
-    if (!s || !s.running) return;
     s.blade.push(pos);
-    // checar colisão com peças
     for (const p of s.pieces) {
       if (p.sliced || p.alpha <= 0) continue;
       const dx = pos.x - p.x, dy = pos.y - p.y;
-      if (Math.sqrt(dx*dx + dy*dy) < p.r + 10) {
-        if (p.isBomb) {
-          s.lives = 0; s.running = false;
-          finalScore.current = s.score;
-          setPhase('dead'); return;
-        }
-        p.sliced = true;
-        s.score++;
-        setScore(s.score);
-        // partículas
-        for (let i = 0; i < 5; i++) {
-          s.particles.push({
-            x: p.x, y: p.y,
-            vx: (Math.random()-0.5)*5, vy: -Math.random()*4,
-            emoji: p.emoji, life: 20,
-          });
-        }
+      if (Math.sqrt(dx*dx + dy*dy) < p.r + 12) {
+        if (p.isBomb) { endGame(s.score); return; }
+        p.sliced = true; s.score++;
+        setUi(u => ({ ...u, score: s.score }));
+        for (let i = 0; i < 5; i++) s.particles.push({
+          x: p.x, y: p.y, vx: (Math.random()-0.5)*5, vy: -Math.random()*5, emoji: p.emoji, life: 18,
+        });
       }
     }
-  };
+  }, [endGame]);
 
-  const onMove = (e) => {
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas || phase !== 'playing') return;
-    slice(getPos(e, canvas));
-  };
-
-  useEffect(() => {
-    if (phase === 'dead' && finalScore.current > best) {
-      setBest(finalScore.current);
-      localStorage.setItem('sninja_best', finalScore.current);
-    }
-  }, [phase]);
-
-  const sc = finalScore.current;
+  const { phase, score, lives, best } = ui;
 
   return (
-    <div style={{ textAlign: 'center' }}>
+    <div style={{ position: 'relative', userSelect: 'none' }}>
+      {/* canvas sempre montado */}
+      <canvas
+        ref={canvasRef} width={340} height={360}
+        style={{ width: '100%', borderRadius: 16, touchAction: 'none', display: phase === 'playing' ? 'block' : 'none', cursor: 'crosshair' }}
+        onMouseMove={onMove} onTouchMove={onMove}
+      />
+
+      {/* overlay idle */}
       {phase === 'idle' && (
-        <div>
-          <div style={{ fontSize: 52, marginBottom: 8 }}>🔪</div>
+        <div style={{ textAlign: 'center', padding: '8px 0' }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>🥷</div>
           <div style={{ fontSize: 16, fontWeight: 800, color: '#f1f5f9', marginBottom: 4 }}>Sushi Ninja Cut</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
-            Corte o sushi com o dedo! Cuidado com as bombas 💣
-          </div>
-          {best > 0 && <div style={{ fontSize: 12, color: '#f97316', marginBottom: 12 }}>🏆 Recorde: {best} pts</div>}
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Arraste o dedo para cortar os sushis!<br/>Cuidado com as bombas 💣</div>
+          {best > 0 && <div style={{ fontSize: 12, color: '#f97316', marginBottom: 14 }}>🏆 Recorde: {best} pts</div>}
           <button onClick={startGame} style={{
-            background: 'linear-gradient(135deg,#f97316,#ea580c)',
-            border: 'none', borderRadius: 14, padding: '13px 32px',
-            color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer',
+            background: 'linear-gradient(135deg,#f97316,#ea580c)', border: 'none',
+            borderRadius: 14, padding: '13px 36px', color: '#fff',
+            fontWeight: 800, fontSize: 15, cursor: 'pointer',
             boxShadow: '0 8px 24px rgba(249,115,22,0.4)',
-          }}>⚔️ Começar</button>
+          }}>⚔️ Jogar agora!</button>
         </div>
       )}
 
-      {phase === 'playing' && (
-        <div>
-          <canvas
-            ref={canvasRef} width={340} height={360}
-            style={{ width: '100%', borderRadius: 16, touchAction: 'none', display: 'block', cursor: 'crosshair' }}
-            onMouseMove={onMove}
-            onTouchMove={onMove}
-          />
-        </div>
-      )}
-
+      {/* overlay game over */}
       {phase === 'dead' && (
-        <div>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>{sc >= 40 ? '🏆' : sc >= 20 ? '⚔️' : '💣'}</div>
-          <div style={{ fontSize: 30, fontWeight: 900, color: '#f97316', marginBottom: 2 }}>{sc} pts</div>
-          {sc >= best && sc > 0
+        <div style={{ textAlign: 'center', padding: '8px 0' }}>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>{score >= 40 ? '🏆' : score >= 20 ? '🥷' : '💣'}</div>
+          <div style={{ fontSize: 32, fontWeight: 900, color: '#f97316', marginBottom: 4 }}>{score} pts</div>
+          {score >= best && score > 0
             ? <div style={{ fontSize: 13, color: '#10b981', fontWeight: 700, marginBottom: 8 }}>🎉 Novo recorde!</div>
-            : <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>Recorde: {best} pts</div>
+            : <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Recorde: {best} pts</div>
           }
           <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
-            {sc >= 40 ? 'Mestre ninja do sushi! 🥷🏆' : sc >= 20 ? 'Muito bom! Continue treinando! ⚔️' : 'A bomba te pegou! Tente de novo! 💣'}
+            {score >= 40 ? 'Mestre ninja! 🥷🏆' : score >= 20 ? 'Muito bom! Tente mais! ⚔️' : 'A bomba te pegou! 💣'}
           </div>
-          <canvas ref={canvasRef} width={0} height={0} style={{ display:'none' }} />
           <button onClick={startGame} style={{
             background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.3)',
-            borderRadius: 12, padding: '10px 24px', color: '#f97316',
+            borderRadius: 12, padding: '10px 28px', color: '#f97316',
             fontWeight: 700, fontSize: 14, cursor: 'pointer',
           }}>🔄 Jogar de novo</button>
         </div>
