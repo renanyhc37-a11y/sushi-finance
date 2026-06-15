@@ -46,8 +46,8 @@ export default function ServidorMonitor() {
         }
       } catch {
         falhasRef.current++;
-        // 2 falhas seguidas (≈16s) = considera fora, evita alarme por engasgo
-        if (falhasRef.current >= 2 && !foraRef.current) {
+        // 4 falhas seguidas (≈32s) = considera fora, evita alarme por engasgo
+        if (falhasRef.current >= 4 && !foraRef.current) {
           foraRef.current = true;
           desdeRef.current = new Date();
           setEstado('fora');
