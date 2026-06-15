@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
+import SushiNinja from '../components/SushiNinja';
 import { getToken } from '../hooks/useAuth';
 import { getUnidadeId } from '../hooks/useUnidade';
 import {
@@ -490,6 +491,7 @@ export default function PDV() {
   const [colunaAtiva, setColunaAtiva] = useState('novo');
   const [mostrarSom, setMostrarSom] = useState(false);
   const [mostrarPrint, setMostrarPrint] = useState(false);
+  const [jogoAberto, setJogoAberto] = useState(false);
   const [somAtual, setSomAtual] = useState(_somCfg.som);
   const [volumeAtual, setVolumeAtual] = useState(_somCfg.volume);
   const [printVer, setPrintVer] = useState(0); // força re-render ao mudar printCfg
@@ -1015,6 +1017,41 @@ export default function PDV() {
         getAudioCtx();
       }}>
       <Toaster position="top-center" toastOptions={{ style: { fontSize: 14 } }} />
+
+      {/* Botão flutuante do jogo */}
+      <button
+        onClick={() => setJogoAberto(true)}
+        title="Sushi Ninja – jogar na ociosidade"
+        className="fixed z-40"
+        style={{
+          bottom: 20, left: 16, width: 44, height: 44, borderRadius: '50%',
+          background: 'linear-gradient(135deg,#f97316,#dc2626)',
+          border: 'none', cursor: 'pointer', fontSize: 20,
+          boxShadow: '0 4px 16px rgba(249,115,22,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'transform .15s',
+        }}
+        onMouseEnter={e => e.currentTarget.style.transform='scale(1.12)'}
+        onMouseLeave={e => e.currentTarget.style.transform='scale(1)'}
+      >🥷</button>
+
+      {/* Modal do jogo */}
+      {jogoAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)' }}
+          onClick={e => { if (e.target === e.currentTarget) setJogoAberto(false); }}>
+          <div style={{ background: '#0f0f0f', borderRadius: 24, padding: '20px 16px 16px', width: '100%', maxWidth: 400, border: '1px solid rgba(249,115,22,0.25)', position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#f1f5f9' }}>🥷 Sushi Ninja Cut</div>
+                <div style={{ fontSize: 11, color: '#475569' }}>Modo operador — aproveite a ociosidade!</div>
+              </div>
+              <button onClick={() => setJogoAberto(false)} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 8, width: 32, height: 32, color: '#64748b', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+            <SushiNinja compact />
+          </div>
+        </div>
+      )}
 
       {/* Banner alerta novos pedidos */}
       <BannerNovoPedido
