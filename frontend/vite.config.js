@@ -41,22 +41,14 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
 
         runtimeCaching: [
-          // API: NetworkFirst — tenta rede, cai no cache se offline (5 min de validade)
+          // API: NetworkOnly — nunca cacheia, sempre busca do servidor
+          // Evita o bug de servir HTML em vez de JSON para rotas /api/
           {
             urlPattern: ({ url }) =>
               url.pathname.startsWith('/api/') ||
               url.href.includes('localhost:3001/api/') ||
               url.href.includes('192.168.15.4:3001/api/'),
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'sushi-api-cache',
-              networkTimeoutSeconds: 8,
-              expiration: {
-                maxEntries: 120,
-                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 dias
-              },
-              cacheableResponse: { statuses: [0, 200] },
-            },
+            handler: 'NetworkOnly',
           },
           // Google Fonts: CacheFirst (raramente muda)
           {
