@@ -194,7 +194,9 @@ function iniciar() {
     webVersionCache: { type: 'local', path: WWEB_CACHE_DIR },
     puppeteer: {
       headless: true,
-      executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      executablePath: process.platform === 'win32'
+        ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+        : (process.env.CHROME_PATH || '/usr/bin/chromium-browser'),
       protocolTimeout: 120000,
       timeout: 120000,
       args: [
