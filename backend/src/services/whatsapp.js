@@ -88,25 +88,31 @@ function formatarTelefone(tel) {
 
 const MENSAGENS = {
   confirmacao: (p) =>
-`🍣 *Sushi Control — Pedido Confirmado!*
+`🍣 *Pedido #${p.numero} recebido!*
 
 Olá, *${p.cliente_nome}*! 😊
 
-Seu pedido foi recebido com sucesso:
+Seu pedido foi recebido e logo entrará em preparo.
 
-📋 *Pedido:* #${p.numero}
 📦 *Itens:*
-${p.itens.map(i => `  • ${i.quantidade}x ${i.item_nome} — ${brl(i.valor_unitario * i.quantidade)}`).join('\n')}
+${p.itens.map(i => `  • ${i.quantidade}x ${i.item_nome}`).join('\n')}
 
 💰 *Total:* ${brl(p.total)}
-📍 *Entrega:* ${p.cliente_endereco}
+${p.tipo_entrega === 'retirada' ? `🏪 *Retirada no balcão*` : `📍 *Entrega:* ${p.cliente_endereco}`}
 
-⏱ Tempo estimado: *40 a 60 minutos*
-
-🔍 *Acompanhe seu pedido em tempo real:*
+🔍 *Acompanhe seu pedido:*
 ${process.env.APP_URL || 'http://localhost:3000'}/pedido/${p.id}
 
 Qualquer dúvida, é só responder esta mensagem. 🙏`,
+
+  espera: (p) =>
+`✅ *Pedido #${p.numero} recebido!*
+
+Olá, *${p.cliente_nome}*! 😊
+
+Seu pedido foi aceito e logo entrará em preparo.
+
+🔍 Acompanhe: ${process.env.APP_URL || 'http://localhost:3000'}/pedido/${p.id}`,
 
   preparando: (p) => p.tipo_entrega === 'retirada'
 ? `👨‍🍳 *Pedido #${p.numero} em preparo!*
@@ -441,6 +447,7 @@ async function notificarMudancaStatus(pedido, novoStatus) {
   console.log(`[WhatsApp] notificarMudancaStatus — pedido #${pedido.numero} → ${novoStatus} | telefone: ${pedido.cliente_telefone || 'NENHUM'}`);
   if (!pedido.cliente_telefone) return;
   const mapa = {
+    espera:     MENSAGENS.espera,
     preparando: MENSAGENS.preparando,
     pronto:     MENSAGENS.saindo,
     entregue:   MENSAGENS.entregue,

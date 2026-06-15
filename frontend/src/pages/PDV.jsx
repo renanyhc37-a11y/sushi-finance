@@ -368,15 +368,17 @@ _printCfg.mostrarPgto = _printCfg.mostrarPgto ?? true;
 // ── Configurações de status ───────────────────────────────────
 const STATUS_CFG = {
   novo:       { label: 'Novos',      Icon: Bell,         cor: '#3b82f6', bg: 'rgba(59,130,246,0.08)',  borda: 'rgba(59,130,246,0.3)'  },
+  espera:     { label: 'Espera',     Icon: Clock,        cor: '#a855f7', bg: 'rgba(168,85,247,0.08)', borda: 'rgba(168,85,247,0.3)'  },
   preparando: { label: 'Preparando', Icon: ChefHat,      cor: 'var(--accent-2)', bg: 'rgba(245,158,11,0.08)',  borda: 'rgba(245,158,11,0.3)'  },
   pronto:     { label: 'Prontos',    Icon: CheckCircle2, cor: '#10b981', bg: 'rgba(16,185,129,0.08)',  borda: 'rgba(16,185,129,0.3)'  },
   entregue:   { label: 'Entregues',  Icon: Bike,         cor: '#6b7280', bg: 'rgba(107,114,128,0.08)', borda: 'rgba(107,114,128,0.25)' },
   cancelado:  { label: 'Cancelados', Icon: X,            cor: '#ef4444', bg: 'rgba(239,68,68,0.08)',   borda: 'rgba(239,68,68,0.25)'  },
 };
 // Colunas do kanban (visíveis simultaneamente)
-const COLUNAS = ['novo','preparando','pronto','entregue'];
+const COLUNAS = ['novo','espera','preparando','pronto','entregue'];
 const AVANCAR = {
-  novo:       { status: 'preparando', label: 'Aceitar',  Icon: ChefHat },
+  novo:       { status: 'espera',     label: 'Aceitar',  Icon: Clock },
+  espera:     { status: 'preparando', label: 'Preparar', Icon: ChefHat },
   preparando: { status: 'pronto',     label: 'Pronto',   Icon: CheckCircle2 },
   pronto:     { status: 'entregue',   label: 'Entregue', Icon: Bike },
 };
@@ -475,7 +477,7 @@ const hoje = () => new Date().toISOString().slice(0, 10);
 
 export default function PDV() {
   const [pedidos, setPedidos] = useState([]);
-  const [resumo, setResumo] = useState({ novo: 0, preparando: 0, pronto: 0, entregue: 0, cancelado: 0 });
+  const [resumo, setResumo] = useState({ novo: 0, espera: 0, preparando: 0, pronto: 0, entregue: 0, cancelado: 0 });
   const [loading, setLoading] = useState(true);
   const [pedidoAberto, setPedidoAberto] = useState(null);
   const [pedidosNovosAlerta, setPedidosNovosAlerta] = useState([]);
@@ -631,10 +633,10 @@ export default function PDV() {
     try {
       await fetch(`${BASE}/pdv/pedidos/${pedido.id}/status`, {
         method: 'PATCH', headers: authH(),
-        body: JSON.stringify({ status: 'preparando' }),
+        body: JSON.stringify({ status: 'espera' }),
       });
       removerAlerta(pedido.id);
-      toast.success(`#${pedido.numero} aceito — em preparo!`);
+      toast.success(`#${pedido.numero} aceito — na fila de espera!`);
 
       // Impressão automática ao aceitar (idempotente: não reimprime se já saiu)
       const res = await fetch(`${BASE}/pdv/pedidos/${pedido.id}`, { headers: authH() });
@@ -846,13 +848,27 @@ export default function PDV() {
           </div>
 
           {/* Observação */}
-          {pedido.observacao && (
-            <div className="flex items-start gap-1.5 mb-2 px-2.5 py-1.5 rounded-xl"
-              style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
-              <span className="text-amber-400 shrink-0 flex items-center"><AlertTriangle size={13} strokeWidth={1.75} /></span>
-              <p className="text-xs text-amber-400 leading-snug">{pedido.observacao}</p>
-            </div>
-          )}
+          {pedido.observacao && (() => {
+            const linhas = pedido.observacao.split('\n');
+            const obsNormal = linhas.filter(l => !l.startsWith('📩 WhatsApp:')).join('\n').trim();
+            const wppMsgs = linhas.filter(l => l.startsWith('📩 WhatsApp:')).map(l => l.replace('📩 WhatsApp:', '').trim());
+            return (<>
+              {obsNormal && (
+                <div className="flex items-start gap-1.5 mb-2 px-2.5 py-1.5 rounded-xl"
+                  style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                  <span className="text-amber-400 shrink-0 flex items-center"><AlertTriangle size={13} strokeWidth={1.75} /></span>
+                  <p className="text-xs text-amber-400 leading-snug">{obsNormal}</p>
+                </div>
+              )}
+              {wppMsgs.length > 0 && (
+                <div className="mb-2 px-2.5 py-1.5 rounded-xl"
+                  style={{ background: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.2)' }}>
+                  <p className="text-xs font-semibold mb-1" style={{ color: '#25d366' }}>📩 WhatsApp ({wppMsgs.length})</p>
+                  {wppMsgs.map((m, i) => <p key={i} className="text-xs leading-snug" style={{ color: '#25d366', opacity: 0.85 }}>• {m}</p>)}
+                </div>
+              )}
+            </>);
+          })()}
 
           {/* Itens — clique para expandir */}
           <button onClick={() => setPedidoAberto(aberto ? null : pedido)}

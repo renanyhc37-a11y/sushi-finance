@@ -3,7 +3,7 @@ const db = require('../db/database');
 
 const router = Router();
 
-const STATUS_VALIDOS = ['novo', 'preparando', 'pronto', 'entregue', 'cancelado'];
+const STATUS_VALIDOS = ['novo', 'espera', 'preparando', 'pronto', 'entregue', 'cancelado'];
 
 // ── Camada 2: impressão idempotente ──────────────────────────
 // Estado de impressão NO SERVIDOR. Sem isto, após uma queda/reload o PDV
@@ -128,13 +128,13 @@ router.patch('/pedidos/:id/status', (req, res) => {
   db.prepare('UPDATE pdv_pedidos SET status = ? WHERE id = ?').run(status, req.params.id);
 
   // Carimba o horário da etapa (para métricas operacionais), só na 1ª vez
-  const colTempo = { preparando: 'aceito_em', pronto: 'pronto_em', entregue: 'entregue_em' }[status];
+  const colTempo = { espera: 'aceito_em', preparando: 'aceito_em', pronto: 'pronto_em', entregue: 'entregue_em' }[status];
   if (colTempo && !pedido[colTempo]) {
     try { db.prepare(`UPDATE pdv_pedidos SET ${colTempo} = datetime('now') WHERE id = ?`).run(req.params.id); } catch {}
   }
 
   // Auto-dedução de estoque quando pedido vai para "preparando"
-  if (status === 'preparando' && pedido.status === 'novo') {
+  if (status === 'preparando' && ['novo', 'espera'].includes(pedido.status)) {
     deduzirEstoque(pedido.id);
   }
 
