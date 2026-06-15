@@ -822,11 +822,9 @@ export default function PDV() {
         <div style={{ height: 3, background: `linear-gradient(90deg, ${cfg.cor}, ${cfg.cor}44)` }} />
 
         <div className="p-3">
-          {/* Linha 1: número + tempo + pagamento */}
-          <div className="flex items-center gap-2 mb-2.5">
-            <button onClick={() => setPedidoModal(pedido)}
-              className="text-xl font-black t-strong leading-none hover:opacity-70 transition-opacity active:scale-95"
-              title="Ver pedido completo">#{pedido.numero}</button>
+          {/* Linha 1: número + tempo + pagamento — toque abre modal */}
+          <button onClick={() => setPedidoModal(pedido)} className="w-full flex items-center gap-2 mb-2.5 -mx-0.5 px-0.5 py-1 rounded-xl active:opacity-60 transition-opacity" style={{ textAlign: 'left' }}>
+            <span className="text-xl font-black t-strong leading-none">#{pedido.numero}</span>
             {eNovo && (
               <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md animate-pulse"
                 style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa' }}>NOVO</span>
@@ -848,7 +846,7 @@ export default function PDV() {
                 {tempoTexto}{atraso && atraso.nivel !== 'ok' ? ` · ${atraso.label}` : ''}
               </span>
             </div>
-          </div>
+          </button>
 
           {/* Cliente + endereço */}
           <div className="mb-2">
