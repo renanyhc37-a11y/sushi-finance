@@ -681,12 +681,13 @@ export default function Cardapio() {
   // Sugestões de upsell: prioriza bebidas/sobremesas/molhos, exclui itens já no carrinho
   function getSugestoes(carr) {
     const ids = new Set(carr.map(c => c.id));
-    const PRIO = /bebida|suco|refri|água|agua|drink|cerveja|saquê|sake|chá|cha\b|sobremesa|doce|mochi|sorvete|extra|adicional|molho|teriy|acompan/i;
+    const PRIO = /bebida|suco|refri|água|agua|drink|cerveja|saquê|sake|chá|cha\b|sobremesa|doce|mochi|sorvete|extra|adicional|molho|tarê|tare|teriy|acompan|sobrem/i;
+    const PRIO_ITEM = /tarê|tare|molho|sobremesa|mochi|sorvete|refri|suco|bebida|cerveja/i;
     const prio = [], outros = [];
     for (const cat of categorias) {
       for (const item of (cat.itens || [])) {
         if (!item.disponivel || ids.has(item.id)) continue;
-        if (PRIO.test(cat.nome)) prio.push({ ...item, _catNome: cat.nome });
+        if (PRIO.test(cat.nome) || PRIO_ITEM.test(item.nome)) prio.push({ ...item, _catNome: cat.nome });
         else outros.push({ ...item, _catNome: cat.nome });
       }
     }
