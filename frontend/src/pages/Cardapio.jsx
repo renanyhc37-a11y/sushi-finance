@@ -1091,7 +1091,7 @@ export default function Cardapio() {
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">R$</span>
                 <input
-                  type="number" inputMode="decimal" step="0.01" min={aPagar}
+                  type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*"
                   placeholder={`Deixe em branco se tiver o valor exato (${brl(aPagar)})`}
                   value={form.troco_para}
                   onChange={e => setForm(p => ({ ...p, troco_para: e.target.value }))}
