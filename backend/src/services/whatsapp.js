@@ -53,7 +53,7 @@ let qrListeners = new Set(); // SSE listeners aguardando QR
 // ── Rate limiting por número ─────────────────────────────────
 // Máx 10 respostas automáticas por número a cada 60 minutos
 const _rateMap = new Map(); // telefone → { count, resetAt }
-const RATE_LIMIT = 10;
+const RATE_LIMIT = 200;
 const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hora
 
 function checkRateLimit(telefone) {
