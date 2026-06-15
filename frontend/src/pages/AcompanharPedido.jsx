@@ -293,10 +293,13 @@ export default function AcompanharPedido() {
           </div>
         </div>
 
-        {/* Jogo — aparece quando entregue */}
-        {entregue && (
+        {/* Jogo — sempre visível enquanto não cancelado */}
+        {!cancelado && (
           <div style={{ background:'#0f0f0f', border:'1px solid rgba(249,115,22,0.2)', borderRadius:18, padding:'18px 16px', marginBottom:12 }}>
-            <div style={{ fontSize:11, color:'#475569', letterSpacing:2, textTransform:'uppercase', marginBottom:12 }}>🎮 Mini jogo</div>
+            <div style={{ fontSize:11, color:'#475569', letterSpacing:2, textTransform:'uppercase', marginBottom:4 }}>🎮 Mini jogo</div>
+            <p style={{ fontSize:12, color:'#475569', marginBottom:12 }}>
+              {entregue ? 'Seu pedido chegou! Bata seu recorde! 🏆' : 'Jogue enquanto seu pedido chega! 🍣'}
+            </p>
             <SushiClicker />
           </div>
         )}
