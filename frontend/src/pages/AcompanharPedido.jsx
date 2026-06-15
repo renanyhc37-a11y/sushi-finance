@@ -11,208 +11,316 @@ const STATUS = {
 const ETAPAS = ['novo', 'preparando', 'pronto', 'entregue'];
 
 // ── Jogo: Sushi Ninja Cut ────────────────────────────────────
-const SUSHIS = ['🍣','🍱','🥟','🦐','🐟','🍙','🌊'];
-const BOMBS  = ['💣'];
+const SUSHIS  = ['🍣','🍱','🥟','🦐','🐟','🍙','🧆','🥗'];
+const SPECIAL = '⭐'; // sushi dourado vale 3pts
+const FREEZE  = '❄️'; // congela tudo por 2s
+
+function mkPiece(W, H, difficulty) {
+  const roll = Math.random();
+  const isBomb    = roll < 0.10;
+  const isSpecial = !isBomb && roll > 0.88;
+  const isFreeze  = !isBomb && !isSpecial && roll > 0.82;
+  // spawn de baixo ou das laterais
+  const side = Math.random() < 0.2 ? (Math.random() < 0.5 ? 'left' : 'right') : 'bottom';
+  let x, y, vx, vy;
+  if (side === 'bottom') {
+    x = W * 0.08 + Math.random() * W * 0.84; y = H + 20;
+    vy = -(10 + Math.random() * 6 + difficulty * 0.8);
+    vx = (Math.random() - 0.5) * 4;
+  } else if (side === 'left') {
+    x = -30; y = H * 0.3 + Math.random() * H * 0.4;
+    vx = 5 + Math.random() * 4; vy = -(3 + Math.random() * 4);
+  } else {
+    x = W + 30; y = H * 0.3 + Math.random() * H * 0.4;
+    vx = -(5 + Math.random() * 4); vy = -(3 + Math.random() * 4);
+  }
+  const emoji = isBomb ? '💣' : isSpecial ? SPECIAL : isFreeze ? FREEZE : SUSHIS[Math.floor(Math.random() * SUSHIS.length)];
+  return { x, y, vx, vy, rot: Math.random()*360, rotV: (Math.random()-0.5)*7,
+    emoji, r: 26, isBomb, isSpecial, isFreeze, sliced: false, alpha: 1, scale: 1 };
+}
 
 function SushiNinja() {
-  const canvasRef  = useRef(null);
-  const stateRef   = useRef({ running: false, pieces: [], blade: [], particles: [], score: 0, lives: 3, spawnTimer: 0, spawnInterval: 80, frame: 0 });
-  const rafRef     = useRef(null);
-  const phaseRef   = useRef('idle');
-  const [ui, setUi] = useState({ phase: 'idle', score: 0, lives: 3, best: Number(localStorage.getItem('sninja_best') || 0) });
+  const canvasRef = useRef(null);
+  const S = useRef(null); // game state
+  const rafRef = useRef(null);
+  const phaseRef = useRef('idle');
+  const [ui, setUi] = useState({ phase: 'idle', score: 0, lives: 3, combo: 0, best: Number(localStorage.getItem('sninja_best')||0) });
 
-  const spawnPiece = (W, H) => {
-    const isBomb = Math.random() < 0.12;
-    return {
-      x: W * 0.1 + Math.random() * W * 0.8, y: H + 10,
-      vy: -(11 + Math.random() * 6), vx: (Math.random() - 0.5) * 3,
-      rot: Math.random() * 360, rotV: (Math.random() - 0.5) * 6,
-      emoji: isBomb ? BOMBS[0] : SUSHIS[Math.floor(Math.random() * SUSHIS.length)],
-      r: 28, isBomb, sliced: false, alpha: 1,
-    };
-  };
-
-  const endGame = useCallback((finalScore) => {
+  const endGame = useCallback((score) => {
     cancelAnimationFrame(rafRef.current);
-    stateRef.current.running = false;
+    if (S.current) S.current.running = false;
     phaseRef.current = 'dead';
-    const best = Number(localStorage.getItem('sninja_best') || 0);
-    const newBest = finalScore > best ? finalScore : best;
-    if (finalScore > best) localStorage.setItem('sninja_best', finalScore);
-    setUi({ phase: 'dead', score: finalScore, lives: 0, best: newBest });
+    const best = Number(localStorage.getItem('sninja_best')||0);
+    if (score > best) localStorage.setItem('sninja_best', score);
+    setUi({ phase:'dead', score, lives:0, combo:0, best: Math.max(score, best) });
   }, []);
 
   const startGame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     cancelAnimationFrame(rafRef.current);
-
     const W = canvas.width, H = canvas.height;
-    const s = stateRef.current;
-    s.running = true; s.pieces = []; s.blade = []; s.particles = [];
-    s.score = 0; s.lives = 3; s.spawnTimer = 0; s.spawnInterval = 80; s.frame = 0;
+
+    S.current = {
+      running: true, pieces: [], blade: [], particles: [], floats: [],
+      score: 0, lives: 3, combo: 0, comboTimer: 0,
+      spawnTimer: 0, spawnInterval: 75, frame: 0, difficulty: 0,
+      shake: 0, frozen: 0, flashRed: 0,
+    };
     phaseRef.current = 'playing';
-    setUi(u => ({ ...u, phase: 'playing', score: 0, lives: 3 }));
+    setUi(u => ({ ...u, phase:'playing', score:0, lives:3, combo:0 }));
 
     const ctx = canvas.getContext('2d');
-    const G = 0.38;
+    const G = 0.35;
 
     const loop = () => {
-      if (!s.running) return;
-      s.frame++;
-      ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, W, H);
+      const s = S.current;
+      if (!s || !s.running) return;
+      s.frame++; s.difficulty = s.frame / 300;
 
-      // grid
-      ctx.strokeStyle = 'rgba(249,115,22,0.05)'; ctx.lineWidth = 1;
-      for (let i = 0; i < W; i += 44) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,H); ctx.stroke(); }
-      for (let i = 0; i < H; i += 44) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(W,i); ctx.stroke(); }
+      // shake offset
+      const shk = s.shake > 0 ? (Math.random()-0.5)*s.shake*8 : 0;
+      const shky = s.shake > 0 ? (Math.random()-0.5)*s.shake*8 : 0;
+      if (s.shake > 0) s.shake -= 0.08;
+
+      ctx.save();
+      ctx.translate(shk, shky);
+      ctx.clearRect(-20,-20,W+40,H+40);
+
+      // fundo gradiente
+      const bg = ctx.createLinearGradient(0,0,0,H);
+      bg.addColorStop(0,'#050505'); bg.addColorStop(1,'#0d0500');
+      ctx.fillStyle = bg; ctx.fillRect(-20,-20,W+40,H+40);
+
+      // flash vermelho (bomba/vida)
+      if (s.flashRed > 0) {
+        ctx.fillStyle = `rgba(239,68,68,${s.flashRed * 0.35})`;
+        ctx.fillRect(-20,-20,W+40,H+40);
+        s.flashRed -= 0.08;
+      }
+
+      // linhas decorativas
+      ctx.strokeStyle = 'rgba(249,115,22,0.04)'; ctx.lineWidth = 1;
+      for (let i=0;i<W;i+=50){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,H);ctx.stroke();}
+      for (let i=0;i<H;i+=50){ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(W,i);ctx.stroke();}
+
+      // efeito frozen
+      if (s.frozen > 0) {
+        ctx.fillStyle = `rgba(147,210,255,0.06)`;
+        ctx.fillRect(-20,-20,W+40,H+40);
+        s.frozen--;
+      }
 
       // spawn
       s.spawnTimer++;
       if (s.spawnTimer >= s.spawnInterval) {
         s.spawnTimer = 0;
-        s.pieces.push(spawnPiece(W, H));
-        if (s.spawnInterval > 38) s.spawnInterval -= 0.25;
+        // duplo spawn em dificuldade alta
+        const count = s.difficulty > 3 && Math.random() < 0.3 ? 2 : 1;
+        for (let i=0;i<count;i++) s.pieces.push(mkPiece(W, H, s.difficulty));
+        if (s.spawnInterval > 32) s.spawnInterval -= 0.18;
       }
 
+      // comboTimer
+      if (s.comboTimer > 0) { s.comboTimer--; if (s.comboTimer===0) s.combo=0; }
+
       // física
-      s.pieces = s.pieces.filter(p => p.alpha > 0.04);
+      const frozen = s.frozen > 0;
+      s.pieces = s.pieces.filter(p => p.alpha > 0.03);
       for (const p of s.pieces) {
         if (!p.sliced) {
-          p.vy += G; p.x += p.vx; p.y += p.vy; p.rot += p.rotV;
-          if (p.y > H + 60) {
+          if (!frozen) { p.vy += G; p.x += p.vx; p.y += p.vy; p.rot += p.rotV; }
+          // pulse nos especiais
+          if (p.isSpecial) p.scale = 1 + Math.sin(s.frame*0.15)*0.12;
+          if (p.y > H+70 || p.x < -80 || p.x > W+80) {
             if (!p.isBomb) {
-              s.lives = Math.max(0, s.lives - 1);
-              setUi(u => ({ ...u, lives: s.lives }));
-              if (s.lives <= 0) { endGame(s.score); return; }
+              s.lives = Math.max(0,s.lives-1);
+              s.shake = 1; s.flashRed = 1; s.combo = 0; s.comboTimer = 0;
+              setUi(u=>({...u, lives:s.lives, combo:0}));
+              if (s.lives<=0){endGame(s.score);ctx.restore();return;}
             }
-            p.alpha = 0;
+            p.alpha=0;
           }
-        } else { p.alpha -= 0.06; }
+        } else { p.alpha -= 0.07; }
       }
 
       // draw pieces
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
       for (const p of s.pieces) {
-        if (p.alpha <= 0) continue;
-        ctx.save(); ctx.globalAlpha = p.alpha;
-        ctx.translate(p.x, p.y); ctx.rotate(p.rot * Math.PI / 180);
-        ctx.font = '40px serif'; ctx.fillText(p.emoji, 0, 0);
+        if (p.alpha<=0) continue;
+        ctx.save(); ctx.globalAlpha=p.alpha;
+        ctx.translate(p.x,p.y); ctx.rotate(p.rot*Math.PI/180);
+        const sc = p.scale||1;
+        ctx.scale(sc,sc);
+        // glow especiais
+        if (p.isSpecial){ ctx.shadowColor='#ffd700'; ctx.shadowBlur=18; }
+        if (p.isFreeze) { ctx.shadowColor='#93d2ff'; ctx.shadowBlur=14; }
+        if (p.isBomb)   { ctx.shadowColor='#ef4444'; ctx.shadowBlur=10; }
+        ctx.font='38px serif'; ctx.fillText(p.emoji,0,0);
         ctx.restore();
       }
 
       // partículas
-      s.particles = s.particles.filter(p => p.life > 0);
+      s.particles = s.particles.filter(p=>p.life>0);
       for (const p of s.particles) {
-        p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.life--;
-        ctx.save(); ctx.globalAlpha = p.life / 18;
-        ctx.font = '20px serif'; ctx.textAlign = 'center';
-        ctx.fillText(p.emoji, p.x, p.y); ctx.restore();
+        p.x+=p.vx; p.y+=p.vy; p.vy+=0.3; p.life--;
+        ctx.save(); ctx.globalAlpha=p.life/p.maxLife;
+        if (p.type==='dot'){
+          ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+        } else {
+          ctx.font='18px serif'; ctx.textAlign='center'; ctx.fillText(p.emoji,p.x,p.y);
+        }
+        ctx.restore();
+      }
+
+      // floats (textos +pts, COMBO)
+      s.floats = s.floats.filter(f=>f.life>0);
+      for (const f of s.floats) {
+        f.y-=1.2; f.life--;
+        ctx.save(); ctx.globalAlpha=f.life/f.maxLife;
+        ctx.font=`bold ${f.size||18}px system-ui`; ctx.fillStyle=f.color||'#ffd700';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.shadowColor=f.color||'#ffd700'; ctx.shadowBlur=8;
+        ctx.fillText(f.text,f.x,f.y); ctx.restore();
       }
 
       // lâmina
-      if (s.blade.length > 1) {
+      if (s.blade.length>1) {
         ctx.save();
-        const grad = ctx.createLinearGradient(s.blade[0].x, s.blade[0].y, s.blade[s.blade.length-1].x, s.blade[s.blade.length-1].y);
-        grad.addColorStop(0, 'rgba(255,255,255,0)');
-        grad.addColorStop(1, 'rgba(255,200,100,0.9)');
-        ctx.strokeStyle = grad; ctx.lineWidth = 3;
-        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.shadowColor = '#f97316'; ctx.shadowBlur = 14;
-        ctx.beginPath(); ctx.moveTo(s.blade[0].x, s.blade[0].y);
-        for (let i = 1; i < s.blade.length; i++) ctx.lineTo(s.blade[i].x, s.blade[i].y);
-        ctx.stroke(); ctx.restore();
-        s.blade = s.blade.slice(-12);
+        for (let i=1;i<s.blade.length;i++){
+          const t=(i/s.blade.length);
+          ctx.strokeStyle=`rgba(255,${180+t*75},${t*100},${t*0.9})`;
+          ctx.lineWidth=2+t*3; ctx.lineCap='round';
+          ctx.shadowColor='#f97316'; ctx.shadowBlur=10*t;
+          ctx.beginPath(); ctx.moveTo(s.blade[i-1].x,s.blade[i-1].y);
+          ctx.lineTo(s.blade[i].x,s.blade[i].y); ctx.stroke();
+        }
+        ctx.restore();
+        s.blade=s.blade.slice(-14);
       }
 
-      // HUD score
+      // HUD
       ctx.save();
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 24px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.shadowColor = '#f97316'; ctx.shadowBlur = 8;
-      ctx.fillText(s.score, 12, 10); ctx.restore();
-      // HUD vidas
-      ctx.font = '18px serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-      ctx.fillText('❤️'.repeat(Math.max(0, s.lives)), W - 8, 10);
+      // score
+      ctx.fillStyle='#fff'; ctx.font='bold 26px system-ui';
+      ctx.textAlign='left'; ctx.textBaseline='top';
+      ctx.shadowColor='#f97316'; ctx.shadowBlur=10;
+      ctx.fillText(s.score,12,8); ctx.restore();
+      // combo badge
+      if (s.combo>=3){
+        ctx.save();
+        ctx.fillStyle=s.combo>=8?'#ffd700':s.combo>=5?'#a78bfa':'#f97316';
+        ctx.font=`bold ${s.combo>=8?16:14}px system-ui`;
+        ctx.textAlign='left'; ctx.textBaseline='top';
+        ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=12;
+        ctx.fillText(`🔥 COMBO x${s.combo}`,12,40); ctx.restore();
+      }
+      // vidas
+      ctx.font='20px serif'; ctx.textAlign='right'; ctx.textBaseline='top';
+      ctx.fillText('❤️'.repeat(Math.max(0,s.lives)),W-6,8);
+      // wave/level
+      const lv = Math.floor(s.difficulty)+1;
+      ctx.font='11px system-ui'; ctx.fillStyle='rgba(249,115,22,0.5)';
+      ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.fillText(`FASE ${lv}`,W/2,8);
 
+      ctx.restore();
       rafRef.current = requestAnimationFrame(loop);
     };
     rafRef.current = requestAnimationFrame(loop);
   }, [endGame]);
 
   const getPos = (e) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const r = canvas.getBoundingClientRect();
-    const sx = canvas.width / r.width, sy = canvas.height / r.height;
-    const src = e.touches ? e.touches[0] : e;
-    return { x: (src.clientX - r.left) * sx, y: (src.clientY - r.top) * sy };
+    const c = canvasRef.current; if (!c) return null;
+    const r = c.getBoundingClientRect();
+    const src = e.touches?e.touches[0]:e;
+    return { x:(src.clientX-r.left)*(c.width/r.width), y:(src.clientY-r.top)*(c.height/r.height) };
   };
 
   const onMove = useCallback((e) => {
     e.preventDefault();
-    if (phaseRef.current !== 'playing') return;
-    const pos = getPos(e);
-    if (!pos) return;
-    const s = stateRef.current;
+    if (phaseRef.current!=='playing') return;
+    const pos = getPos(e); if (!pos) return;
+    const s = S.current; if (!s||!s.running) return;
     s.blade.push(pos);
     for (const p of s.pieces) {
-      if (p.sliced || p.alpha <= 0) continue;
-      const dx = pos.x - p.x, dy = pos.y - p.y;
-      if (Math.sqrt(dx*dx + dy*dy) < p.r + 12) {
-        if (p.isBomb) { endGame(s.score); return; }
-        p.sliced = true; s.score++;
-        setUi(u => ({ ...u, score: s.score }));
-        for (let i = 0; i < 5; i++) s.particles.push({
-          x: p.x, y: p.y, vx: (Math.random()-0.5)*5, vy: -Math.random()*5, emoji: p.emoji, life: 18,
-        });
+      if (p.sliced||p.alpha<=0) continue;
+      const dx=pos.x-p.x, dy=pos.y-p.y;
+      if (Math.sqrt(dx*dx+dy*dy)<p.r+14) {
+        if (p.isBomb) {
+          s.shake=2; s.flashRed=2;
+          // explodir partículas
+          for(let i=0;i<10;i++) s.particles.push({x:p.x,y:p.y,vx:(Math.random()-0.5)*8,vy:-Math.random()*6,r:3+Math.random()*3,color:`hsl(${Math.random()*30},90%,50%)`,type:'dot',life:25,maxLife:25});
+          endGame(s.score); return;
+        }
+        p.sliced=true;
+        // freeze
+        if (p.isFreeze) { s.frozen=120; s.floats.push({x:p.x,y:p.y-20,text:'❄️ FREEZE!',color:'#93d2ff',life:40,maxLife:40,size:16}); }
+        // pontos
+        const pts = p.isSpecial?3:1;
+        s.score += pts * (s.combo>=8?3 : s.combo>=5?2 : s.combo>=3?1.5 : 1) | 0 || pts;
+        s.combo++; s.comboTimer=90;
+        setUi(u=>({...u, score:s.score, combo:s.combo}));
+        // float pts
+        const comboBonus = s.combo>=8?'🔥x3':s.combo>=5?'x2':s.combo>=3?'x1.5':'';
+        s.floats.push({x:p.x,y:p.y-20,text:`+${pts}${comboBonus?` ${comboBonus}`:''}`,color:p.isSpecial?'#ffd700':'#f97316',life:35,maxLife:35,size:p.isSpecial?22:16});
+        if (s.combo===3) s.floats.push({x:p.x,y:p.y-50,text:'COMBO!',color:'#f97316',life:45,maxLife:45,size:20});
+        if (s.combo===5) s.floats.push({x:p.x,y:p.y-50,text:'INCRÍVEL!',color:'#a78bfa',life:45,maxLife:45,size:20});
+        if (s.combo===8) s.floats.push({x:p.x,y:p.y-50,text:'🔥 NINJA! 🔥',color:'#ffd700',life:55,maxLife:55,size:22});
+        // partículas
+        const colors = p.isSpecial?['#ffd700','#ffe066','#fff']:['#f97316','#fb923c','#fff'];
+        for(let i=0;i<7;i++) s.particles.push({x:p.x,y:p.y,vx:(Math.random()-0.5)*7,vy:-Math.random()*6-1,r:2+Math.random()*3,color:colors[i%colors.length],type:'dot',life:20,maxLife:20});
+        for(let i=0;i<3;i++) s.particles.push({x:p.x,y:p.y,vx:(Math.random()-0.5)*5,vy:-Math.random()*4,emoji:p.emoji,type:'emoji',life:16,maxLife:16});
       }
     }
-  }, [endGame]);
+  },[endGame]);
 
-  const { phase, score, lives, best } = ui;
+  const { phase, score, lives, combo, best } = ui;
 
   return (
-    <div style={{ position: 'relative', userSelect: 'none' }}>
-      {/* canvas sempre montado */}
-      <canvas
-        ref={canvasRef} width={340} height={360}
-        style={{ width: '100%', borderRadius: 16, touchAction: 'none', display: phase === 'playing' ? 'block' : 'none', cursor: 'crosshair' }}
+    <div style={{ position:'relative', userSelect:'none' }}>
+      <canvas ref={canvasRef} width={340} height={380}
+        style={{ width:'100%', borderRadius:16, touchAction:'none', display:phase==='playing'?'block':'none', cursor:'crosshair' }}
         onMouseMove={onMove} onTouchMove={onMove}
       />
 
-      {/* overlay idle */}
-      {phase === 'idle' && (
-        <div style={{ textAlign: 'center', padding: '8px 0' }}>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>🥷</div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: '#f1f5f9', marginBottom: 4 }}>Sushi Ninja Cut</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Arraste o dedo para cortar os sushis!<br/>Cuidado com as bombas 💣</div>
-          {best > 0 && <div style={{ fontSize: 12, color: '#f97316', marginBottom: 14 }}>🏆 Recorde: {best} pts</div>}
+      {phase==='idle' && (
+        <div style={{ textAlign:'center', padding:'4px 0' }}>
+          <div style={{ fontSize:52, marginBottom:6, lineHeight:1 }}>🥷</div>
+          <div style={{ fontSize:18, fontWeight:900, color:'#f1f5f9', marginBottom:4, letterSpacing:-0.5 }}>Sushi Ninja Cut</div>
+          <div style={{ fontSize:12, color:'#64748b', marginBottom:14, lineHeight:1.6 }}>
+            ⚔️ Arraste o dedo e corte os sushis<br/>
+            ⭐ Sushi dourado vale <b style={{color:'#ffd700'}}>3 pts</b> e há combos!<br/>
+            ❄️ Gelo = modo freeze • 💣 Bomba = game over
+          </div>
+          {best>0 && <div style={{fontSize:13,color:'#f97316',marginBottom:14,fontWeight:700}}>🏆 Recorde: {best} pts</div>}
           <button onClick={startGame} style={{
-            background: 'linear-gradient(135deg,#f97316,#ea580c)', border: 'none',
-            borderRadius: 14, padding: '13px 36px', color: '#fff',
-            fontWeight: 800, fontSize: 15, cursor: 'pointer',
-            boxShadow: '0 8px 24px rgba(249,115,22,0.4)',
-          }}>⚔️ Jogar agora!</button>
+            background:'linear-gradient(135deg,#f97316,#dc2626)', border:'none',
+            borderRadius:14, padding:'14px 40px', color:'#fff', fontWeight:900,
+            fontSize:16, cursor:'pointer', boxShadow:'0 8px 28px rgba(249,115,22,0.5)',
+            letterSpacing:0.5,
+          }}>⚔️ Começar!</button>
         </div>
       )}
 
-      {/* overlay game over */}
-      {phase === 'dead' && (
-        <div style={{ textAlign: 'center', padding: '8px 0' }}>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>{score >= 40 ? '🏆' : score >= 20 ? '🥷' : '💣'}</div>
-          <div style={{ fontSize: 32, fontWeight: 900, color: '#f97316', marginBottom: 4 }}>{score} pts</div>
-          {score >= best && score > 0
-            ? <div style={{ fontSize: 13, color: '#10b981', fontWeight: 700, marginBottom: 8 }}>🎉 Novo recorde!</div>
-            : <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>Recorde: {best} pts</div>
+      {phase==='dead' && (
+        <div style={{ textAlign:'center', padding:'4px 0' }}>
+          <div style={{ fontSize:52, marginBottom:8 }}>{score>=60?'🏆':score>=30?'🥷':score>=15?'⚔️':'💣'}</div>
+          <div style={{ fontSize:34, fontWeight:900, color:'#f97316', marginBottom:4 }}>{score} pts</div>
+          {score>=best && score>0
+            ? <div style={{fontSize:13,color:'#10b981',fontWeight:800,marginBottom:8}}>🎉 NOVO RECORDE!</div>
+            : <div style={{fontSize:12,color:'#475569',marginBottom:8}}>Recorde: {best} pts</div>
           }
-          <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
-            {score >= 40 ? 'Mestre ninja! 🥷🏆' : score >= 20 ? 'Muito bom! Tente mais! ⚔️' : 'A bomba te pegou! 💣'}
+          <div style={{fontSize:13,color:'#94a3b8',marginBottom:18}}>
+            {score>=60?'Lendário! Você é um Sushi Ninja Master! 🏆':
+             score>=30?'Incrível! Mestre ninja! 🥷':
+             score>=15?'Bom! Continue treinando! ⚔️':
+             'A bomba te pegou! Revanche! 💣'}
           </div>
           <button onClick={startGame} style={{
-            background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.3)',
-            borderRadius: 12, padding: '10px 28px', color: '#f97316',
-            fontWeight: 700, fontSize: 14, cursor: 'pointer',
+            background:'rgba(249,115,22,0.15)', border:'1px solid rgba(249,115,22,0.4)',
+            borderRadius:12, padding:'11px 30px', color:'#f97316',
+            fontWeight:800, fontSize:14, cursor:'pointer',
           }}>🔄 Jogar de novo</button>
         </div>
       )}
