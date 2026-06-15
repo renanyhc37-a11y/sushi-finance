@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useOfflineQuery } from '../hooks/useOfflineQuery';
 import toast from 'react-hot-toast';
@@ -8,7 +8,7 @@ import { PageLoading } from '../components/Loading';
 import { brl, mesAtual } from '../lib/fmt';
 import {
   Plus, ChevronDown, ChevronUp, Trash2, Save,
-  CreditCard, Banknote, QrCode, Wallet, ShoppingBag,
+  CreditCard, Banknote, QrCode, Wallet, ShoppingBag, CheckCircle,
 } from 'lucide-react';
 
 const VAZIO = (hoje) => ({
@@ -22,40 +22,78 @@ function calcTaxaAuto(credito, debito) {
 }
 
 const fmtData = (d) => {
-  if (!d) return '—';
+  if (!d) return {};
   const [a, m, dia] = d.split('-');
   const nomes = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   const diaSemana = nomes[new Date(d + 'T12:00:00').getDay()];
   return { dia, mes: m, ano: a, diaSemana, iso: d };
 };
 
+function numericForm(f) {
+  return {
+    ...f,
+    total_bruto: Number(f.total_bruto),
+    pix: Number(f.pix || 0),
+    dinheiro: Number(f.dinheiro || 0),
+    credito: Number(f.credito || 0),
+    debito: Number(f.debito || 0),
+    taxa_cartao: Number(f.taxa_cartao || 0),
+    quantidade_pedidos: Number(f.quantidade_pedidos || 0),
+  };
+}
+
 export default function FaturamentoDiario() {
   const qc = useQueryClient();
   const hoje = new Date().toISOString().slice(0, 10);
   const [mes, setMes] = useState(mesAtual());
-  const [aberto, setAberto] = useState(null);   // id do card expandido
+  const [aberto, setAberto] = useState(null);
   const [novoDia, setNovoDia] = useState(false);
   const [form, setForm] = useState(VAZIO(hoje));
   const [taxaAuto, setTaxaAuto] = useState(true);
   const [confirmDel, setConfirmDel] = useState(null);
 
-  const { data: registros = [], isLoading, isOffline } = useOfflineQuery(
+  // registros manuais
+  const { data: manuais = [], isLoading, isOffline } = useOfflineQuery(
     ['faturamento', mes],
     () => api.get(`/faturamento?mes=${mes}`),
   );
 
-  const totalMes     = registros.reduce((a, r) => a + r.total_bruto, 0);
-  const totalTaxas   = registros.reduce((a, r) => a + r.taxa_cartao, 0);
+  // dados automáticos dos pedidos
+  const { data: autoPedidos = [] } = useOfflineQuery(
+    ['faturamento-auto', mes],
+    () => api.get(`/faturamento/pedidos-agrupados?mes=${mes}`),
+    { refetchInterval: 60000 },
+  );
+
+  // merge: dias com manual + dias só com pedidos automáticos
+  const diasMap = new Map();
+  // auto primeiro
+  for (const a of autoPedidos) diasMap.set(a.data, { auto: a, manual: null });
+  // manual sobrescreve (mas mantém o auto para referência)
+  for (const m of manuais) {
+    const existing = diasMap.get(m.data) || { auto: null };
+    diasMap.set(m.data, { ...existing, manual: m });
+  }
+  // ordena desc
+  const diasList = Array.from(diasMap.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([data, v]) => ({ data, ...v }));
+
+  // KPIs — usa manual se existir, senão auto
+  const fonte = diasList.map(d => d.manual || { ...d.auto, taxa_cartao: 0 });
+  const totalMes     = fonte.reduce((a, r) => a + (r.total_bruto || 0), 0);
+  const totalTaxas   = fonte.reduce((a, r) => a + (r.taxa_cartao || 0), 0);
   const totalLiquido = totalMes - totalTaxas;
-  const totalPedidos = registros.reduce((a, r) => a + (r.quantidade_pedidos || 0), 0);
+  const totalPedidos = fonte.reduce((a, r) => a + (r.quantidade_pedidos || 0), 0);
   const ticketMedio  = totalPedidos > 0 ? totalMes / totalPedidos : 0;
-  const totalPix     = registros.reduce((a, r) => a + (r.pix || 0), 0);
-  const totalDinheiro= registros.reduce((a, r) => a + (r.dinheiro || 0), 0);
-  const totalCredito = registros.reduce((a, r) => a + (r.credito || 0), 0);
-  const totalDebito  = registros.reduce((a, r) => a + (r.debito || 0), 0);
+  const totalPix     = fonte.reduce((a, r) => a + (r.pix || 0), 0);
+  const totalDinheiro= fonte.reduce((a, r) => a + (r.dinheiro || 0), 0);
+  const totalCredito = fonte.reduce((a, r) => a + (r.credito || 0), 0);
+  const totalDebito  = fonte.reduce((a, r) => a + (r.debito || 0), 0);
 
   const invalidar = () => {
     qc.invalidateQueries(['faturamento']);
+    qc.invalidateQueries(['faturamento-auto']);
     qc.invalidateQueries(['dashboard']);
   };
 
@@ -78,9 +116,24 @@ export default function FaturamentoDiario() {
     return next;
   });
 
-  const submitNovo = (e) => {
-    e.preventDefault();
-    salvarNovo.mutate(numericForm(form));
+  // pré-preenche form com dados auto de um dia
+  const confirmarDia = (autoData) => {
+    const taxa = calcTaxaAuto(autoData.credito, autoData.debito);
+    setForm({
+      data: autoData.data,
+      total_bruto: autoData.total_bruto,
+      pix: autoData.pix || '',
+      dinheiro: autoData.dinheiro || '',
+      credito: autoData.credito || '',
+      debito: autoData.debito || '',
+      taxa_cartao: taxa,
+      observacao: '',
+      quantidade_pedidos: autoData.quantidade_pedidos || '',
+    });
+    setTaxaAuto(true);
+    setNovoDia(true);
+    setAberto(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -126,10 +179,10 @@ export default function FaturamentoDiario() {
       {novoDia && (
         <div className="rounded-2xl overflow-hidden" style={{ border: '1.5px solid var(--accent)', background: 'var(--space-elev)' }}>
           <div className="flex items-center gap-3 px-5 py-4" style={{ background: 'var(--accent-soft)', borderBottom: '1px solid var(--hairline)' }}>
-            <span className="font-black text-base" style={{ color: 'var(--accent)' }}>Novo dia</span>
+            <span className="font-black text-base" style={{ color: 'var(--accent)' }}>Registrar dia</span>
             <button onClick={() => setNovoDia(false)} className="ml-auto btn-ghost btn-icon btn-sm" style={{ color: 'var(--txt-dim)' }}>✕</button>
           </div>
-          <form onSubmit={submitNovo} className="p-5">
+          <form onSubmit={e => { e.preventDefault(); salvarNovo.mutate(numericForm(form)); }} className="p-5">
             <FormDia form={form} setF={setF} taxaAuto={taxaAuto} setTaxaAuto={setTaxaAuto} />
             <div className="flex justify-end gap-2 mt-5 pt-4" style={{ borderTop: '1px solid var(--hairline)' }}>
               <button type="button" onClick={() => setNovoDia(false)} className="btn-secondary">Cancelar</button>
@@ -144,28 +197,35 @@ export default function FaturamentoDiario() {
       {/* Lista de dias */}
       {isLoading ? <PageLoading /> : (
         <div className="space-y-2">
-          {registros.length === 0 && !novoDia && (
+          {diasList.length === 0 && !novoDia && (
             <div className="rounded-2xl p-12 text-center" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
               <p className="text-3xl mb-3">💰</p>
-              <p className="font-bold mb-1" style={{ color: 'var(--txt-strong)' }}>Nenhum registro neste mês</p>
-              <p className="text-sm" style={{ color: 'var(--txt-dim)' }}>Clique em "Registrar dia" para lançar o caixa</p>
+              <p className="font-bold mb-1" style={{ color: 'var(--txt-strong)' }}>Nenhum movimento neste mês</p>
+              <p className="text-sm" style={{ color: 'var(--txt-dim)' }}>Os pedidos aparecerão aqui automaticamente</p>
             </div>
           )}
-          {registros.map(r => (
-            <CardDia
-              key={r.id}
-              registro={r}
-              expandido={aberto === r.id}
-              onToggle={() => setAberto(p => p === r.id ? null : r.id)}
-              onExcluir={() => setConfirmDel(r)}
-              onSalvo={invalidar}
-            />
+          {diasList.map(d => (
+            d.manual
+              ? <CardDia
+                  key={d.data}
+                  registro={d.manual}
+                  autoRef={d.auto}
+                  expandido={aberto === d.manual.id}
+                  onToggle={() => setAberto(p => p === d.manual.id ? null : d.manual.id)}
+                  onExcluir={() => setConfirmDel(d.manual)}
+                  onSalvo={invalidar}
+                />
+              : <CardAutoNaoConfirmado
+                  key={d.data}
+                  auto={d.auto}
+                  onConfirmar={() => confirmarDia(d.auto)}
+                />
           ))}
         </div>
       )}
 
       {/* Rodapé totais */}
-      {registros.length > 1 && (
+      {diasList.length > 1 && (
         <div className="rounded-2xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-3"
           style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
           <TotalCol label="Total PIX" valor={brl(totalPix)} cor="#0ea5e9" icone={<QrCode size={14} />} />
@@ -188,8 +248,80 @@ export default function FaturamentoDiario() {
   );
 }
 
-// ── Card de um dia (colapsável com edição inline) ─────────────
-function CardDia({ registro: r, expandido, onToggle, onExcluir, onSalvo }) {
+// ── Card automático (pedidos reais, ainda não confirmado) ─────
+function CardAutoNaoConfirmado({ auto, onConfirmar }) {
+  const dt = fmtData(auto.data);
+  const [expandido, setExpandido] = useState(false);
+
+  return (
+    <div className="rounded-2xl overflow-hidden transition-all"
+      style={{ background: 'var(--space-elev)', border: '1px solid rgba(249,115,22,0.2)' }}>
+      <button onClick={() => setExpandido(p => !p)} className="w-full text-left px-5 py-4 flex items-center gap-4 hover:opacity-80 transition-opacity">
+        {/* Data */}
+        <div className="shrink-0 w-12 text-center">
+          <p className="text-xl font-black leading-none" style={{ color: 'var(--txt-strong)' }}>{dt.dia}</p>
+          <p className="text-[10px] font-semibold uppercase" style={{ color: 'var(--txt-dim)' }}>{dt.diaSemana}</p>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 mb-1.5">
+            <span className="text-base font-black" style={{ color: 'var(--txt-strong)' }}>{brl(auto.total_bruto)}</span>
+            <span className="text-xs" style={{ color: 'var(--txt-dim)' }}>pedidos</span>
+            {/* badge automático */}
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-1"
+              style={{ background: 'rgba(249,115,22,0.12)', color: '#f97316' }}>
+              🤖 automático
+            </span>
+          </div>
+          <BarraMini pix={auto.pix} dinheiro={auto.dinheiro} credito={auto.credito} debito={auto.debito} total={auto.total_bruto} />
+        </div>
+
+        <div className="shrink-0 flex items-center gap-2">
+          {auto.quantidade_pedidos > 0 && (
+            <div className="hidden sm:flex items-center gap-1" style={{ color: 'var(--txt-dim)' }}>
+              <ShoppingBag size={13} />
+              <span className="text-sm font-semibold" style={{ color: 'var(--txt)' }}>{auto.quantidade_pedidos}</span>
+            </div>
+          )}
+          <div style={{ color: 'var(--txt-dim)' }}>
+            {expandido ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </div>
+        </div>
+      </button>
+
+      {expandido && (
+        <div className="px-5 pb-4" style={{ borderTop: '1px solid var(--hairline)' }}>
+          <div className="pt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            {[
+              { label:'PIX', val: auto.pix, cor:'#0ea5e9', icon: <QrCode size={12}/> },
+              { label:'Dinheiro', val: auto.dinheiro, cor:'#10b981', icon: <Banknote size={12}/> },
+              { label:'Crédito', val: auto.credito, cor:'#8b5cf6', icon: <CreditCard size={12}/> },
+              { label:'Débito', val: auto.debito, cor:'#6366f1', icon: <Wallet size={12}/> },
+            ].map(p => (
+              <div key={p.label} className="rounded-xl p-2.5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--hairline)' }}>
+                <div className="flex items-center gap-1 mb-1" style={{ color: p.cor }}>{p.icon}<span className="text-[10px] font-bold">{p.label}</span></div>
+                <p className="text-sm font-black" style={{ color: p.val > 0 ? 'var(--txt-strong)' : 'var(--txt-faint)' }}>{brl(p.val || 0)}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between items-center">
+            <p className="text-xs" style={{ color: 'var(--txt-dim)' }}>
+              Dados gerados automaticamente dos pedidos. Confirme para fechar o caixa do dia.
+            </p>
+            <button onClick={onConfirmar}
+              className="flex items-center gap-1.5 text-sm font-bold px-4 py-2 rounded-xl shrink-0 ml-3"
+              style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981' }}>
+              <CheckCircle size={14} /> Confirmar caixa
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Card manual (já confirmado, editável) ─────────────────────
+function CardDia({ registro: r, autoRef, expandido, onToggle, onExcluir, onSalvo }) {
   const qc = useQueryClient();
   const [form, setForm] = useState(null);
   const [taxaAuto, setTaxaAuto] = useState(false);
@@ -228,33 +360,38 @@ function CardDia({ registro: r, expandido, onToggle, onExcluir, onSalvo }) {
 
   const liquido = r.total_bruto - (r.taxa_cartao || 0);
   const totalPago = (r.pix || 0) + (r.dinheiro || 0) + (r.credito || 0) + (r.debito || 0);
+  const difAutoManual = autoRef ? autoRef.total_bruto - r.total_bruto : null;
 
   return (
     <div className="rounded-2xl overflow-hidden transition-all"
       style={{ background: 'var(--space-elev)', border: `1px solid ${expandido ? 'var(--accent)' : 'var(--hairline)'}` }}>
 
-      {/* Linha de resumo (sempre visível) */}
       <button onClick={onToggle} className="w-full text-left px-5 py-4 flex items-center gap-4 hover:opacity-80 transition-opacity">
-        {/* Data */}
         <div className="shrink-0 w-12 text-center">
           <p className="text-xl font-black leading-none" style={{ color: 'var(--txt-strong)' }}>{dt.dia}</p>
           <p className="text-[10px] font-semibold uppercase" style={{ color: 'var(--txt-dim)' }}>{dt.diaSemana}</p>
         </div>
 
-        {/* Barra de pagamentos mini */}
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 mb-1.5">
             <span className="text-base font-black" style={{ color: 'var(--txt-strong)' }}>{brl(r.total_bruto)}</span>
             <span className="text-xs" style={{ color: 'var(--txt-dim)' }}>bruto</span>
             <span className="text-sm font-bold ml-auto" style={{ color: '#10b981' }}>{brl(liquido)}</span>
             <span className="text-[10px]" style={{ color: 'var(--txt-dim)' }}>líquido</span>
+            {/* diferença com pedidos reais */}
+            {difAutoManual !== null && Math.abs(difAutoManual) > 0.5 && (
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171' }}
+                title={`Pedidos no sistema: ${brl(autoRef.total_bruto)}`}>
+                {difAutoManual > 0 ? '+' : ''}{brl(difAutoManual)} vs pedidos
+              </span>
+            )}
           </div>
           {totalPago > 0 && (
             <BarraMini pix={r.pix} dinheiro={r.dinheiro} credito={r.credito} debito={r.debito} total={r.total_bruto} />
           )}
         </div>
 
-        {/* Pedidos */}
         {r.quantidade_pedidos > 0 && (
           <div className="shrink-0 text-right hidden sm:block">
             <div className="flex items-center gap-1" style={{ color: 'var(--txt-dim)' }}>
@@ -265,20 +402,28 @@ function CardDia({ registro: r, expandido, onToggle, onExcluir, onSalvo }) {
           </div>
         )}
 
-        {/* Chevron */}
         <div className="shrink-0" style={{ color: 'var(--txt-dim)' }}>
           {expandido ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
         </div>
       </button>
 
-      {/* Painel de edição expandido */}
       {expandido && form && (
         <div className="px-5 pb-5" style={{ borderTop: '1px solid var(--hairline)' }}>
-          <form onSubmit={e => { e.preventDefault(); salvar.mutate(numericForm(form)); }} className="pt-4">
+          {/* comparativo com pedidos automáticos */}
+          {autoRef && (
+            <div className="mt-3 mb-4 px-3 py-2.5 rounded-xl flex justify-between items-center text-xs"
+              style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
+              <span style={{ color: 'var(--txt-dim)' }}>🤖 Pedidos no sistema hoje:</span>
+              <span className="font-bold" style={{ color: '#f97316' }}>
+                {brl(autoRef.total_bruto)} · {autoRef.quantidade_pedidos} pedidos
+              </span>
+            </div>
+          )}
+          <form onSubmit={e => { e.preventDefault(); salvar.mutate(numericForm(form)); }} className="pt-1">
             <FormDia form={form} setF={setF} taxaAuto={taxaAuto} setTaxaAuto={setTaxaAuto} />
             <div className="flex items-center justify-between gap-2 mt-5 pt-4" style={{ borderTop: '1px solid var(--hairline)' }}>
               <button type="button" onClick={onExcluir}
-                className="flex items-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-xl transition-colors"
+                className="flex items-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-xl"
                 style={{ color: '#f87171' }}>
                 <Trash2 size={14} /> Excluir
               </button>
@@ -296,7 +441,7 @@ function CardDia({ registro: r, expandido, onToggle, onExcluir, onSalvo }) {
   );
 }
 
-// ── Formulário reutilizável (novo + edição) ───────────────────
+// ── Formulário reutilizável ───────────────────────────────────
 function FormDia({ form, setF, taxaAuto, setTaxaAuto }) {
   const soma = ['pix', 'dinheiro', 'credito', 'debito'].reduce((a, k) => a + Number(form[k] || 0), 0);
   const diff = Number(form.total_bruto || 0) - soma;
@@ -304,7 +449,6 @@ function FormDia({ form, setF, taxaAuto, setTaxaAuto }) {
 
   return (
     <div className="space-y-4">
-      {/* Data + Total */}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-[11px] font-semibold block mb-1" style={{ color: 'var(--txt-dim)' }}>Data</label>
@@ -317,7 +461,6 @@ function FormDia({ form, setF, taxaAuto, setTaxaAuto }) {
         </div>
       </div>
 
-      {/* Formas de pagamento */}
       <div>
         <p className="text-[11px] font-semibold mb-2" style={{ color: 'var(--txt-dim)' }}>Formas de pagamento</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -339,7 +482,6 @@ function FormDia({ form, setF, taxaAuto, setTaxaAuto }) {
         )}
       </div>
 
-      {/* Taxa cartão + Pedidos */}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <div className="flex items-center justify-between mb-1">
@@ -373,7 +515,7 @@ function FormDia({ form, setF, taxaAuto, setTaxaAuto }) {
 }
 
 // ── Sub-componentes ───────────────────────────────────────────
-function Kpi({ label, valor, sub, cor, destaque }) {
+function Kpi({ label, valor, sub, cor }) {
   return (
     <div className="rounded-2xl p-4" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
       <p className="text-[11px] font-semibold mb-1" style={{ color: 'var(--txt-dim)' }}>{label}</p>
@@ -454,17 +596,4 @@ function BarraMini({ pix, dinheiro, credito, debito, total }) {
       ))}
     </div>
   );
-}
-
-function numericForm(f) {
-  return {
-    ...f,
-    total_bruto: Number(f.total_bruto),
-    pix: Number(f.pix || 0),
-    dinheiro: Number(f.dinheiro || 0),
-    credito: Number(f.credito || 0),
-    debito: Number(f.debito || 0),
-    taxa_cartao: Number(f.taxa_cartao || 0),
-    quantidade_pedidos: Number(f.quantidade_pedidos || 0),
-  };
 }

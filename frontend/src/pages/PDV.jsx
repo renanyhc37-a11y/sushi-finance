@@ -484,7 +484,7 @@ export default function PDV() {
   const [pedidoModal, setPedidoModal] = useState(null);
   const [pedidosNovosAlerta, setPedidosNovosAlerta] = useState([]);
   const [mostrarCancelados, setMostrarCancelados] = useState(false);
-  const [ocultarCancelados, setOcultarCancelados] = useState(false);
+  const [ocultarCancelados, setOcultarCancelados] = useState(() => sessionStorage.getItem('pdv_ocultar_cancelados') === '1');
   const alarmRef = useRef(null);
   const [tick, setTick] = useState(0);
   const [filtroData, setFiltroData] = useState(hoje());
@@ -1506,7 +1506,7 @@ export default function PDV() {
                     {porStatus.cancelado?.length || 0}
                   </div>
                   {(porStatus.cancelado?.length || 0) > 0 && (
-                    <button onClick={() => { setOcultarCancelados(true); setMostrarCancelados(false); }}
+                    <button onClick={() => { setOcultarCancelados(true); setMostrarCancelados(false); sessionStorage.setItem('pdv_ocultar_cancelados','1'); }}
                       className="text-[10px] font-bold px-2 py-1 rounded-lg ml-1"
                       style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)' }}
                       title="Ocultar cancelados">
@@ -1532,7 +1532,7 @@ export default function PDV() {
       <div className="shrink-0 flex items-center justify-between px-4 py-1.5"
         style={{ borderTop: '1px solid var(--space-elev)' }}>
         <span className="text-[10px] t-faint">Tempo real via SSE · {new Date().toLocaleTimeString('pt-BR')}</span>
-        <button onClick={() => { setOcultarCancelados(false); setMostrarCancelados(v => !v); }}
+        <button onClick={() => { setOcultarCancelados(false); sessionStorage.removeItem('pdv_ocultar_cancelados'); setMostrarCancelados(v => !v); }}
           className="text-[10px] font-semibold px-2 py-1 rounded-lg"
           style={{ color: mostrarCancelados ? '#f87171' : '#333', background: 'transparent' }}>
           {mostrarCancelados ? <span className="flex items-center gap-1"><X size={11} strokeWidth={2} /> Ocultar cancelados</span> : `+ Cancelados (${porStatus.cancelado?.length || 0})`}

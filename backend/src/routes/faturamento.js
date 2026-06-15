@@ -60,4 +60,32 @@ router.delete('/:id', (req, res) => {
   }
 });
 
+// Agrega pedidos reais (pdv_pedidos) por dia, para exibição automática no faturamento
+router.get('/pedidos-agrupados', (req, res) => {
+  try {
+    const { mes } = req.query; // YYYY-MM
+    const param = mes ? `${mes}%` : `${new Date().toISOString().slice(0,7)}%`;
+
+    const rows = db.prepare(`
+      SELECT
+        date(created_at, 'localtime') AS data,
+        COUNT(*) AS quantidade_pedidos,
+        COALESCE(SUM(total), 0) AS total_bruto,
+        COALESCE(SUM(CASE WHEN forma_pagamento='pix'      THEN total ELSE 0 END), 0) AS pix,
+        COALESCE(SUM(CASE WHEN forma_pagamento='dinheiro' THEN total ELSE 0 END), 0) AS dinheiro,
+        COALESCE(SUM(CASE WHEN forma_pagamento='credito'  THEN total ELSE 0 END), 0) AS credito,
+        COALESCE(SUM(CASE WHEN forma_pagamento='debito'   THEN total ELSE 0 END), 0) AS debito
+      FROM pdv_pedidos
+      WHERE status NOT IN ('cancelado')
+        AND date(created_at, 'localtime') LIKE ?
+      GROUP BY date(created_at, 'localtime')
+      ORDER BY data DESC
+    `).all(param);
+
+    res.json(rows);
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
+
 module.exports = router;
