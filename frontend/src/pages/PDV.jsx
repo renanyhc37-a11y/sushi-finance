@@ -850,21 +850,23 @@ export default function PDV() {
           {/* Observação */}
           {pedido.observacao && (() => {
             const linhas = pedido.observacao.split('\n');
-            const obsNormal = linhas.filter(l => !l.startsWith('📩 WhatsApp:')).join('\n').trim();
-            const wppMsgs = linhas.filter(l => l.startsWith('📩 WhatsApp:')).map(l => l.replace('📩 WhatsApp:', '').trim());
+            const obsNormal = linhas.filter(l => !l.startsWith('📩 WhatsApp:')).join(' ').replace(/\s+/g, ' ').trim();
+            const wppMsgs = linhas.filter(l => l.startsWith('📩 WhatsApp:')).map(l => l.replace('📩 WhatsApp:', '').trim()).filter(Boolean);
+            const obsTrunc = obsNormal.length > 100 ? obsNormal.slice(0, 100) + '…' : obsNormal;
+            const wppRecentes = wppMsgs.slice(-3);
             return (<>
-              {obsNormal && (
+              {obsTrunc && (
                 <div className="flex items-start gap-1.5 mb-2 px-2.5 py-1.5 rounded-xl"
                   style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
                   <span className="text-amber-400 shrink-0 flex items-center"><AlertTriangle size={13} strokeWidth={1.75} /></span>
-                  <p className="text-xs text-amber-400 leading-snug">{obsNormal}</p>
+                  <p className="text-xs text-amber-400 leading-snug">{obsTrunc}</p>
                 </div>
               )}
-              {wppMsgs.length > 0 && (
+              {wppRecentes.length > 0 && (
                 <div className="mb-2 px-2.5 py-1.5 rounded-xl"
                   style={{ background: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.2)' }}>
                   <p className="text-xs font-semibold mb-1" style={{ color: '#25d366' }}>📩 WhatsApp ({wppMsgs.length})</p>
-                  {wppMsgs.map((m, i) => <p key={i} className="text-xs leading-snug" style={{ color: '#25d366', opacity: 0.85 }}>• {m}</p>)}
+                  {wppRecentes.map((m, i) => <p key={i} className="text-xs leading-snug" style={{ color: '#25d366', opacity: 0.85 }}>• {m.length > 80 ? m.slice(0, 80) + '…' : m}</p>)}
                 </div>
               )}
             </>);
