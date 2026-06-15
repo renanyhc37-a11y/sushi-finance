@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import GameHub from '../components/GameHub';
 
 const STATUS = {
   novo:       { label: 'Confirmando pedido', emoji: '⏳', cor: '#f97316', bg: 'rgba(249,115,22,0.1)' },
+  espera:     { label: 'Confirmando pedido', emoji: '⏳', cor: '#f97316', bg: 'rgba(249,115,22,0.1)' },
   preparando: { label: 'Em preparo',          emoji: '🍣', cor: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
   pronto:     { label: 'Saiu para entrega',   emoji: '🛵', cor: '#a78bfa', bg: 'rgba(167,139,250,0.1)' },
   entregue:   { label: 'Entregue!',           emoji: '🎉', cor: '#10b981', bg: 'rgba(16,185,129,0.1)' },
@@ -13,24 +14,59 @@ const ETAPAS = ['novo', 'preparando', 'pronto', 'entregue'];
 
 export default function AcompanharPedido() {
   const { id } = useParams();
-  const [pedido, setPedido] = useState(null);
-  const [erro, setErro]     = useState('');
-  const [ultima, setUltima] = useState('');
+  const [pedido, setPedido]   = useState(null);
+  const [erro, setErro]       = useState('');
+  const [online, setOnline]   = useState(true);
+  const [flash, setFlash]     = useState(false);
+  const prevStatus            = useRef(null);
 
   const carregar = async () => {
     try {
       const r = await fetch(`/api/cardapio/pedido/${id}/rastreio`);
       if (!r.ok) { setErro('Pedido não encontrado'); return; }
-      setPedido(await r.json());
-      setUltima(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+      const data = await r.json();
+      setPedido(data);
+      return data;
     } catch { setErro('Erro ao carregar'); }
   };
 
   useEffect(() => {
     carregar();
-    const iv = setInterval(carregar, 7000);
-    return () => clearInterval(iv);
+
+    // SSE público: escuta atualizações de status em tempo real
+    const es = new EventSource(`/api/rastreio/eventos`);
+    let pedidoIdInterno = null;
+
+    // carrega uma vez para saber o id interno
+    carregar().then(p => { if (p) pedidoIdInterno = p.id; });
+
+    es.addEventListener('status_atualizado', async (e) => {
+      const dados = JSON.parse(e.data);
+      // só recarrega se for este pedido
+      if (pedidoIdInterno && dados.id !== pedidoIdInterno) return;
+      const novo = await carregar();
+      if (novo) { pedidoIdInterno = novo.id; }
+      if (novo && prevStatus.current && prevStatus.current !== novo.status) {
+        setFlash(true);
+        setTimeout(() => setFlash(false), 1200);
+        prevStatus.current = novo.status;
+      }
+    });
+
+    // Fallback polling a cada 15s (caso SSE falhe)
+    const iv = setInterval(async () => {
+      const novo = await carregar();
+      if (novo) prevStatus.current = novo.status;
+    }, 15000);
+
+    es.onerror = () => setOnline(false);
+    es.onopen  = () => setOnline(true);
+
+    return () => { es.close(); clearInterval(iv); };
   }, [id]);
+
+  // registra status inicial
+  useEffect(() => { if (pedido && !prevStatus.current) prevStatus.current = pedido.status; }, [pedido]);
 
   if (erro) return (
     <div style={{ minHeight:'100vh', background:'#070707', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:12 }}>
@@ -47,13 +83,14 @@ export default function AcompanharPedido() {
   );
 
   const st       = STATUS[pedido.status] || STATUS.novo;
-  const etapaAtual = ETAPAS.indexOf(pedido.status);
+  const etapaAtual = ETAPAS.indexOf(pedido.status === 'espera' ? 'novo' : pedido.status);
   const cancelado  = pedido.status === 'cancelado';
   const entregue   = pedido.status === 'entregue';
   const brl = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   return (
-    <div style={{ minHeight:'100vh', background:'#070707', fontFamily:'system-ui,sans-serif', color:'#f1f5f9', paddingBottom: 48 }}>
+    <div style={{ minHeight:'100vh', background:'#070707', fontFamily:'system-ui,sans-serif', color:'#f1f5f9', paddingBottom: 48,
+      transition: 'background .4s', ...(flash ? { background: `${st.cor}18` } : {}) }}>
 
       {/* Header */}
       <div style={{ background:'linear-gradient(160deg,#0f0f0f 0%,#1a0a00 100%)', borderBottom:'1px solid rgba(249,115,22,0.15)', padding:'28px 20px 20px', textAlign:'center' }}>
@@ -72,8 +109,9 @@ export default function AcompanharPedido() {
           <div style={{ fontSize:12, color:'#475569', marginTop:4 }}>Seu pedido está sendo cuidado com carinho</div>
         </div>
 
-        {/* Status */}
-        <div style={{ background:st.bg, border:`1.5px solid ${st.cor}`, borderRadius:18, padding:'18px 16px', textAlign:'center', marginBottom:12 }}>
+        {/* Status — anima na mudança */}
+        <div style={{ background:st.bg, border:`1.5px solid ${st.cor}`, borderRadius:18, padding:'18px 16px', textAlign:'center', marginBottom:12,
+          transition:'all .5s', transform: flash ? 'scale(1.02)' : 'scale(1)' }}>
           <div style={{ fontSize:40, marginBottom:6, lineHeight:1 }}>{st.emoji}</div>
           <div style={{ fontSize:18, fontWeight:800, color:st.cor }}>{st.label}</div>
           {pedido.status==='preparando' && <div style={{ fontSize:12, color:'#64748b', marginTop:6 }}>Nossos chefs estão preparando com cuidado 👨‍🍳</div>}
@@ -125,14 +163,14 @@ export default function AcompanharPedido() {
           <div style={{ background:'#0f0f0f', border:'1px solid rgba(249,115,22,0.2)', borderRadius:18, padding:'18px 16px', marginBottom:12 }}>
             <div style={{ fontSize:11, color:'#475569', letterSpacing:2, textTransform:'uppercase', marginBottom:4 }}>🎮 Mini-Jogos</div>
             <p style={{ fontSize:12, color:'#475569', marginBottom:12 }}>
-              {entregue ? 'Pedido chegou! Bata seu recorde! 🏆' : 'Jogue enquanto aguarda! 🍣'}
+              {entregue ? 'Pedido chegou! Bate seu recorde! 🏆' : 'Jogue enquanto aguarda! 🍣'}
             </p>
             <GameHub />
           </div>
         )}
 
         <div style={{ textAlign:'center', color:'#334155', fontSize:11 }}>
-          🔄 Atualizado às {ultima} · atualiza a cada 7s
+          {online ? '🟢 Atualizando em tempo real' : '🟡 Reconectando…'}
         </div>
       </div>
     </div>

@@ -119,8 +119,10 @@ app.get('/wa-version.html', (req, res) => {
 app.use('/api/cardapio', cardapioRouter);
 
 // SSE registrados ANTES do requireAuth (EventSource não suporta headers)
-const { sseHandler } = require('./routes/pdv');
+const { sseHandler, ssePublicoHandler } = require('./routes/pdv');
 app.get('/api/pdv/eventos', sseHandler);
+// SSE público sem auth — só status_atualizado (para /pedido/:id do cliente)
+app.get('/api/rastreio/eventos', ssePublicoHandler);
 app.get('/api/whatsapp/sse', (req, res) => {
   const jwt = require('jsonwebtoken');
   const { SECRET } = require('./middleware/requireAuth');

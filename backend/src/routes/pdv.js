@@ -14,10 +14,15 @@ try { db.exec("ALTER TABLE pdv_pedidos ADD COLUMN impresso_em TEXT"); } catch {}
 
 // ── SSE: clientes conectados ──────────────────────────────────
 const clientes = new Set();
+const clientesPublicos = new Set(); // sem auth — para página de rastreio do cliente
 
 function broadcast(evento, dados) {
   const msg = `event: ${evento}\ndata: ${JSON.stringify(dados)}\n\n`;
   clientes.forEach(res => { try { res.write(msg); } catch {} });
+  // replica status para clientes públicos
+  if (evento === 'status_atualizado') {
+    clientesPublicos.forEach(res => { try { res.write(msg); } catch {} });
+  }
 }
 
 // Handler SSE — exportado para ser registrado antes do requireAuth no index.js
@@ -323,4 +328,56 @@ router.get('/relatorio', (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
-module.exports = { router, broadcast, sseHandler };
+// GET /api/pdv/cliente/:telefone/historico — últimos pedidos do cliente
+router.get('/cliente/:telefone/historico', (req, res) => {
+  try {
+    const tel = req.params.telefone.replace(/\D/g, '');
+    const pedidos = db.prepare(`
+      SELECT p.id, p.numero, p.total, p.status, p.forma_pagamento, p.created_at,
+             GROUP_CONCAT(i.quantidade || 'x ' || i.item_nome, ' | ') as itens_resumo
+      FROM pdv_pedidos p
+      LEFT JOIN pdv_itens i ON i.pedido_id = p.id
+      WHERE replace(replace(replace(p.cliente_telefone,' ',''),'-',''),'(','') LIKE '%' || ? || '%'
+        AND p.status != 'cancelado'
+      GROUP BY p.id
+      ORDER BY p.created_at DESC
+      LIMIT 8
+    `).all(tel.slice(-8));
+    res.json(pedidos);
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// GET /api/pdv/metricas-hoje — faturamento e contagens em tempo real do dia
+router.get('/metricas-hoje', (req, res) => {
+  try {
+    const row = db.prepare(`
+      SELECT
+        COUNT(*) as total_pedidos,
+        COALESCE(SUM(total), 0) as faturamento,
+        COALESCE(SUM(CASE WHEN forma_pagamento='pix'      THEN total ELSE 0 END), 0) as pix,
+        COALESCE(SUM(CASE WHEN forma_pagamento='dinheiro' THEN total ELSE 0 END), 0) as dinheiro,
+        COALESCE(SUM(CASE WHEN forma_pagamento='credito'  THEN total ELSE 0 END), 0) as credito,
+        COALESCE(SUM(CASE WHEN forma_pagamento='debito'   THEN total ELSE 0 END), 0) as debito,
+        COUNT(CASE WHEN status='cancelado' THEN 1 END) as cancelados
+      FROM pdv_pedidos
+      WHERE date(created_at, 'localtime') = date('now', 'localtime')
+        AND status != 'cancelado'
+    `).get();
+    res.json(row);
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// SSE público — sem autenticação, só recebe status_atualizado
+function ssePublicoHandler(req, res) {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  res.write('event: conectado\ndata: {}\n\n');
+  const hb = setInterval(() => { try { res.write(': ping\n\n'); } catch {} }, 25000);
+  clientesPublicos.add(res);
+  req.on('close', () => { clientesPublicos.delete(res); clearInterval(hb); });
+}
+
+module.exports = { router, broadcast, sseHandler, ssePublicoHandler };

@@ -350,9 +350,15 @@ let _somCfg = (() => {
 function salvarSomCfg() { try { localStorage.setItem('pdv_som', JSON.stringify(_somCfg)); } catch {} }
 _somCfg.som = _somCfg.som || 'campanha';
 _somCfg.volume = _somCfg.volume ?? 0.7;
+// Som por coluna: { novo: 'campanha', preparando: null, pronto: 'bip', ... }
+// null = usa o som padrão; 'off' = silencia aquela coluna
+if (!_somCfg.porColuna) _somCfg.porColuna = {};
 
-function tocarSom() {
-  SONS[_somCfg.som]?.tocar(_somCfg.volume);
+function tocarSom(status) {
+  const cfg = _somCfg.porColuna?.[status];
+  const som = cfg === undefined ? _somCfg.som : cfg;
+  if (!som || som === 'off') return;
+  SONS[som]?.tocar(_somCfg.volume);
 }
 
 // Configurações globais de impressão — persistidas no localStorage
@@ -482,6 +488,8 @@ export default function PDV() {
   const [loading, setLoading] = useState(true);
   const [pedidoAberto, setPedidoAberto] = useState(null);
   const [pedidoModal, setPedidoModal] = useState(null);
+  const [historicoCliente, setHistoricoCliente] = useState([]);
+  const [metricasHoje, setMetricasHoje] = useState(null);
   const [pedidosNovosAlerta, setPedidosNovosAlerta] = useState([]);
   const [mostrarCancelados, setMostrarCancelados] = useState(false);
   const [ocultarCancelados, setOcultarCancelados] = useState(() => sessionStorage.getItem('pdv_ocultar_cancelados') === '1');
@@ -545,8 +553,8 @@ export default function PDV() {
   // ── Alarme em loop ──────────────────────────────────────────
   const iniciarAlarme = useCallback(() => {
     if (alarmRef.current) return; // já tocando
-    tocarSom();
-    alarmRef.current = setInterval(() => { tocarSom(); }, 4500);
+    tocarSom('novo');
+    alarmRef.current = setInterval(() => { tocarSom('novo'); }, 4500);
   }, []);
 
   const pararAlarme = useCallback(() => {
@@ -727,6 +735,30 @@ export default function PDV() {
     } catch { toast.error('Erro ao cancelar'); }
   }
 
+  async function abrirModal(pedido) {
+    setPedidoModal(pedido);
+    setHistoricoCliente([]);
+    if (pedido.cliente_telefone) {
+      try {
+        const r = await fetch(`${BASE}/pdv/cliente/${encodeURIComponent(pedido.cliente_telefone)}/historico`, { headers: authH() });
+        if (r.ok) setHistoricoCliente(await r.json());
+      } catch {}
+    }
+  }
+
+  async function carregarMetricasHoje() {
+    try {
+      const r = await fetch(`${BASE}/pdv/metricas-hoje`, { headers: authH() });
+      if (r.ok) setMetricasHoje(await r.json());
+    } catch {}
+  }
+
+  useEffect(() => {
+    carregarMetricasHoje();
+    const iv = setInterval(carregarMetricasHoje, 30000);
+    return () => clearInterval(iv);
+  }, []);
+
   const totalAtivos = (resumo.novo || 0) + (resumo.preparando || 0) + (resumo.pronto || 0);
   const temAlerta = pedidosNovosAlerta.length > 0;
   const faturamentoHoje = pedidos.filter(p => p.status !== 'cancelado').reduce((s, p) => s + (p.total || 0), 0);
@@ -825,7 +857,7 @@ export default function PDV() {
         <div style={{ height: 5, background: `linear-gradient(90deg, ${cfg.cor}, ${cfg.cor}66)` }} />
 
         {/* Header clicável — número + cliente + tempo */}
-        <button onClick={() => setPedidoModal(pedido)}
+        <button onClick={() => abrirModal(pedido)}
           className="w-full text-left active:opacity-60 transition-opacity">
           {/* Faixa de destaque com número + pagamento + tempo */}
           <div className="flex items-center gap-2 px-3 py-2"
@@ -850,7 +882,7 @@ export default function PDV() {
               <span className="text-xs font-black flex items-center gap-1"
                 style={{ color: atraso && atraso.nivel !== 'ok' ? atraso.cor : `${cfg.cor}99` }}>
                 {atraso && atraso.nivel !== 'ok' && <AlertTriangle size={11} strokeWidth={2.5} />}
-                {tempoTexto}
+                {new Date(pedido.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           </div>
@@ -1167,6 +1199,29 @@ export default function PDV() {
                     </div>
                   </div>
                 )}
+
+                {/* Histórico do cliente */}
+                {historicoCliente.length > 1 && (
+                  <div className="rounded-2xl p-4" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-widest t-dim mb-3">Últimos pedidos</p>
+                    <div className="space-y-2">
+                      {historicoCliente.filter(h => h.id !== p.id).slice(0, 5).map(h => (
+                        <div key={h.id} className="flex items-center gap-2 py-1.5 px-2 rounded-xl"
+                          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--hairline)' }}>
+                          <span className="text-xs font-black t-dim w-8 shrink-0">#{h.numero}</span>
+                          <span className="text-xs t-dim flex-1">
+                            {new Date(h.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                          </span>
+                          <span className="text-xs font-bold t-strong shrink-0">{brl(h.total)}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md shrink-0"
+                            style={{ background: h.status === 'entregue' ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.1)', color: h.status === 'entregue' ? '#34d399' : '#f87171' }}>
+                            {h.status === 'entregue' ? '✓' : '✕'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Footer — ações */}
@@ -1232,7 +1287,15 @@ export default function PDV() {
                 <span className="text-[10px] t-dim leading-none hidden sm:block">{label}</span>
               </div>
             ))}
-            {faturamentoHoje > 0 && (
+            {metricasHoje ? (
+              <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl"
+                style={{ background: 'rgba(var(--accent-rgb),0.08)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
+                <span className="text-xs font-black text-orange-400">{brl(metricasHoje.total || 0)}</span>
+                <span className="text-[10px] t-dim hidden sm:block mx-1">hoje</span>
+                {metricasHoje.pix > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md hidden md:inline" style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>PIX {brl(metricasHoje.pix)}</span>}
+                {metricasHoje.dinheiro > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md hidden md:inline" style={{ background: 'rgba(16,185,129,0.12)', color: '#34d399' }}>$ {brl(metricasHoje.dinheiro)}</span>}
+              </div>
+            ) : faturamentoHoje > 0 && (
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl"
                 style={{ background: 'rgba(var(--accent-rgb),0.08)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
                 <span className="text-xs font-black text-orange-400">{brl(faturamentoHoje)}</span>
@@ -1319,7 +1382,7 @@ export default function PDV() {
                 <Bell size={16} strokeWidth={1.75} />
               </button>
               {mostrarSom && (
-                <div className="fixed sm:absolute left-3 right-3 bottom-3 sm:left-auto sm:right-0 sm:bottom-auto sm:top-full sm:mt-1 z-50 rounded-2xl overflow-hidden shadow-2xl sm:w-[210px]"
+                <div className="fixed sm:absolute left-3 right-3 bottom-3 sm:left-auto sm:right-0 sm:bottom-auto sm:top-full sm:mt-1 z-50 rounded-2xl overflow-hidden shadow-2xl sm:w-[230px]"
                   style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
                   <div className="px-3 py-2 text-[10px] font-black t-dim uppercase tracking-wider border-b border-zinc-800">Som de notificação</div>
                   <div className="p-2 space-y-1">
@@ -1339,8 +1402,42 @@ export default function PDV() {
                     </div>
                     <input type="range" min="0" max="1" step="0.05" value={volumeAtual}
                       onChange={e => { const v = parseFloat(e.target.value); _somCfg.volume = v; salvarSomCfg(); setVolumeAtual(v); }}
-                      onMouseUp={() => tocarSom()}
+                      onMouseUp={() => tocarSom('novo')}
                       className="w-full accent-indigo-500" />
+                  </div>
+                  {/* Som por coluna */}
+                  <div className="px-3 pb-3 border-t border-zinc-800 pt-2">
+                    <p className="text-[10px] t-dim font-bold mb-2">SOM POR COLUNA</p>
+                    <div className="space-y-1.5">
+                      {[
+                        { key: 'novo',       label: 'Novo pedido',  cor: '#3b82f6' },
+                        { key: 'preparando', label: 'Em preparo',   cor: 'var(--accent-2)' },
+                        { key: 'pronto',     label: 'Pronto',       cor: '#10b981' },
+                      ].map(({ key, label, cor }) => {
+                        const atual = _somCfg.porColuna?.[key] ?? undefined;
+                        const opcoes = [['off', '🔕'], ...Object.keys(SONS).map(k => [k, SONS[k].label])];
+                        return (
+                          <div key={key} className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold flex-1" style={{ color: cor }}>{label}</span>
+                            <select
+                              value={atual === undefined ? '' : atual}
+                              onChange={e => {
+                                const v = e.target.value;
+                                if (!_somCfg.porColuna) _somCfg.porColuna = {};
+                                if (v === '') { delete _somCfg.porColuna[key]; }
+                                else { _somCfg.porColuna[key] = v; if (v !== 'off') SONS[v]?.tocar(_somCfg.volume); }
+                                salvarSomCfg(); setSomAtual(s => s); // força re-render
+                              }}
+                              className="text-[10px] rounded-lg px-1.5 py-1 font-bold"
+                              style={{ background: 'var(--space-elev-2)', color: '#999', border: '1px solid var(--hairline)', outline: 'none' }}>
+                              <option value="">padrão</option>
+                              <option value="off">silenciar</option>
+                              {Object.entries(SONS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+                            </select>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
