@@ -675,14 +675,41 @@ export default function Cardapio() {
   const totalItens = carrinho.reduce((s, i) => s + i.qty, 0);
   const totalValor = carrinho.reduce((s, i) => s + i.preco * i.qty, 0);
 
+  const [upsellNudge, setUpsellNudge] = useState(false);
+  const nudgeTimerRef = useRef(null);
+
+  // Sugestões de upsell: prioriza bebidas/sobremesas/molhos, exclui itens já no carrinho
+  function getSugestoes(carr) {
+    const ids = new Set(carr.map(c => c.id));
+    const PRIO = /bebida|suco|refri|água|agua|drink|cerveja|saquê|sake|chá|cha\b|sobremesa|doce|mochi|sorvete|extra|adicional|molho|teriy|acompan/i;
+    const prio = [], outros = [];
+    for (const cat of categorias) {
+      for (const item of (cat.itens || [])) {
+        if (!item.disponivel || ids.has(item.id)) continue;
+        if (PRIO.test(cat.nome)) prio.push({ ...item, _catNome: cat.nome });
+        else outros.push({ ...item, _catNome: cat.nome });
+      }
+    }
+    const outrosBaratos = outros.sort((a, b) => a.preco - b.preco).slice(0, 2);
+    return [...prio.slice(0, 5), ...outrosBaratos].slice(0, 6);
+  }
+
   // Adiciona 1 unidade (usado nos botões rápidos + dos cards)
   function addItem(item) {
     setAnimItem(item.id);
     setTimeout(() => setAnimItem(null), 400);
     setCarrinho(prev => {
-      const e = prev.find(c => c.id === item.id);
-      if (e) return prev.map(c => c.id === item.id ? { ...c, qty: c.qty + 1 } : c);
-      return [...prev, { ...item, qty: 1, obs: '' }];
+      const isFirst = prev.length === 0;
+      const next = prev.find(c => c.id === item.id)
+        ? prev.map(c => c.id === item.id ? { ...c, qty: c.qty + 1 } : c)
+        : [...prev, { ...item, qty: 1, obs: '' }];
+      // Mostra nudge de bebida após 1º item adicionado
+      if (isFirst) {
+        clearTimeout(nudgeTimerRef.current);
+        setUpsellNudge(true);
+        nudgeTimerRef.current = setTimeout(() => setUpsellNudge(false), 6000);
+      }
+      return next;
     });
   }
 
@@ -1538,35 +1565,93 @@ export default function Cardapio() {
         ))}
       </div>
 
-      {carrinho.length > 0 && (
-        <div className="sticky bottom-0 p-4 max-w-lg w-full mx-auto"
-          style={{ background: 'rgba(7,7,7,0.97)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-          {/* Total section */}
-          <div className="rounded-2xl p-4 mb-3 flex justify-between items-center"
-            style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div>
-              <p className="text-xs text-zinc-600">Total do pedido</p>
-              <p className="text-2xl font-black text-white mt-0.5">{brl(totalValor)}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-zinc-600">{totalItens} {totalItens === 1 ? 'item' : 'itens'}</p>
-              <p className="text-xs text-zinc-700 mt-0.5">Frete calculado no checkout</p>
+      {carrinho.length > 0 && (() => {
+        const sugestoes = getSugestoes(carrinho);
+        const pedidoMin = entrega.pedido_minimo || 0;
+
+        return (
+          <div className="max-w-lg w-full mx-auto">
+            {/* ── Upsell: complete seu pedido ── */}
+            {sugestoes.length > 0 && (
+              <div className="px-4 pb-2">
+                <div className="mb-2.5 flex items-center gap-2">
+                  <span className="text-base">🎯</span>
+                  <div>
+                    <p className="text-sm font-black text-white leading-none">Complete seu pedido</p>
+                    <p className="text-[11px] text-zinc-600 mt-0.5">Clientes que pediram isso também levaram</p>
+                  </div>
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+                  {sugestoes.map((item, idx) => {
+                    const badges = [
+                      idx === 0 && { txt: '🔥 Mais pedido', bg: 'rgba(239,68,68,0.85)' },
+                      idx === 1 && { txt: '⭐ Recomendado', bg: 'rgba(245,158,11,0.85)' },
+                      /molho|teriy|shoyu/i.test(item.nome) && { txt: '✨ Combina muito', bg: 'rgba(139,92,246,0.85)' },
+                      /bebida|refri|suco|água/i.test(item._catNome || '') && { txt: '🥤 Refrescante', bg: 'rgba(14,165,233,0.85)' },
+                      /sobremesa|doce|mochi|sorvete/i.test(item._catNome || '') && { txt: '🍡 Sobremesa', bg: 'rgba(236,72,153,0.85)' },
+                    ].find(Boolean);
+                    return (
+                      <div key={item.id} className="shrink-0 rounded-2xl overflow-hidden flex flex-col"
+                        style={{ width: 130, background: '#111', border: '1px solid rgba(255,255,255,0.07)' }}>
+                        {/* Foto */}
+                        <div className="relative w-full flex items-center justify-center" style={{ aspectRatio: '4/3', background: '#1a1a1a' }}>
+                          {item.foto
+                            ? <img src={item.foto} alt={item.nome} className="w-full h-full object-cover" />
+                            : <span className="text-3xl">{item.emoji || '🍱'}</span>}
+                          {badges && (
+                            <span className="absolute top-1.5 left-1.5 text-[9px] font-black text-white px-1.5 py-0.5 rounded-md"
+                              style={{ background: badges.bg, backdropFilter: 'blur(6px)' }}>
+                              {badges.txt}
+                            </span>
+                          )}
+                        </div>
+                        {/* Info + add */}
+                        <div className="p-2 flex flex-col flex-1">
+                          <p className="text-xs font-bold text-white leading-tight line-clamp-2 flex-1 mb-1.5">{item.nome}</p>
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs font-black" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</span>
+                            <button onClick={() => addItem(item)}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center font-black text-white text-lg active:scale-90 transition-transform"
+                              style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent-2))', boxShadow: '0 2px 8px rgba(var(--accent-rgb),0.4)' }}>+</button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+
+            <div className="sticky bottom-0 p-4"
+              style={{ background: 'rgba(7,7,7,0.97)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+              {/* Total */}
+              <div className="rounded-2xl p-4 mb-3 flex justify-between items-center"
+                style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div>
+                  <p className="text-xs text-zinc-600">Total do pedido</p>
+                  <p className="text-2xl font-black text-white mt-0.5">{brl(totalValor)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-zinc-600">{totalItens} {totalItens === 1 ? 'item' : 'itens'}</p>
+                  <p className="text-xs text-zinc-700 mt-0.5">Frete calculado no checkout</p>
+                </div>
+              </div>
+              {horarioStatus && !horarioStatus.aberta ? (
+                <button disabled className="w-full py-4 rounded-2xl font-black text-lg cursor-not-allowed" style={{ background: '#2a2a2a', color: '#888' }}>
+                  <span className="flex items-center justify-center gap-2">🔒 Estamos fechados no momento</span>
+                </button>
+              ) : (
+                <button onClick={() => setTela('checkout')}
+                  className="w-full py-4 rounded-2xl font-black text-white text-lg active:scale-95 transition-transform"
+                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 8px 32px rgba(var(--accent-rgb),0.35)' }}>
+                  <span className="flex items-center justify-center gap-2">Ir para entrega <ArrowRight size={18} strokeWidth={2} /></span>
+                </button>
+              )}
             </div>
           </div>
-          {horarioStatus && !horarioStatus.aberta ? (
-            <button disabled
-              className="w-full py-4 rounded-2xl font-black text-lg cursor-not-allowed"
-              style={{ background: '#2a2a2a', color: '#888' }}>
-              <span className="flex items-center justify-center gap-2">🔒 Estamos fechados no momento</span>
-            </button>
-          ) : (
-            <button onClick={() => setTela('checkout')}
-              className="w-full py-4 rounded-2xl font-black text-white text-lg active:scale-95 transition-transform"
-              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 8px 32px rgba(var(--accent-rgb),0.35)' }}>
-              <span className="flex items-center justify-center gap-2">Ir para entrega <ArrowRight size={18} strokeWidth={2} /></span>
-            </button>
-          )}
-        </div>
+        );
+      })()}
       )}
     </div>
   );
@@ -2027,6 +2112,21 @@ export default function Cardapio() {
           })}
         </div>
       </div>
+
+      {/* Nudge de upsell — aparece 6s após 1º item */}
+      {upsellNudge && totalItens > 0 && (
+        <div className="fixed z-40 flex justify-center"
+          style={{ bottom: 96, left: '50%', transform: 'translateX(-50%)', animation: 'fadeSlideUp 0.35s ease' }}>
+          <style>{`@keyframes fadeSlideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}`}</style>
+          <button onClick={() => { setUpsellNudge(false); setTela('carrinho'); }}
+            className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl font-bold text-white text-sm active:scale-95 transition-transform"
+            style={{ background: 'rgba(14,165,233,0.95)', backdropFilter: 'blur(16px)', boxShadow: '0 4px 24px rgba(14,165,233,0.5)' }}>
+            <span className="text-lg">🥤</span>
+            <span>Vai uma bebida? Toque para ver →</span>
+            <button onClick={e => { e.stopPropagation(); setUpsellNudge(false); }} className="ml-1 opacity-70"><X size={14} /></button>
+          </button>
+        </div>
+      )}
 
       {/* FAB carrinho — glassmorphism */}
       {totalItens > 0 && (
