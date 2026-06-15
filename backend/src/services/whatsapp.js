@@ -87,12 +87,14 @@ function formatarTelefone(tel) {
 }
 
 const MENSAGENS = {
-  confirmacao: (p) =>
-`🍣 *Pedido #${p.numero} recebido!*
+  confirmacao: null,
+
+  espera: (p) =>
+`🍣 *Pedido #${p.numero} aceito!*
 
 Olá, *${p.cliente_nome}*! 😊
 
-Seu pedido foi recebido e logo entrará em preparo.
+Seu pedido foi aceito e logo entrará em preparo.
 
 📦 *Itens:*
 ${p.itens.map(i => `  • ${i.quantidade}x ${i.item_nome}`).join('\n')}
@@ -100,19 +102,7 @@ ${p.itens.map(i => `  • ${i.quantidade}x ${i.item_nome}`).join('\n')}
 💰 *Total:* ${brl(p.total)}
 ${p.tipo_entrega === 'retirada' ? `🏪 *Retirada no balcão*` : `📍 *Entrega:* ${p.cliente_endereco}`}
 
-🔍 *Acompanhe seu pedido:*
-${process.env.APP_URL || 'http://localhost:3000'}/pedido/${p.id}
-
 Qualquer dúvida, é só responder esta mensagem. 🙏`,
-
-  espera: (p) =>
-`✅ *Pedido #${p.numero} recebido!*
-
-Olá, *${p.cliente_nome}*! 😊
-
-Seu pedido foi aceito e logo entrará em preparo.
-
-🔍 Acompanhe: ${process.env.APP_URL || 'http://localhost:3000'}/pedido/${p.id}`,
 
   preparando: (p) => p.tipo_entrega === 'retirada'
 ? `👨‍🍳 *Pedido #${p.numero} em preparo!*
@@ -431,16 +421,7 @@ function sseStatus(req, res) {
 
 // ── Mensagens automáticas por evento ────────────────────────
 async function notificarNovoPedido(pedido) {
-  console.log(`[WhatsApp] notificarNovoPedido — pedido #${pedido.numero} | telefone: ${pedido.cliente_telefone || 'NENHUM'}`);
-  if (!pedido.cliente_telefone) {
-    console.warn('[WhatsApp] Pedido sem telefone — mensagem não enviada.');
-    return;
-  }
-  try {
-    await enviar(pedido.cliente_telefone, MENSAGENS.confirmacao(pedido));
-  } catch (err) {
-    console.error('[WhatsApp] Erro em notificarNovoPedido:', err.message);
-  }
+  // Mensagem de confirmação enviada apenas ao aceitar (status espera), não na criação
 }
 
 async function notificarMudancaStatus(pedido, novoStatus) {
