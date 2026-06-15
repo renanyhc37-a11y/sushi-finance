@@ -481,6 +481,7 @@ export default function PDV() {
   const [resumo, setResumo] = useState({ novo: 0, espera: 0, preparando: 0, pronto: 0, entregue: 0, cancelado: 0 });
   const [loading, setLoading] = useState(true);
   const [pedidoAberto, setPedidoAberto] = useState(null);
+  const [pedidoModal, setPedidoModal] = useState(null);
   const [pedidosNovosAlerta, setPedidosNovosAlerta] = useState([]);
   const [mostrarCancelados, setMostrarCancelados] = useState(false);
   const alarmRef = useRef(null);
@@ -697,6 +698,7 @@ export default function PDV() {
       }
 
       if (pedidoAberto?.id === pedido.id) setPedidoAberto(null);
+      if (pedidoModal?.id === pedido.id) setPedidoModal(null);
       carregar(true);
     } catch { toast.error('Erro ao atualizar'); }
   }
@@ -719,6 +721,7 @@ export default function PDV() {
       if (pedido.status === 'novo') removerAlerta(pedido.id);
       toast.success(`#${pedido.numero} cancelado`);
       if (pedidoAberto?.id === pedido.id) setPedidoAberto(null);
+      if (pedidoModal?.id === pedido.id) setPedidoModal(null);
       carregar(true);
     } catch { toast.error('Erro ao cancelar'); }
   }
@@ -821,7 +824,9 @@ export default function PDV() {
         <div className="p-3">
           {/* Linha 1: número + tempo + pagamento */}
           <div className="flex items-center gap-2 mb-2.5">
-            <span className="text-xl font-black t-strong leading-none">#{pedido.numero}</span>
+            <button onClick={() => setPedidoModal(pedido)}
+              className="text-xl font-black t-strong leading-none hover:opacity-70 transition-opacity active:scale-95"
+              title="Ver pedido completo">#{pedido.numero}</button>
             {eNovo && (
               <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md animate-pulse"
                 style={{ background: 'rgba(59,130,246,0.2)', color: '#60a5fa' }}>NOVO</span>
@@ -1018,23 +1023,6 @@ export default function PDV() {
       }}>
       <Toaster position="top-center" toastOptions={{ style: { fontSize: 14 } }} />
 
-      {/* Botão flutuante do jogo */}
-      <button
-        onClick={() => setJogoAberto(true)}
-        title="Sushi Ninja – jogar na ociosidade"
-        className="fixed z-40"
-        style={{
-          bottom: 20, left: 16, width: 44, height: 44, borderRadius: '50%',
-          background: 'linear-gradient(135deg,#f97316,#dc2626)',
-          border: 'none', cursor: 'pointer', fontSize: 20,
-          boxShadow: '0 4px 16px rgba(249,115,22,0.5)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'transform .15s',
-        }}
-        onMouseEnter={e => e.currentTarget.style.transform='scale(1.12)'}
-        onMouseLeave={e => e.currentTarget.style.transform='scale(1)'}
-      >🥷</button>
-
       {/* Modal do jogo */}
       {jogoAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -1052,6 +1040,170 @@ export default function PDV() {
           </div>
         </div>
       )}
+
+      {/* Modal detalhes completo do pedido */}
+      {pedidoModal && (() => {
+        const p = pedidos.find(x => x.id === pedidoModal.id) || pedidoModal;
+        const cfg = STATUS_CFG[p.status] || STATUS_CFG.novo;
+        const av = AVANCAR[p.status];
+        const { texto: tempoTexto } = tempo(p.created_at);
+        const linhas = (p.observacao || '').split('\n');
+        const obsNormal = linhas.filter(l => !l.startsWith('📩 WhatsApp:')).join('\n').trim();
+        const wppMsgs = linhas.filter(l => l.startsWith('📩 WhatsApp:')).map(l => l.replace('📩 WhatsApp:', '').trim()).filter(Boolean);
+        const pgtoLabel = { pix: 'PIX', dinheiro: 'Dinheiro', credito: 'Crédito', debito: 'Débito' }[p.forma_pagamento] || p.forma_pagamento || '—';
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+            onClick={e => { if (e.target === e.currentTarget) setPedidoModal(null); }}>
+            <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col"
+              style={{ background: 'var(--space-surface)', maxHeight: '92vh', border: '1px solid var(--hairline)' }}>
+
+              {/* Topo colorido */}
+              <div style={{ height: 4, background: `linear-gradient(90deg,${cfg.cor},${cfg.cor}44)` }} />
+
+              {/* Header */}
+              <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: '1px solid var(--hairline)' }}>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-black t-strong">#{p.numero}</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: `${cfg.cor}22`, color: cfg.cor }}>
+                      {cfg.label}
+                    </span>
+                    {p.agendado_para && (
+                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1"
+                        style={{ background: 'rgba(168,85,247,0.18)', color: '#c084fc' }}>
+                        <Clock size={10} /> {new Date(p.agendado_para).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs t-dim mt-0.5">{tempoTexto} · {new Date(p.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>
+                </div>
+                <button onClick={() => setPedidoModal(null)}
+                  className="ml-auto w-8 h-8 flex items-center justify-center rounded-xl t-dim"
+                  style={{ background: 'var(--space-elev-2)' }}>✕</button>
+              </div>
+
+              {/* Corpo scrollável */}
+              <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+
+                {/* Cliente */}
+                <div className="rounded-2xl p-4 space-y-2" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                  <p className="text-[10px] font-bold uppercase tracking-widest t-dim">Cliente</p>
+                  <p className="font-black t-strong text-base">{p.cliente_nome}</p>
+                  {p.cliente_telefone && (
+                    <a href={`tel:${p.cliente_telefone}`} className="flex items-center gap-2 text-sm" style={{ color: '#60a5fa' }}>
+                      <Smartphone size={14} /> {p.cliente_telefone}
+                    </a>
+                  )}
+                  <div className="flex items-start gap-2 text-sm t-mut">
+                    {p.tipo_entrega === 'retirada'
+                      ? <><ShoppingBag size={14} className="shrink-0 mt-0.5" /><span>Retirada no balcão</span></>
+                      : <><MapPin size={14} className="shrink-0 mt-0.5" /><span>{p.cliente_endereco}{p.bairro ? ` — ${p.bairro}` : ''}</span></>
+                    }
+                  </div>
+                  {p.cliente_total_pedidos > 1 && (
+                    <p className="text-xs font-bold flex items-center gap-1" style={{ color: '#fbbf24' }}>
+                      <Star size={12} /> {p.cliente_total_pedidos}º pedido deste cliente
+                    </p>
+                  )}
+                </div>
+
+                {/* Itens */}
+                <div className="rounded-2xl p-4" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                  <p className="text-[10px] font-bold uppercase tracking-widest t-dim mb-3">Itens do pedido</p>
+                  <div className="space-y-2">
+                    {p.itens.map((item, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="font-black text-sm shrink-0" style={{ color: cfg.cor }}>{item.quantidade}×</span>
+                        <span className="t-strong text-sm flex-1">{item.item_nome}</span>
+                        <span className="t-dim text-sm shrink-0">{brl(item.valor_unitario * item.quantidade)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between items-center mt-3 pt-3" style={{ borderTop: '1px solid var(--hairline)' }}>
+                    <span className="text-sm t-dim">Total</span>
+                    <span className="font-black t-strong text-lg">{brl(p.total)}</span>
+                  </div>
+                  {p.desconto > 0 && <p className="text-xs mt-1 text-right" style={{ color: '#34d399' }}>Desconto: -{brl(p.desconto)}</p>}
+                  {p.frete > 0  && <p className="text-xs mt-0.5 text-right t-dim">Frete: +{brl(p.frete)}</p>}
+                </div>
+
+                {/* Pagamento */}
+                <div className="rounded-2xl p-4 space-y-2" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                  <p className="text-[10px] font-bold uppercase tracking-widest t-dim">Pagamento</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm t-mut">{pgtoLabel}</span>
+                    {p.forma_pagamento === 'pix' && (
+                      p.pix_confirmado_em
+                        ? <span className="text-xs font-bold flex items-center gap-1" style={{ color: '#34d399' }}><CheckCircle2 size={13} /> Confirmado</span>
+                        : <button onClick={() => { confirmarPix(p); setPedidoModal(null); }}
+                            className="text-xs font-bold px-3 py-1 rounded-lg"
+                            style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.3)' }}>
+                            ✓ Caiu no banco
+                          </button>
+                    )}
+                  </div>
+                  {p.forma_pagamento === 'dinheiro' && p.troco_para > p.total && (
+                    <div className="flex items-center justify-between px-3 py-2 rounded-xl"
+                      style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)' }}>
+                      <span className="text-sm t-mut">Troco p/ {brl(p.troco_para)}</span>
+                      <span className="font-black" style={{ color: '#34d399' }}>Levar {brl(p.troco_para - p.total)}</span>
+                    </div>
+                  )}
+                  {p.cupom_codigo && <p className="text-xs t-dim">Cupom: <span className="font-bold t-strong">{p.cupom_codigo}</span></p>}
+                </div>
+
+                {/* Observação */}
+                {obsNormal && (
+                  <div className="rounded-2xl p-4" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#f59e0b' }}>⚠️ Observação</p>
+                    <p className="text-sm leading-relaxed" style={{ color: '#fbbf24', whiteSpace: 'pre-wrap' }}>{obsNormal}</p>
+                  </div>
+                )}
+
+                {/* Mensagens WhatsApp */}
+                {wppMsgs.length > 0 && (
+                  <div className="rounded-2xl p-4" style={{ background: 'rgba(37,211,102,0.06)', border: '1px solid rgba(37,211,102,0.2)' }}>
+                    <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: '#25d366' }}>📩 WhatsApp ({wppMsgs.length})</p>
+                    <div className="space-y-1.5">
+                      {wppMsgs.map((m, i) => <p key={i} className="text-sm leading-snug" style={{ color: '#25d366', opacity: 0.9 }}>• {m}</p>)}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer — ações */}
+              {p.status !== 'cancelado' && p.status !== 'entregue' && (
+                <div className="px-5 py-4 flex gap-2" style={{ borderTop: '1px solid var(--hairline)' }}>
+                  <button onClick={() => cancelar(p)}
+                    className="w-10 h-10 flex items-center justify-center rounded-xl shrink-0"
+                    style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }}>
+                    <X size={17} />
+                  </button>
+                  {p.cliente_telefone && (
+                    <button onClick={() => abrirWhatsApp(p, p.status)}
+                      className="w-10 h-10 flex items-center justify-center rounded-xl shrink-0"
+                      style={{ background: 'rgba(37,211,102,0.1)', color: '#25d366', border: '1px solid rgba(37,211,102,0.2)' }}>
+                      <MessageCircle size={17} />
+                    </button>
+                  )}
+                  {av && (
+                    <button onClick={() => { avancar(p); }}
+                      className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-black text-white text-sm transition-all active:scale-95"
+                      style={{
+                        background: p.status === 'novo' ? 'linear-gradient(135deg,#2563eb,#1d4ed8)' : cfg.cor,
+                        boxShadow: `0 4px 16px ${cfg.cor}44`,
+                      }}>
+                      <av.Icon size={16} strokeWidth={2} /> {av.label}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Banner alerta novos pedidos */}
       <BannerNovoPedido
