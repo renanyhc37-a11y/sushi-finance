@@ -568,10 +568,14 @@ function ItemModal({ item, onClose, carrinho, onConfirm }) {
   );
 }
 
-// ── TrocoInput: componente estável para não desmontar o input a cada keystroke ──
-function TrocoInput({ troco, aPagar, onChange }) {
+// ── TrocoInput: componente estável (memo) para não desmontar o input a cada keystroke ──
+const TrocoInput = React.memo(function TrocoInput({ troco, aPagar, onChange }) {
   const trocoNum = troco ? Number(String(troco).replace(',', '.')) : 0;
   const trocoOk = trocoNum >= aPagar;
+  const brlLocal = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  let feedback = null;
+  if (troco && trocoOk) feedback = <p className="text-xs text-green-400 font-bold mt-1.5">Troco: {brlLocal(trocoNum - aPagar)}</p>;
+  else if (troco && !trocoOk) feedback = <p className="text-xs text-amber-400 mt-1.5">O valor precisa ser ≥ {brlLocal(aPagar)}</p>;
   return (
     <div className="mt-2.5 rounded-xl p-3" style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}>
       <label className="text-xs text-zinc-500 font-medium flex items-center gap-1.5 mb-2">
@@ -581,7 +585,8 @@ function TrocoInput({ troco, aPagar, onChange }) {
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">R$</span>
         <input
           type="text" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*"
-          placeholder={`Deixe em branco se tiver o valor exato (${Number(aPagar).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})`}
+          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck="false"
+          placeholder={`Valor exato: ${brlLocal(aPagar)}`}
           value={troco}
           onChange={e => onChange(e.target.value)}
           className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm text-white outline-none"
@@ -590,15 +595,10 @@ function TrocoInput({ troco, aPagar, onChange }) {
           onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
         />
       </div>
-      {troco && trocoOk && (
-        <p className="text-xs text-green-400 font-bold mt-1.5">Troco: {Number(trocoNum - aPagar).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-      )}
-      {troco && !trocoOk && (
-        <p className="text-xs text-amber-400 mt-1.5">O valor precisa ser ≥ {Number(aPagar).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-      )}
+      <div style={{ minHeight: '1.25rem' }}>{feedback}</div>
     </div>
   );
-}
+});
 
 // ── Componente principal ──────────────────────────────────────
 export default function Cardapio() {
@@ -709,6 +709,7 @@ export default function Cardapio() {
 
   const [upsellNudge, setUpsellNudge] = useState(false);
   const nudgeTimerRef = useRef(null);
+  const onTrocoChange = useCallback(v => setForm(p => ({ ...p, troco_para: v })), []);
 
   // Sugestões de upsell: prioriza bebidas/sobremesas/molhos, exclui itens já no carrinho
   function getSugestoes(carr) {
@@ -1143,7 +1144,7 @@ export default function Cardapio() {
           <TrocoInput
             troco={form.troco_para}
             aPagar={totalValor - calcDesconto()}
-            onChange={v => setForm(p => ({ ...p, troco_para: v }))}
+            onChange={onTrocoChange}
           />
         )}
       </div>
