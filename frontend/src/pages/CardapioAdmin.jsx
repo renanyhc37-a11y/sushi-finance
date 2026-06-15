@@ -1300,78 +1300,116 @@ function SortableCatItem({ cat, isActive, isOver, isDraggingItem, onClick, onEdi
 function SortableItemCard({ item, onToggle, onFicha, onEdit, onDelete }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `item-${item.id}` });
   const brlLocal = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.35 : item.disponivel ? 1 : 0.7,
-    zIndex: isDragging ? 50 : undefined,
-  };
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.35 : 1, zIndex: isDragging ? 50 : undefined };
   return (
-    <div ref={setNodeRef}
-      className="rounded-2xl overflow-hidden"
-      style={{
-        ...style,
-        background: 'var(--space-elev)',
-        border: `1px solid ${!item.disponivel ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.05)'}`,
-      }}>
-      {/* Imagem + handle de arrastar */}
-      <div className="relative w-full flex items-center justify-center overflow-hidden"
-        style={{ background: 'var(--space-elev-2)', aspectRatio: '4/3' }}>
+    <div ref={setNodeRef} className="group rounded-2xl overflow-hidden flex flex-col"
+      style={{ ...style, background: 'var(--space-elev)', border: `1.5px solid ${!item.disponivel ? 'rgba(239,68,68,0.25)' : 'rgba(255,255,255,0.05)'}`, transition: 'border-color 0.2s' }}>
+      {/* Foto */}
+      <div className="relative w-full overflow-hidden" style={{ background: 'var(--space-elev-2)', aspectRatio: '16/9' }}>
         {item.foto
-          ? <img src={`${item.foto}?t=${Date.now()}`} alt={item.nome} className="w-full h-full object-cover" />
-          : <span className="select-none" style={{ color: 'var(--txt-dim)' }}><IconePrato chave={item.emoji} size={44} strokeWidth={1.4} /></span>}
-
-        {/* Handle — área de drag */}
-        <div {...listeners} {...attributes}
-          className="absolute inset-0 cursor-grab active:cursor-grabbing"
-          style={{ touchAction: 'none' }} />
-
-        {/* Status badge — por cima do handle */}
-        <button onClick={onToggle}
-          className="absolute top-2 right-2 px-2 py-0.5 rounded-lg text-[10px] font-black"
-          style={{
-            background: item.disponivel ? 'rgba(16,185,129,0.85)' : 'rgba(239,68,68,0.85)',
-            color: '#fff', backdropFilter: 'blur(6px)', zIndex: 10,
-          }}>
-          {item.disponivel ? <Check size={13} strokeWidth={2.5} /> : <X size={13} strokeWidth={2} />}
+          ? <img src={`${item.foto}?t=${Date.now()}`} alt={item.nome} className="w-full h-full object-cover" style={{ opacity: item.disponivel ? 1 : 0.45 }} />
+          : <div className="w-full h-full flex items-center justify-center" style={{ opacity: item.disponivel ? 0.35 : 0.15 }}><IconePrato chave={item.emoji} size={40} strokeWidth={1.4} /></div>}
+        {/* Handle drag */}
+        <div {...listeners} {...attributes} className="absolute inset-0 cursor-grab active:cursor-grabbing" style={{ touchAction: 'none' }} />
+        {/* Toggle disponível */}
+        <button onClick={onToggle} title={item.disponivel ? 'Ocultar do cardápio' : 'Disponibilizar'}
+          className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black"
+          style={{ background: item.disponivel ? 'rgba(16,185,129,0.9)' : 'rgba(239,68,68,0.9)', color: '#fff', backdropFilter: 'blur(6px)', zIndex: 10 }}>
+          {item.disponivel ? <><Check size={11} strokeWidth={3} /> Ativo</> : <><X size={11} strokeWidth={3} /> Oculto</>}
         </button>
-
-        {/* Ícone de arrastar — canto superior esquerdo */}
-        <div className="absolute top-2 left-2 w-6 h-6 flex items-center justify-center rounded-lg"
-          style={{ background: 'rgba(0,0,0,0.6)', color: '#888', pointerEvents: 'none' }}>
-          <GripVertical size={14} strokeWidth={1.75} />
+        <div className="absolute top-2 left-2 w-6 h-6 flex items-center justify-center rounded-lg pointer-events-none"
+          style={{ background: 'rgba(0,0,0,0.55)', color: '#666' }}>
+          <GripVertical size={13} strokeWidth={1.75} />
         </div>
       </div>
-
       {/* Info */}
-      <div className="p-3">
-        <div className="flex items-start justify-between gap-1 mb-0.5">
-          <p className="font-bold t-strong text-sm leading-tight">{item.nome}</p>
-          <p className="font-black text-sm shrink-0" style={{ color: 'var(--accent)' }}>{brlLocal(item.preco)}</p>
+      <div className="flex flex-col flex-1 p-3">
+        <div className="flex items-start justify-between gap-1 mb-1">
+          <p className="font-bold t-strong text-sm leading-tight flex-1">{item.nome}</p>
+          <p className="font-black text-sm shrink-0 ml-1" style={{ color: 'var(--accent)' }}>{brlLocal(item.preco)}</p>
         </div>
-        {item.descricao && (
-          <p className="text-[11px] mt-0.5 line-clamp-2" style={{ color: '#555' }}>{item.descricao}</p>
-        )}
-        <div className="flex gap-1.5 mt-2.5 pt-2.5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-          <button onClick={onFicha}
-            className="flex-1 py-1.5 rounded-lg text-[11px] font-bold"
+        {item.descricao && <p className="text-[11px] line-clamp-2 flex-1" style={{ color: '#555' }}>{item.descricao}</p>}
+        {/* Ações */}
+        <div className="flex gap-1.5 mt-2.5 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+          <button onClick={onFicha} title="Ficha técnica"
+            className="flex-1 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1"
             style={{ background: 'rgba(167,139,250,0.1)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.2)' }}>
-            <span className="flex items-center justify-center gap-1"><FileText size={13} strokeWidth={1.75} /> Ficha</span>
+            <FileText size={12} strokeWidth={1.75} /> Ficha
           </button>
-          <button onClick={onEdit}
-            className="flex-1 py-1.5 rounded-lg text-[11px] font-bold"
-            style={{ background: 'rgba(255,255,255,0.04)', color: '#aaa', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <span className="flex items-center justify-center gap-1"><Pencil size={13} strokeWidth={1.75} /> Editar</span>
+          <button onClick={onEdit} title="Editar item"
+            className="flex-1 py-1.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1"
+            style={{ background: 'rgba(251,191,36,0.08)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}>
+            <Pencil size={12} strokeWidth={1.75} /> Editar
           </button>
-          <button onClick={onDelete}
-            className="w-8 h-8 flex items-center justify-center rounded-lg"
+          <button onClick={onDelete} title="Excluir"
+            className="w-8 h-8 flex items-center justify-center rounded-lg shrink-0"
             style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.15)' }}>
-            <Trash2 size={15} strokeWidth={1.75} />
+            <Trash2 size={14} strokeWidth={1.75} />
           </button>
         </div>
       </div>
     </div>
   );
+}
+
+// ── Vista lista: linha compacta de item ───────────────────────
+function ListItemRow({ item, onToggle, onFicha, onEdit, onDelete, listeners, attributes, setNodeRef, style: dndStyle }) {
+  const brlLocal = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const rowStyle = { ...dndStyle, background: 'var(--space-elev)', border: `1px solid ${!item.disponivel ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.04)'}` };
+  return (
+    <div ref={setNodeRef} style={rowStyle}
+      className="flex items-center gap-3 px-3 py-2.5 rounded-xl group">
+      {/* Drag handle */}
+      <div {...listeners} {...attributes} className="cursor-grab active:cursor-grabbing shrink-0 text-center" style={{ touchAction: 'none', color: '#333' }}>
+        <GripVertical size={15} strokeWidth={1.75} />
+      </div>
+      {/* Thumb */}
+      <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 flex items-center justify-center" style={{ background: 'var(--space-elev-2)' }}>
+        {item.foto
+          ? <img src={`${item.foto}?t=${Date.now()}`} alt={item.nome} className="w-full h-full object-cover" style={{ opacity: item.disponivel ? 1 : 0.4 }} />
+          : <IconePrato chave={item.emoji} size={22} strokeWidth={1.5} style={{ opacity: item.disponivel ? 0.5 : 0.2 }} />}
+      </div>
+      {/* Nome + desc */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold t-strong truncate">{item.nome}</p>
+        {item.descricao && <p className="text-[11px] truncate" style={{ color: '#555' }}>{item.descricao}</p>}
+      </div>
+      {/* Preço */}
+      <span className="text-sm font-black shrink-0" style={{ color: 'var(--accent)' }}>{brlLocal(item.preco)}</span>
+      {/* Toggle */}
+      <button onClick={onToggle} title={item.disponivel ? 'Ocultar' : 'Ativar'}
+        className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold"
+        style={item.disponivel
+          ? { background: 'rgba(16,185,129,0.1)', color: '#10b981', border: '1px solid rgba(16,185,129,0.25)' }
+          : { background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
+        {item.disponivel ? <><Check size={12} strokeWidth={2.5} /> Ativo</> : <><X size={12} strokeWidth={2} /> Oculto</>}
+      </button>
+      {/* Ações */}
+      <div className="flex items-center gap-1 shrink-0">
+        <button onClick={onFicha} title="Ficha técnica"
+          className="w-8 h-8 flex items-center justify-center rounded-lg"
+          style={{ background: 'rgba(167,139,250,0.1)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.2)' }}>
+          <FileText size={14} strokeWidth={1.75} />
+        </button>
+        <button onClick={onEdit} title="Editar"
+          className="w-8 h-8 flex items-center justify-center rounded-lg"
+          style={{ background: 'rgba(251,191,36,0.08)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.2)' }}>
+          <Pencil size={14} strokeWidth={1.75} />
+        </button>
+        <button onClick={onDelete} title="Excluir"
+          className="w-8 h-8 flex items-center justify-center rounded-lg"
+          style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.15)' }}>
+          <Trash2 size={14} strokeWidth={1.75} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SortableListRow({ item, onToggle, onFicha, onEdit, onDelete }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: `item-${item.id}` });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.35 : 1, zIndex: isDragging ? 50 : undefined };
+  return <ListItemRow item={item} onToggle={onToggle} onFicha={onFicha} onEdit={onEdit} onDelete={onDelete} listeners={listeners} attributes={attributes} setNodeRef={setNodeRef} style={style} />;
 }
 
 // ── Componente principal ──────────────────────────────────────
@@ -1381,6 +1419,8 @@ export default function CardapioAdmin() {
   const [catAtiva, setCatAtiva] = useState(null);
   const [modalCat, setModalCat] = useState(null);   // null | 'nova' | categoria
   const [modalItem, setModalItem] = useState(null); // null | 'novo' | item
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('cardapio_view') || 'grid');
+  const [buscaItem, setBuscaItem] = useState('');
   const abaInicial = new URLSearchParams(window.location.search).get('aba') || 'cardapio';
   const [aba, setAba] = useState(abaInicial); // 'cardapio' | 'cupons' | 'horario' | 'ia'
   const [cupons, setCupons] = useState([]);
@@ -2251,12 +2291,15 @@ export default function CardapioAdmin() {
             <div className="flex min-h-[calc(100vh-120px)]">
 
               {/* Sidebar categorias — sortable, só desktop */}
-              <div className="hidden md:block w-52 shrink-0 border-r overflow-y-auto"
+              <div className="hidden md:flex flex-col w-56 shrink-0 border-r overflow-y-auto"
                 style={{ borderColor: 'var(--hairline)', position: 'sticky', top: 105, alignSelf: 'flex-start', maxHeight: 'calc(100vh - 105px)' }}>
-                <div className="p-3 space-y-0.5">
-                  <p className="text-[10px] font-black tracking-widest px-2 pb-2" style={{ color: '#333' }}>
-                    CATEGORIAS <span style={{ color: 'var(--hairline)' }}>· arraste para reordenar</span>
-                  </p>
+                <div className="p-3 space-y-0.5 flex-1">
+                  <div className="flex items-center justify-between px-2 pb-2">
+                    <p className="text-[10px] font-black tracking-widest" style={{ color: '#444' }}>CATEGORIAS</p>
+                    <button onClick={() => setModalCat('nova')} title="Nova categoria"
+                      className="w-5 h-5 flex items-center justify-center rounded-md text-xs font-black"
+                      style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)' }}>+</button>
+                  </div>
                   {loading ? (
                     [1,2,3,4,5].map(i => (
                       <div key={i} className="h-10 rounded-xl animate-pulse mx-1 mb-1" style={{ background: 'var(--space-elev)' }} />
@@ -2290,49 +2333,80 @@ export default function CardapioAdmin() {
                 ) : (
                   <>
                     {/* Header da categoria */}
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                       <div className="flex items-center gap-2.5">
-                        <span className="text-2xl">{catSelecionada.emoji}</span>
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                          style={{ background: catSelecionada.ativo ? 'rgba(var(--accent-rgb),0.12)' : 'rgba(239,68,68,0.1)', border: `1px solid ${catSelecionada.ativo ? 'rgba(var(--accent-rgb),0.25)' : 'rgba(239,68,68,0.2)'}` }}>
+                          <IconePrato chave={catSelecionada.emoji} size={20} style={{ color: catSelecionada.ativo ? 'var(--accent)' : '#ef4444' }} />
+                        </div>
                         <div>
                           <div className="flex items-center gap-2">
                             <h2 className="text-base font-black t-strong">{catSelecionada.nome}</h2>
-                            {!catSelecionada.ativo && (
-                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold"
-                                style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>Oculta</span>
-                            )}
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold" style={{ background: 'var(--space-elev-2)', color: '#555' }}>{catSelecionada.itens.length} itens</span>
+                            {!catSelecionada.ativo && <span className="text-[10px] px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>Oculta</span>}
                           </div>
-                          {catSelecionada.descricao && (
-                            <p className="text-xs" style={{ color: '#555' }}>{catSelecionada.descricao}</p>
-                          )}
+                          {catSelecionada.descricao && <p className="text-xs mt-0.5" style={{ color: '#555' }}>{catSelecionada.descricao}</p>}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <button onClick={() => toggleCategoria(catSelecionada)}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-bold"
+                          className="h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1"
                           style={catSelecionada.ativo
                             ? { background: 'rgba(16,185,129,0.08)', color: '#10b981', border: '1px solid rgba(16,185,129,0.2)' }
                             : { background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
-                          <span className="flex items-center gap-1">{catSelecionada.ativo ? <><Check size={13} strokeWidth={2.5} /> Visível</> : <><X size={13} strokeWidth={2} /> Oculta</>}</span>
+                          {catSelecionada.ativo ? <><Check size={12} strokeWidth={2.5} /> Visível</> : <><X size={12} strokeWidth={2} /> Oculta</>}
                         </button>
                         <button onClick={() => setModalCat(catSelecionada)}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-bold"
+                          className="h-8 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1"
                           style={{ background: 'var(--space-elev)', color: '#777', border: '1px solid var(--space-elev-2)' }}>
-                          <span className="flex items-center gap-1"><Pencil size={13} strokeWidth={1.75} /> Editar cat.</span>
+                          <Pencil size={12} strokeWidth={1.75} /> Editar cat.
                         </button>
                         <button onClick={() => excluirCategoria(catSelecionada)}
                           className="w-8 h-8 flex items-center justify-center rounded-lg"
-                          style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.15)' }}>
-                          <Trash2 size={15} strokeWidth={1.75} />
+                          style={{ background: 'rgba(239,68,68,0.06)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.15)' }}>
+                          <Trash2 size={14} strokeWidth={1.75} />
                         </button>
                         <button onClick={() => setModalItem({ novo: true })}
-                          className="px-3 py-1.5 rounded-xl text-xs font-black t-strong"
-                          style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent-2))' }}>
-                          + Item
+                          className="h-8 px-3 rounded-xl text-xs font-black t-strong flex items-center gap-1"
+                          style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent-2))', boxShadow: '0 2px 10px rgba(var(--accent-rgb),0.3)' }}>
+                          <Plus size={13} strokeWidth={2.5} /> Item
                         </button>
                       </div>
                     </div>
 
-                    {/* Grid sortable de cards */}
+                    {/* Barra de busca + toggle de view */}
+                    {catSelecionada.itens.length > 0 && (
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="flex-1 relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 t-faint pointer-events-none">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                          </span>
+                          <input
+                            type="text" placeholder={`Buscar em ${catSelecionada.nome}…`}
+                            value={buscaItem} onChange={e => setBuscaItem(e.target.value)}
+                            className="w-full pl-8 pr-3 py-2 rounded-xl text-sm outline-none"
+                            style={{ background: 'var(--space-elev)', border: '1px solid var(--space-elev-2)', color: 'var(--txt-strong)' }}
+                          />
+                          {buscaItem && (
+                            <button onClick={() => setBuscaItem('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 t-dim"><X size={13} /></button>
+                          )}
+                        </div>
+                        {/* Toggle grid/lista */}
+                        <div className="flex rounded-xl overflow-hidden shrink-0" style={{ border: '1px solid var(--space-elev-2)' }}>
+                          {[{ v: 'grid', icon: '⊞' }, { v: 'list', icon: '☰' }].map(({ v, icon }) => (
+                            <button key={v} onClick={() => { setViewMode(v); localStorage.setItem('cardapio_view', v); }}
+                              className="w-9 h-9 flex items-center justify-center text-base transition-all"
+                              style={viewMode === v
+                                ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }
+                                : { background: 'var(--space-elev)', color: '#555' }}>
+                              {icon}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Itens */}
                     {catSelecionada.itens.length === 0 ? (
                       <div className="text-center py-16">
                         <p className="flex justify-center mb-3 t-faint"><UtensilsCrossed size={34} strokeWidth={1.5} /></p>
@@ -2343,24 +2417,43 @@ export default function CardapioAdmin() {
                           + Adicionar primeiro item
                         </button>
                       </div>
-                    ) : (
-                      <SortableContext
-                        items={catSelecionada.itens.map(i => `item-${i.id}`)}
-                        strategy={rectSortingStrategy}>
-                        <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
-                          {catSelecionada.itens.map(item => (
-                            <SortableItemCard
-                              key={item.id}
-                              item={item}
-                              onToggle={() => toggleItem(item)}
-                              onFicha={() => setModalFicha(item)}
-                              onEdit={() => setModalItem(item)}
-                              onDelete={() => excluirItem(item)}
-                            />
-                          ))}
+                    ) : (() => {
+                      const itensFiltrados = buscaItem
+                        ? catSelecionada.itens.filter(i => i.nome.toLowerCase().includes(buscaItem.toLowerCase()))
+                        : catSelecionada.itens;
+                      if (itensFiltrados.length === 0) return (
+                        <div className="text-center py-12">
+                          <p className="t-dim text-sm">Nenhum item encontrado para "{buscaItem}"</p>
                         </div>
-                      </SortableContext>
-                    )}
+                      );
+                      return viewMode === 'list' ? (
+                        <SortableContext items={catSelecionada.itens.map(i => `item-${i.id}`)} strategy={verticalListSortingStrategy}>
+                          <div className="space-y-1.5">
+                            {itensFiltrados.map(item => (
+                              <SortableListRow key={item.id} item={item}
+                                onToggle={() => toggleItem(item)}
+                                onFicha={() => setModalFicha(item)}
+                                onEdit={() => setModalItem(item)}
+                                onDelete={() => excluirItem(item)}
+                              />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      ) : (
+                        <SortableContext items={catSelecionada.itens.map(i => `item-${i.id}`)} strategy={rectSortingStrategy}>
+                          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(195px, 1fr))' }}>
+                            {itensFiltrados.map(item => (
+                              <SortableItemCard key={item.id} item={item}
+                                onToggle={() => toggleItem(item)}
+                                onFicha={() => setModalFicha(item)}
+                                onEdit={() => setModalItem(item)}
+                                onDelete={() => excluirItem(item)}
+                              />
+                            ))}
+                          </div>
+                        </SortableContext>
+                      );
+                    })()}
                   </>
                 )}
               </div>
