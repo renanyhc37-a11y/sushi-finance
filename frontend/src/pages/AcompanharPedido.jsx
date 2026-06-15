@@ -10,133 +10,270 @@ const STATUS = {
 };
 const ETAPAS = ['novo', 'preparando', 'pronto', 'entregue'];
 
-// ── Jogo: Sushi Clicker ───────────────────────────────────────
-function SushiClicker() {
-  const [score, setScore] = useState(0);
-  const [clicks, setClicks] = useState([]);
-  const [best, setBest] = useState(() => Number(localStorage.getItem('sushi_best') || 0));
-  const [timeLeft, setTimeLeft] = useState(15);
-  const [started, setStarted] = useState(false);
-  const [ended, setEnded] = useState(false);
-  const timerRef = useRef(null);
-  const idRef = useRef(0);
+// ── Jogo: Sushi Ninja Cut ────────────────────────────────────
+const SUSHIS = ['🍣','🍱','🥟','🦐','🐟','🍙','🥢'];
+const BOMBS  = ['💣'];
 
-  const start = () => { setScore(0); setTimeLeft(15); setEnded(false); setStarted(true); };
+function SushiNinja() {
+  const canvasRef = useRef(null);
+  const stateRef  = useRef(null); // game state (mutable, não causa re-render)
+  const rafRef    = useRef(null);
+  const [phase, setPhase]   = useState('idle'); // idle | playing | dead
+  const [score, setScore]   = useState(0);
+  const [lives, setLives]   = useState(3);
+  const [best,  setBest]    = useState(() => Number(localStorage.getItem('sninja_best') || 0));
+  const finalScore = useRef(0);
+
+  const initState = () => ({
+    pieces: [],
+    blade: [],         // últimas posições do cursor/touch
+    particles: [],     // pedaços cortados
+    spawnTimer: 0,
+    spawnInterval: 80, // frames entre spawns (vai diminuindo)
+    frame: 0,
+    score: 0,
+    lives: 3,
+    running: true,
+  });
+
+  const spawnPiece = (s, W) => {
+    const isBomb = Math.random() < 0.12;
+    const x = W * 0.1 + Math.random() * W * 0.8;
+    const vy = -(12 + Math.random() * 7);
+    const vx = (Math.random() - 0.5) * 3;
+    const emoji = isBomb ? BOMBS[0] : SUSHIS[Math.floor(Math.random() * SUSHIS.length)];
+    return { x, y: s.height ?? 400, vy, vx, rot: Math.random() * 360, rotV: (Math.random()-0.5)*6, emoji, r: 30, isBomb, sliced: false, alpha: 1 };
+  };
+
+  const startGame = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    stateRef.current = initState();
+    stateRef.current.width  = canvas.width;
+    stateRef.current.height = canvas.height;
+    finalScore.current = 0;
+    setScore(0); setLives(3); setPhase('playing');
+  };
 
   useEffect(() => {
-    if (!started || ended) return;
-    timerRef.current = setInterval(() => {
-      setTimeLeft(t => {
-        if (t <= 1) { clearInterval(timerRef.current); setEnded(true); return 0; }
-        return t - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timerRef.current);
-  }, [started, ended]);
+    if (phase !== 'playing') return;
+    const canvas = canvasRef.current;
+    const ctx    = canvas.getContext('2d');
+    const s      = stateRef.current;
+    const W = canvas.width, H = canvas.height;
+    s.width = W; s.height = H;
+
+    const loop = () => {
+      if (!s.running) return;
+      s.frame++;
+      ctx.clearRect(0, 0, W, H);
+
+      // fundo
+      ctx.fillStyle = '#070707';
+      ctx.fillRect(0, 0, W, H);
+
+      // grid sutil
+      ctx.strokeStyle = 'rgba(249,115,22,0.04)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < W; i += 40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,H); ctx.stroke(); }
+      for (let i = 0; i < H; i += 40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(W,i); ctx.stroke(); }
+
+      // spawn
+      s.spawnTimer++;
+      if (s.spawnTimer >= s.spawnInterval) {
+        s.spawnTimer = 0;
+        s.pieces.push(spawnPiece(s, W));
+        if (s.spawnInterval > 35) s.spawnInterval -= 0.3;
+      }
+
+      // física das peças
+      const G = 0.38;
+      s.pieces = s.pieces.filter(p => p.alpha > 0.05);
+      for (const p of s.pieces) {
+        if (!p.sliced) {
+          p.vy += G; p.x += p.vx; p.y += p.vy; p.rot += p.rotV;
+          // caiu sem ser cortado
+          if (p.y > H + 50 && !p.isBomb) {
+            s.lives--;
+            setLives(s.lives);
+            if (s.lives <= 0) { s.running = false; finalScore.current = s.score; setPhase('dead'); return; }
+            p.alpha = 0;
+          }
+          if (p.y > H + 50 && p.isBomb) p.alpha = 0;
+        } else {
+          // pedaço cortado: some
+          p.alpha -= 0.05;
+        }
+      }
+
+      // desenha peças
+      ctx.font = '42px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const p of s.pieces) {
+        if (p.alpha <= 0) continue;
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.translate(p.x, p.y);
+        ctx.rotate((p.rot * Math.PI) / 180);
+        ctx.fillText(p.emoji, 0, 0);
+        ctx.restore();
+      }
+
+      // partículas de corte
+      s.particles = s.particles.filter(p => p.life > 0);
+      for (const p of s.particles) {
+        p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life--;
+        ctx.save();
+        ctx.globalAlpha = p.life / 20;
+        ctx.font = '22px serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.emoji, p.x, p.y);
+        ctx.restore();
+      }
+
+      // rastro da lâmina
+      if (s.blade.length > 1) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.lineWidth = 3;
+        ctx.lineCap  = 'round';
+        ctx.lineJoin = 'round';
+        ctx.shadowColor = '#f97316';
+        ctx.shadowBlur  = 12;
+        ctx.beginPath();
+        ctx.moveTo(s.blade[0].x, s.blade[0].y);
+        for (let i = 1; i < s.blade.length; i++) {
+          ctx.lineTo(s.blade[i].x, s.blade[i].y);
+        }
+        ctx.stroke();
+        ctx.restore();
+        s.blade = s.blade.slice(-10);
+      }
+
+      // HUD
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = 'bold 22px system-ui';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${s.score}`, 12, 30);
+      ctx.font = '13px system-ui';
+      ctx.fillStyle = '#64748b';
+      ctx.fillText('pts', 12, 48);
+      // vidas
+      ctx.font = '20px serif';
+      ctx.textAlign = 'right';
+      ctx.fillText('❤️'.repeat(Math.max(0, s.lives)), W - 10, 30);
+
+      rafRef.current = requestAnimationFrame(loop);
+    };
+
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [phase]);
+
+  // detecção de corte via mouse/touch
+  const getPos = (e, canvas) => {
+    const r = canvas.getBoundingClientRect();
+    const scaleX = canvas.width  / r.width;
+    const scaleY = canvas.height / r.height;
+    const src = e.touches ? e.touches[0] : e;
+    return { x: (src.clientX - r.left) * scaleX, y: (src.clientY - r.top) * scaleY };
+  };
+
+  const slice = (pos) => {
+    const s = stateRef.current;
+    if (!s || !s.running) return;
+    s.blade.push(pos);
+    // checar colisão com peças
+    for (const p of s.pieces) {
+      if (p.sliced || p.alpha <= 0) continue;
+      const dx = pos.x - p.x, dy = pos.y - p.y;
+      if (Math.sqrt(dx*dx + dy*dy) < p.r + 10) {
+        if (p.isBomb) {
+          s.lives = 0; s.running = false;
+          finalScore.current = s.score;
+          setPhase('dead'); return;
+        }
+        p.sliced = true;
+        s.score++;
+        setScore(s.score);
+        // partículas
+        for (let i = 0; i < 5; i++) {
+          s.particles.push({
+            x: p.x, y: p.y,
+            vx: (Math.random()-0.5)*5, vy: -Math.random()*4,
+            emoji: p.emoji, life: 20,
+          });
+        }
+      }
+    }
+  };
+
+  const onMove = (e) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas || phase !== 'playing') return;
+    slice(getPos(e, canvas));
+  };
 
   useEffect(() => {
-    if (ended && score > best) { setBest(score); localStorage.setItem('sushi_best', score); }
-  }, [ended]);
+    if (phase === 'dead' && finalScore.current > best) {
+      setBest(finalScore.current);
+      localStorage.setItem('sninja_best', finalScore.current);
+    }
+  }, [phase]);
 
-  const handleClick = useCallback((e) => {
-    if (!started || ended) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const id = ++idRef.current;
-    setScore(s => s + 1);
-    setClicks(c => [...c, { id, x, y }]);
-    setTimeout(() => setClicks(c => c.filter(cl => cl.id !== id)), 600);
-  }, [started, ended]);
-
-  const emojis = ['🍣', '🍱', '🥢', '🐟', '🦐', '🌊'];
-  const pct = (timeLeft / 15) * 100;
+  const sc = finalScore.current;
 
   return (
     <div style={{ textAlign: 'center' }}>
-      <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 16 }}>
-        Enquanto seu pedido chegou, que tal bater um recorde?
-      </p>
-
-      {!started && !ended && (
-        <button onClick={start} style={{
-          background: 'linear-gradient(135deg,#f97316,#fb923c)',
-          border: 'none', borderRadius: 14, padding: '14px 32px',
-          color: '#fff', fontWeight: 800, fontSize: 16, cursor: 'pointer',
-          boxShadow: '0 8px 24px rgba(249,115,22,0.4)', letterSpacing: 0.5,
-        }}>
-          🎮 Jogar agora!
-        </button>
-      )}
-
-      {started && !ended && (
+      {phase === 'idle' && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 13, color: '#64748b' }}>⏱ {timeLeft}s</span>
-            <span style={{ fontSize: 18, fontWeight: 800, color: '#f97316' }}>{score} pts</span>
+          <div style={{ fontSize: 52, marginBottom: 8 }}>🔪</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: '#f1f5f9', marginBottom: 4 }}>Sushi Ninja Cut</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+            Corte o sushi com o dedo! Cuidado com as bombas 💣
           </div>
-          {/* barra de tempo */}
-          <div style={{ height: 6, background: '#1e293b', borderRadius: 99, marginBottom: 16, overflow: 'hidden' }}>
-            <div style={{
-              height: '100%', borderRadius: 99, transition: 'width 1s linear',
-              width: `${pct}%`,
-              background: pct > 50 ? '#10b981' : pct > 25 ? '#f97316' : '#ef4444',
-            }} />
-          </div>
-          {/* área de clique */}
-          <div onClick={handleClick} style={{
-            position: 'relative', height: 180, borderRadius: 20, cursor: 'pointer',
-            background: 'rgba(249,115,22,0.06)', border: '2px dashed rgba(249,115,22,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            userSelect: 'none', overflow: 'hidden',
-          }}>
-            <span style={{ fontSize: 64, pointerEvents: 'none' }}>🍣</span>
-            <span style={{ position: 'absolute', bottom: 10, fontSize: 12, color: '#64748b' }}>Toque o sushi!</span>
-            {clicks.map(cl => (
-              <span key={cl.id} style={{
-                position: 'absolute', left: cl.x, top: cl.y,
-                fontSize: 22, pointerEvents: 'none',
-                animation: 'floatUp 0.6s ease-out forwards',
-                transform: 'translate(-50%,-50%)',
-              }}>
-                {emojis[cl.id % emojis.length]}
-              </span>
-            ))}
-          </div>
+          {best > 0 && <div style={{ fontSize: 12, color: '#f97316', marginBottom: 12 }}>🏆 Recorde: {best} pts</div>}
+          <button onClick={startGame} style={{
+            background: 'linear-gradient(135deg,#f97316,#ea580c)',
+            border: 'none', borderRadius: 14, padding: '13px 32px',
+            color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer',
+            boxShadow: '0 8px 24px rgba(249,115,22,0.4)',
+          }}>⚔️ Começar</button>
         </div>
       )}
 
-      {ended && (
+      {phase === 'playing' && (
         <div>
-          <div style={{ fontSize: 52, marginBottom: 8 }}>{score >= 30 ? '🏆' : score >= 15 ? '🥈' : '🍣'}</div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: '#f97316', marginBottom: 4 }}>{score} pts</div>
-          {score >= best && score > 0 && (
-            <div style={{ fontSize: 13, color: '#10b981', fontWeight: 700, marginBottom: 8 }}>🎉 Novo recorde!</div>
-          )}
-          {score < best && (
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>Recorde: {best} pts</div>
-          )}
+          <canvas
+            ref={canvasRef} width={340} height={360}
+            style={{ width: '100%', borderRadius: 16, touchAction: 'none', display: 'block', cursor: 'crosshair' }}
+            onMouseMove={onMove}
+            onTouchMove={onMove}
+          />
+        </div>
+      )}
+
+      {phase === 'dead' && (
+        <div>
+          <div style={{ fontSize: 48, marginBottom: 8 }}>{sc >= 40 ? '🏆' : sc >= 20 ? '⚔️' : '💣'}</div>
+          <div style={{ fontSize: 30, fontWeight: 900, color: '#f97316', marginBottom: 2 }}>{sc} pts</div>
+          {sc >= best && sc > 0
+            ? <div style={{ fontSize: 13, color: '#10b981', fontWeight: 700, marginBottom: 8 }}>🎉 Novo recorde!</div>
+            : <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>Recorde: {best} pts</div>
+          }
           <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
-            {score >= 30 ? 'Incrível! Você é mestre do sushi! 🏆' :
-             score >= 15 ? 'Muito bom! Continue treinando! 💪' :
-             'Tente de novo, você consegue mais! 🍣'}
+            {sc >= 40 ? 'Mestre ninja do sushi! 🥷🏆' : sc >= 20 ? 'Muito bom! Continue treinando! ⚔️' : 'A bomba te pegou! Tente de novo! 💣'}
           </div>
-          <button onClick={start} style={{
+          <canvas ref={canvasRef} width={0} height={0} style={{ display:'none' }} />
+          <button onClick={startGame} style={{
             background: 'rgba(249,115,22,0.15)', border: '1px solid rgba(249,115,22,0.3)',
             borderRadius: 12, padding: '10px 24px', color: '#f97316',
             fontWeight: 700, fontSize: 14, cursor: 'pointer',
-          }}>
-            🔄 Jogar de novo
-          </button>
+          }}>🔄 Jogar de novo</button>
         </div>
       )}
-
-      <style>{`
-        @keyframes floatUp {
-          0%   { opacity:1; transform: translate(-50%,-50%) scale(1.2); }
-          100% { opacity:0; transform: translate(-50%,-120%) scale(0.8); }
-        }
-      `}</style>
     </div>
   );
 }
@@ -300,7 +437,7 @@ export default function AcompanharPedido() {
             <p style={{ fontSize:12, color:'#475569', marginBottom:12 }}>
               {entregue ? 'Seu pedido chegou! Bata seu recorde! 🏆' : 'Jogue enquanto seu pedido chega! 🍣'}
             </p>
-            <SushiClicker />
+            <SushiNinja />
           </div>
         )}
 
