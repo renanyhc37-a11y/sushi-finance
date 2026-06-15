@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import SushiNinja from '../components/SushiNinja';
+import GameHub from '../components/GameHub';
 
 const STATUS = {
   novo:       { label: 'Confirmando pedido', emoji: '⏳', cor: '#f97316', bg: 'rgba(249,115,22,0.1)' },
@@ -123,11 +123,11 @@ export default function AcompanharPedido() {
         {/* Jogo */}
         {!cancelado && (
           <div style={{ background:'#0f0f0f', border:'1px solid rgba(249,115,22,0.2)', borderRadius:18, padding:'18px 16px', marginBottom:12 }}>
-            <div style={{ fontSize:11, color:'#475569', letterSpacing:2, textTransform:'uppercase', marginBottom:4 }}>🎮 Sushi Ninja</div>
+            <div style={{ fontSize:11, color:'#475569', letterSpacing:2, textTransform:'uppercase', marginBottom:4 }}>🎮 Mini-Jogos</div>
             <p style={{ fontSize:12, color:'#475569', marginBottom:12 }}>
               {entregue ? 'Pedido chegou! Bata seu recorde! 🏆' : 'Jogue enquanto aguarda! 🍣'}
             </p>
-            <SushiNinja />
+            <GameHub />
           </div>
         )}
 

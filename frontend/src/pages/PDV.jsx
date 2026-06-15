@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import SushiNinja from '../components/SushiNinja';
+import GameHub from '../components/GameHub';
 import { getToken } from '../hooks/useAuth';
 import { getUnidadeId } from '../hooks/useUnidade';
 import {
@@ -1043,12 +1043,12 @@ export default function PDV() {
           <div style={{ background: '#0f0f0f', borderRadius: 24, padding: '20px 16px 16px', width: '100%', maxWidth: 400, border: '1px solid rgba(249,115,22,0.25)', position: 'relative' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: '#f1f5f9' }}>🥷 Sushi Ninja Cut</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#f1f5f9' }}>🎮 Mini-Jogos</div>
                 <div style={{ fontSize: 11, color: '#475569' }}>Modo operador — aproveite a ociosidade!</div>
               </div>
               <button onClick={() => setJogoAberto(false)} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 8, width: 32, height: 32, color: '#64748b', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
             </div>
-            <SushiNinja compact />
+            <GameHub compact />
           </div>
         </div>
       )}
