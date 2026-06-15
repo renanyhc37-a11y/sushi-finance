@@ -108,8 +108,15 @@ ${process.env.APP_URL || 'http://localhost:3000'}/pedido/${p.id}
 
 Qualquer dúvida, é só responder esta mensagem. 🙏`,
 
-  preparando: (p) =>
-`👨‍🍳 *Pedido #${p.numero} em preparo!*
+  preparando: (p) => p.tipo_entrega === 'retirada'
+? `👨‍🍳 *Pedido #${p.numero} em preparo!*
+
+Olá, *${p.cliente_nome}*!
+
+Seu pedido já está sendo preparado com carinho pela nossa equipe. 🍣✨
+
+Em breve estará pronto para retirada!`
+: `👨‍🍳 *Pedido #${p.numero} em preparo!*
 
 Olá, *${p.cliente_nome}*!
 
@@ -117,8 +124,17 @@ Seu pedido já está sendo preparado com carinho pela nossa equipe. 🍣✨
 
 Em breve sairá para entrega!`,
 
-  saindo: (p) =>
-`🛵 *Pedido #${p.numero} saindo para entrega!*
+  saindo: (p) => p.tipo_entrega === 'retirada'
+? `✅ *Pedido #${p.numero} pronto para retirada!*
+
+Olá, *${p.cliente_nome}*!
+
+Seu pedido está pronto! Pode vir buscar quando quiser. 🎉
+
+📍 Nos encontre em: ${p.cliente_endereco || 'Rua Castro 1465 - Jd Ouro Branco'}
+
+Te esperamos! 😊`
+: `🛵 *Pedido #${p.numero} saindo para entrega!*
 
 Olá, *${p.cliente_nome}*!
 
