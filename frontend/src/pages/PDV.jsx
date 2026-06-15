@@ -618,7 +618,17 @@ export default function PDV() {
       carregar(true);
     });
 
-    es.addEventListener('status_atualizado', () => carregar(true));
+    es.addEventListener('status_atualizado', (e) => {
+      carregar(true);
+      try {
+        const dados = JSON.parse(e.data);
+        if (dados?.id) setPedidosNovosAlerta(prev => {
+          const next = prev.filter(p => p.id !== dados.id);
+          if (next.length === 0) pararAlarme();
+          return next;
+        });
+      } catch {}
+    });
     es.addEventListener('impresso_atualizado', () => carregar(true));
     es.onerror = () => {};
 
