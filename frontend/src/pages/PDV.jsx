@@ -773,6 +773,25 @@ export default function PDV() {
     const atraso = pedido.status === 'entregue' || pedido.status === 'cancelado' ? null : nivelAtraso(pedido);
     const aberto = pedidoAberto?.id === pedido.id;
     const eNovo = pedido.status === 'novo';
+    const eEntregue = pedido.status === 'entregue';
+
+    // Cards entregues ficam colapsados até clicar
+    if (eEntregue && !aberto) {
+      return (
+        <div key={pedido.id} className="rounded-2xl overflow-hidden transition-all duration-200 cursor-pointer"
+          style={{ background: 'var(--space-elev)', border: '1.5px solid var(--space-elev-2)' }}
+          onClick={() => setPedidoAberto(pedido)}>
+          <div style={{ height: 3, background: `linear-gradient(90deg, ${cfg.cor}, ${cfg.cor}44)` }} />
+          <div className="px-3 py-2 flex items-center gap-2">
+            <span className="text-sm font-black t-strong">#{pedido.numero}</span>
+            <span className="text-sm font-bold t-strong truncate flex-1">{pedido.cliente_nome}</span>
+            <span className="text-xs t-dim">{tempoTexto}</span>
+            <span className="text-sm font-black t-strong shrink-0">{brl(pedido.total)}</span>
+            <ChevronDown size={14} className="t-dim shrink-0" />
+          </div>
+        </div>
+      );
+    }
     const PgtoIcon = { pix: Smartphone, dinheiro: Banknote, cartao_cred: CreditCard, cartao_deb: CreditCard }[pedido.forma_pagamento] || null;
     const pgtoLabel = { pix: 'PIX', dinheiro: 'Dinheiro', cartao_cred: 'Crédito', cartao_deb: 'Débito' }[pedido.forma_pagamento] || '';
 
