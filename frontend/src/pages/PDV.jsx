@@ -484,6 +484,7 @@ export default function PDV() {
   const [pedidoModal, setPedidoModal] = useState(null);
   const [pedidosNovosAlerta, setPedidosNovosAlerta] = useState([]);
   const [mostrarCancelados, setMostrarCancelados] = useState(false);
+  const [ocultarCancelados, setOcultarCancelados] = useState(false);
   const alarmRef = useRef(null);
   const [tick, setTick] = useState(0);
   const [filtroData, setFiltroData] = useState(hoje());
@@ -823,27 +824,40 @@ export default function PDV() {
         {/* Barra colorida topo — mais grossa */}
         <div style={{ height: 5, background: `linear-gradient(90deg, ${cfg.cor}, ${cfg.cor}66)` }} />
 
-        {/* Header clicável — número grande + cliente + tempo */}
+        {/* Header clicável — número + cliente + tempo */}
         <button onClick={() => setPedidoModal(pedido)}
-          className="w-full text-left px-3 pt-3 pb-2 active:opacity-60 transition-opacity"
-          style={{ borderBottom: `1px solid ${cfg.cor}22` }}>
-          <div className="flex items-start justify-between gap-2">
-            {/* Número bem grande */}
+          className="w-full text-left active:opacity-60 transition-opacity">
+          {/* Faixa de destaque com número + pagamento + tempo */}
+          <div className="flex items-center gap-2 px-3 py-2"
+            style={{ background: `${cfg.cor}18`, borderBottom: `1px solid ${cfg.cor}33` }}>
+            <span className="text-xl font-black leading-none" style={{ color: cfg.cor }}>#{pedido.numero}</span>
+            {eNovo && (
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-md animate-pulse"
+                style={{ background: 'rgba(59,130,246,0.25)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.4)' }}>NOVO</span>
+            )}
+            {pedido.agendado_para && (
+              <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1"
+                style={{ background: 'rgba(168,85,247,0.18)', color: '#c084fc' }}>
+                <Clock size={10} strokeWidth={2} /> {new Date(pedido.agendado_para).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              {pedido.forma_pagamento && (
+                <span className="text-xs font-bold flex items-center gap-1" style={{ color: `${cfg.cor}cc` }}>
+                  {PgtoIcon && <PgtoIcon size={12} strokeWidth={1.75} />} {pgtoLabel}
+                </span>
+              )}
+              <span className="text-xs font-black flex items-center gap-1"
+                style={{ color: atraso && atraso.nivel !== 'ok' ? atraso.cor : `${cfg.cor}99` }}>
+                {atraso && atraso.nivel !== 'ok' && <AlertTriangle size={11} strokeWidth={2.5} />}
+                {tempoTexto}
+              </span>
+            </div>
+          </div>
+          {/* Cliente + endereço */}
+          <div className="px-3 pt-2.5 pb-2 flex items-start justify-between gap-2">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-3xl font-black leading-none" style={{ color: cfg.cor }}>#{pedido.numero}</span>
-                {eNovo && (
-                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md animate-pulse"
-                    style={{ background: 'rgba(59,130,246,0.25)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.4)' }}>NOVO</span>
-                )}
-                {pedido.agendado_para && (
-                  <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1"
-                    style={{ background: 'rgba(168,85,247,0.18)', color: '#c084fc' }}>
-                    <Clock size={10} strokeWidth={2} /> {new Date(pedido.agendado_para).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                )}
-              </div>
-              <p className="font-black text-base leading-tight mt-1" style={{ color: 'var(--txt-strong)' }}>{pedido.cliente_nome}</p>
+              <p className="font-black text-base leading-tight" style={{ color: 'var(--txt-strong)' }}>{pedido.cliente_nome}</p>
               <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'var(--txt-dim)' }}>
                 {pedido.tipo_entrega === 'retirada'
                   ? <><ShoppingBag size={11} strokeWidth={1.75} className="shrink-0" /><span className="font-semibold" style={{ color: '#60a5fa' }}>RETIRADA</span></>
@@ -851,25 +865,10 @@ export default function PDV() {
                 }
               </p>
             </div>
-            {/* Tempo + pagamento */}
             <div className="flex flex-col items-end gap-1 shrink-0">
-              <span className="text-sm font-black px-2 py-1 rounded-xl flex items-center gap-1"
-                style={{
-                  background: atraso && atraso.nivel !== 'ok' ? `${atraso.cor}22` : 'var(--space-elev-2)',
-                  color: atraso && atraso.nivel !== 'ok' ? atraso.cor : 'var(--txt-dim)',
-                  border: atraso && atraso.nivel !== 'ok' ? `1px solid ${atraso.cor}44` : 'none',
-                }}>
-                {atraso && atraso.nivel !== 'ok' && <AlertTriangle size={12} strokeWidth={2.5} />}
-                {tempoTexto}
-              </span>
-              {pedido.forma_pagamento && (
-                <span className="text-[11px] font-bold flex items-center gap-1" style={{ color: '#818cf8' }}>
-                  {PgtoIcon && <PgtoIcon size={12} strokeWidth={1.75} />} {pgtoLabel}
-                </span>
-              )}
               {pedido.cliente_total_pedidos > 1 && (
                 <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-0.5" style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24' }}>
-                  <Star size={9} strokeWidth={2} /> {pedido.cliente_total_pedidos}º
+                  <Star size={9} strokeWidth={2} /> {pedido.cliente_total_pedidos}º pedido
                 </span>
               )}
               {pedido.cliente_total_pedidos === 1 && (
@@ -1495,7 +1494,7 @@ export default function PDV() {
             })}
 
             {/* Coluna de cancelados — opcional */}
-            {(mostrarCancelados || (porStatus.cancelado?.length > 0)) && (
+            {!ocultarCancelados && (mostrarCancelados || (porStatus.cancelado?.length > 0)) && (
               <div className="flex flex-col rounded-2xl shrink-0 overflow-hidden"
                 style={{ minWidth: 240, background: 'var(--space-surface)', border: '1.5px solid var(--hairline)' }}>
                 <div className="px-3 py-3 shrink-0 flex items-center gap-2"
@@ -1507,7 +1506,7 @@ export default function PDV() {
                     {porStatus.cancelado?.length || 0}
                   </div>
                   {(porStatus.cancelado?.length || 0) > 0 && (
-                    <button onClick={() => setMostrarCancelados(false)}
+                    <button onClick={() => { setOcultarCancelados(true); setMostrarCancelados(false); }}
                       className="text-[10px] font-bold px-2 py-1 rounded-lg ml-1"
                       style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)' }}
                       title="Ocultar cancelados">
@@ -1533,7 +1532,7 @@ export default function PDV() {
       <div className="shrink-0 flex items-center justify-between px-4 py-1.5"
         style={{ borderTop: '1px solid var(--space-elev)' }}>
         <span className="text-[10px] t-faint">Tempo real via SSE · {new Date().toLocaleTimeString('pt-BR')}</span>
-        <button onClick={() => setMostrarCancelados(v => !v)}
+        <button onClick={() => { setOcultarCancelados(false); setMostrarCancelados(v => !v); }}
           className="text-[10px] font-semibold px-2 py-1 rounded-lg"
           style={{ color: mostrarCancelados ? '#f87171' : '#333', background: 'transparent' }}>
           {mostrarCancelados ? <span className="flex items-center gap-1"><X size={11} strokeWidth={2} /> Ocultar cancelados</span> : `+ Cancelados (${porStatus.cancelado?.length || 0})`}
