@@ -290,8 +290,8 @@ function Carrossel({ onBannerClick }) {
               style={{ userSelect: 'none' }} />
           )}
 
-          {/* Gradiente de cor — só quando não há imagem */}
-          {!banner.img && (
+          {/* Gradiente de cor — sem imagem sempre; com imagem só se usar_gradiente=1 */}
+          {(!banner.img || banner.usar_gradiente) && (
             <div className="absolute inset-0"
               style={{ background: `linear-gradient(110deg, ${banner.cor1}f0 0%, ${banner.cor2}cc 60%, ${banner.cor2}88 100%)` }} />
           )}

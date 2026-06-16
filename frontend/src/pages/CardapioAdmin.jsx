@@ -464,6 +464,7 @@ function ModalBanner({ banner, onClose, onSalvo }) {
     img: banner?.img || '',
     ordem: banner?.ordem || 0,
     item_id: banner?.item_id ?? null,
+    usar_gradiente: banner?.usar_gradiente ? 1 : 0,
   });
   const [fotoFile, setFotoFile] = useState(null);
   const [fotoPreview, setFotoPreview] = useState(banner?.img ? banner.img : null);
@@ -496,9 +497,7 @@ function ModalBanner({ banner, onClose, onSalvo }) {
       // 1. Salva dados do banner
       const url = isNovo ? `${BASE}/ia/banners` : `${BASE}/ia/banners/${banner.id}`;
       const method = isNovo ? 'POST' : 'PUT';
-      toast(`${method} → ${url}`, { duration: 4000 });
       const r = await fetch(url, { method, headers: authJ(), body: JSON.stringify(form) });
-      toast(`Status: ${r.status}`, { duration: 5000 });
       if (!r.ok) {
         let msg = `HTTP ${r.status}`;
         try { const d = await r.json(); msg = d.erro || msg; } catch {}
@@ -533,7 +532,7 @@ function ModalBanner({ banner, onClose, onSalvo }) {
     } catch { toast.error('Erro ao remover imagem'); }
   }
 
-  const [usarGradiente, setUsarGradiente] = useState(!fotoPreview);
+  const [usarGradiente, setUsarGradiente] = useState(banner?.usar_gradiente ? true : !fotoPreview);
 
   // Preview: imagem pura OU gradiente (opcional quando há imagem)
   const bgStyle = fotoPreview
@@ -669,7 +668,7 @@ function ModalBanner({ banner, onClose, onSalvo }) {
                 {fotoPreview ? 'GRADIENTE SOBRE A IMAGEM (opcional)' : 'COR DE FUNDO'}
               </label>
               {fotoPreview && (
-                <button onClick={() => setUsarGradiente(v => !v)}
+                <button onClick={() => { setUsarGradiente(v => { set('usar_gradiente', v ? 0 : 1); return !v; }); }}
                   className="flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
                   style={usarGradiente
                     ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.35)' }
@@ -1715,10 +1714,8 @@ export default function CardapioAdmin() {
   async function carregarBanners() {
     try {
       const r = await fetch(`${BASE}/ia/banners`, { headers: authH() });
-      toast(`GET banners: ${r.status}`, { duration: 4000 });
-      if (r.ok) { const d = await r.json(); toast(`${d.length} banners carregados`, { duration: 4000 }); setBanners(d); }
-      else toast.error(`Erro GET banners: ${r.status}`);
-    } catch (e) { toast.error(`carregarBanners: ${e.message}`); }
+      if (r.ok) setBanners(await r.json());
+    } catch {}
   }
 
   async function gerarSugestoesIA() {
