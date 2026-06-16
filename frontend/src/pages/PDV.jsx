@@ -490,7 +490,8 @@ const PGTO_OPTS = [
 function ModalNovoPedido({ onClose, onCriado }) {
   const [cardapio, setCardapio] = useState([]);
   const [busca, setBusca] = useState('');
-  const [carrinho, setCarrinho] = useState([]); // [{ item, qtd }]
+  const [catAtiva, setCatAtiva] = useState('');
+  const [carrinho, setCarrinho] = useState([]);
   const [cliente, setCliente] = useState({ nome: '', telefone: '', endereco: '', bairro: '' });
   const [pgto, setPgto] = useState('pix');
   const [tipoEntrega, setTipoEntrega] = useState('entrega');
@@ -498,23 +499,27 @@ function ModalNovoPedido({ onClose, onCriado }) {
   const [obs, setObs] = useState('');
   const [frete, setFrete] = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [etapa, setEtapa] = useState('itens'); // 'itens' | 'cliente'
+  const [painelAberto, setPainelAberto] = useState(false); // resumo/cliente no mobile
+  const buscaRef = useRef(null);
 
   useEffect(() => {
     fetch(`${BASE}/cardapio/itens`, { headers: authH() })
       .then(r => r.ok ? r.json() : [])
       .then(data => setCardapio(Array.isArray(data) ? data.filter(i => i.disponivel) : []))
       .catch(() => {});
+    setTimeout(() => buscaRef.current?.focus(), 100);
   }, []);
 
-  const itensFiltrados = cardapio.filter(i =>
-    !busca || i.nome.toLowerCase().includes(busca.toLowerCase()) ||
-    (i.categoria_nome || '').toLowerCase().includes(busca.toLowerCase())
-  );
+  const categorias = [...new Set(cardapio.map(i => i.categoria_nome || 'Outros'))];
 
-  // agrupa por categoria
+  const itensFiltrados = cardapio.filter(i => {
+    const matchBusca = !busca || i.nome.toLowerCase().includes(busca.toLowerCase());
+    const matchCat = !catAtiva || (i.categoria_nome || 'Outros') === catAtiva;
+    return matchBusca && matchCat;
+  });
+
   const porCategoria = itensFiltrados.reduce((acc, i) => {
-    const cat = i.categoria_nome || 'Sem categoria';
+    const cat = i.categoria_nome || 'Outros';
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(i);
     return acc;
@@ -535,9 +540,10 @@ function ModalNovoPedido({ onClose, onCriado }) {
   const subtotal = carrinho.reduce((s, c) => s + c.item.preco * c.qtd, 0);
   const totalFinal = subtotal + Number(frete || 0);
   const qtdItem = id => carrinho.find(c => c.item.id === id)?.qtd || 0;
+  const totalItens = carrinho.reduce((s, c) => s + c.qtd, 0);
 
   async function enviar() {
-    if (!cliente.nome.trim()) { toast.error('Informe o nome do cliente'); return; }
+    if (!cliente.nome.trim()) { toast.error('Informe o nome do cliente'); setPainelAberto(true); return; }
     if (carrinho.length === 0) { toast.error('Adicione pelo menos um item'); return; }
     setEnviando(true);
     try {
@@ -557,7 +563,7 @@ function ModalNovoPedido({ onClose, onCriado }) {
         }),
       });
       const data = await r.json();
-      if (!r.ok) { toast.error(data.erro || 'Erro ao criar pedido'); return; }
+      if (!r.ok) { toast.error(data.erro || 'Erro ao criar pedido'); setEnviando(false); return; }
       toast.success(`Pedido #${data.numero} criado!`);
       onCriado?.();
       onClose();
@@ -565,188 +571,251 @@ function ModalNovoPedido({ onClose, onCriado }) {
     setEnviando(false);
   }
 
+  // Painel lateral (resumo + dados cliente)
+  const PainelDireito = () => (
+    <div className="flex flex-col h-full">
+      {/* Tipo entrega */}
+      <div className="px-4 pt-4 pb-3 shrink-0" style={{ borderBottom: '1px solid var(--hairline)' }}>
+        <div className="flex gap-2">
+          {[{ v: 'entrega', l: '🛵 Entrega' }, { v: 'retirada', l: '🏪 Retirada' }].map(t => (
+            <button key={t.v} onClick={() => setTipoEntrega(t.v)}
+              className="flex-1 py-2 rounded-xl text-xs font-black transition-all"
+              style={{ background: tipoEntrega === t.v ? 'rgba(var(--accent-rgb),0.15)' : 'var(--space-elev)', color: tipoEntrega === t.v ? 'var(--accent)' : 'var(--txt-dim)', border: `1px solid ${tipoEntrega === t.v ? 'rgba(var(--accent-rgb),0.3)' : 'var(--hairline)'}` }}>
+              {t.l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Scroll: carrinho + dados cliente */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+
+        {/* Carrinho */}
+        {carrinho.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 t-dim text-center">
+            <ShoppingBag size={28} strokeWidth={1.5} className="mb-2 opacity-40" />
+            <p className="text-xs">Nenhum item ainda</p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {carrinho.map(({ item, qtd }) => (
+              <div key={item.id} className="flex items-center gap-2 py-1">
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setQtd(item.id, qtd - 1)}
+                    className="w-6 h-6 rounded-lg flex items-center justify-center transition-all active:scale-90"
+                    style={{ background: 'var(--space-elev-2)', color: qtd === 1 ? '#f87171' : 'var(--txt-dim)' }}>
+                    {qtd === 1 ? <Trash2 size={11} strokeWidth={2} /> : <span className="text-xs font-black">−</span>}
+                  </button>
+                  <span className="text-xs font-black t-strong w-5 text-center">{qtd}</span>
+                  <button onClick={() => setQtd(item.id, qtd + 1)}
+                    className="w-6 h-6 rounded-lg flex items-center justify-center transition-all active:scale-90"
+                    style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)' }}>
+                    <span className="text-xs font-black">+</span>
+                  </button>
+                </div>
+                <span className="flex-1 text-xs t-strong truncate">{item.nome}</span>
+                <span className="text-xs font-black shrink-0" style={{ color: 'var(--accent)' }}>{brl(item.preco * qtd)}</span>
+              </div>
+            ))}
+            {tipoEntrega === 'entrega' && (
+              <div className="flex items-center gap-2 pt-1" style={{ borderTop: '1px dashed var(--hairline)' }}>
+                <span className="text-xs t-dim flex-1">Frete</span>
+                <input type="number" placeholder="0,00" value={frete}
+                  onChange={e => setFrete(e.target.value)} min="0" step="0.01"
+                  className="w-20 text-xs text-right rounded-lg px-2 py-1 outline-none"
+                  style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
+              </div>
+            )}
+            <div className="flex items-center justify-between pt-1 font-black" style={{ borderTop: '1px solid var(--hairline)' }}>
+              <span className="text-xs t-dim">Total</span>
+              <span className="text-sm" style={{ color: 'var(--accent)' }}>{brl(totalFinal)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Dados do cliente */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-black uppercase tracking-wider t-dim">Cliente</p>
+          {[
+            { k: 'nome',     ph: 'Nome *',    type: 'text' },
+            { k: 'telefone', ph: 'Telefone',  type: 'tel' },
+            ...(tipoEntrega === 'entrega' ? [
+              { k: 'endereco', ph: 'Endereço', type: 'text' },
+              { k: 'bairro',   ph: 'Bairro',   type: 'text' },
+            ] : []),
+          ].map(({ k, ph, type }) => (
+            <input key={k} type={type} placeholder={ph} value={cliente[k]}
+              onChange={e => setCliente(prev => ({ ...prev, [k]: e.target.value }))}
+              className="w-full text-xs rounded-xl px-3 py-2 outline-none"
+              style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
+          ))}
+        </div>
+
+        {/* Pagamento */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-black uppercase tracking-wider t-dim">Pagamento</p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {PGTO_OPTS.map(o => (
+              <button key={o.v} onClick={() => setPgto(o.v)}
+                className="py-2 rounded-xl text-xs font-bold transition-all"
+                style={{ background: pgto === o.v ? 'rgba(var(--accent-rgb),0.15)' : 'var(--space-elev)', color: pgto === o.v ? 'var(--accent)' : 'var(--txt-dim)', border: `1px solid ${pgto === o.v ? 'rgba(var(--accent-rgb),0.3)' : 'var(--hairline)'}` }}>
+                {o.l}
+              </button>
+            ))}
+          </div>
+          {pgto === 'dinheiro' && (
+            <input type="number" placeholder="Troco para (R$)" value={troco}
+              onChange={e => setTroco(e.target.value)} min="0" step="0.01"
+              className="w-full text-xs rounded-xl px-3 py-2 outline-none"
+              style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
+          )}
+        </div>
+
+        {/* Observação */}
+        <textarea placeholder="Observação (opcional)" value={obs}
+          onChange={e => setObs(e.target.value)} rows={2}
+          className="w-full text-xs rounded-xl px-3 py-2 outline-none resize-none"
+          style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
+      </div>
+
+      {/* Botão criar */}
+      <div className="shrink-0 px-4 py-3" style={{ borderTop: '1px solid var(--hairline)' }}>
+        <button onClick={enviar}
+          disabled={enviando || carrinho.length === 0}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-black text-white text-sm transition-all active:scale-95 disabled:opacity-40"
+          style={{ background: carrinho.length === 0 ? 'var(--space-elev-2)' : 'var(--accent)' }}>
+          {enviando ? 'Criando…' : <><Plus size={15} strokeWidth={2.5} /> Criar pedido{carrinho.length > 0 ? ` · ${brl(totalFinal)}` : ''}</>}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
       style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden"
-        style={{ background: 'var(--space-surface)', border: '1px solid var(--hairline)', maxHeight: '94vh' }}>
 
-        {/* Header */}
-        <div className="shrink-0 flex items-center gap-3 px-5 py-4" style={{ borderBottom: '1px solid var(--hairline)' }}>
-          <div className="flex-1">
-            <p className="font-black t-strong text-base leading-none">Novo pedido</p>
-            <p className="text-xs t-dim mt-0.5">Lançamento pelo operador</p>
-          </div>
-          {/* Abas itens / cliente */}
-          <div className="flex gap-1">
-            {[{ id: 'itens', l: `Itens${carrinho.length > 0 ? ` (${carrinho.length})` : ''}` }, { id: 'cliente', l: 'Cliente' }].map(a => (
-              <button key={a.id} onClick={() => setEtapa(a.id)}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
-                style={{ background: etapa === a.id ? 'rgba(var(--accent-rgb),0.15)' : 'var(--space-elev)', color: etapa === a.id ? 'var(--accent)' : 'var(--txt-dim)', border: `1px solid ${etapa === a.id ? 'rgba(var(--accent-rgb),0.3)' : 'transparent'}` }}>
-                {a.l}
-              </button>
-            ))}
-          </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl t-dim shrink-0"
-            style={{ background: 'var(--space-elev-2)' }}><X size={16} /></button>
-        </div>
+      {/* Container: 2 colunas no desktop, 1 coluna no mobile */}
+      <div className="w-full rounded-t-3xl sm:rounded-3xl overflow-hidden flex"
+        style={{ background: 'var(--space-surface)', border: '1px solid var(--hairline)', maxHeight: '94vh', maxWidth: 820 }}>
 
-        {/* Corpo */}
-        <div className="flex-1 overflow-y-auto">
-
-          {/* ── ETAPA ITENS ── */}
-          {etapa === 'itens' && (
-            <div className="flex flex-col h-full">
-              {/* Busca */}
-              <div className="px-4 pt-3 pb-2 shrink-0">
-                <div className="relative">
-                  <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 t-dim" strokeWidth={2} />
-                  <input value={busca} onChange={e => setBusca(e.target.value)}
-                    placeholder="Buscar item…"
-                    className="w-full text-sm rounded-xl pl-8 pr-3 py-2 outline-none"
-                    style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
-                </div>
-              </div>
-
-              {/* Itens do cardápio */}
-              <div className="flex-1 overflow-y-auto px-4 pb-3 space-y-4">
-                {Object.entries(porCategoria).map(([cat, items]) => (
-                  <div key={cat}>
-                    <p className="text-[10px] font-black uppercase tracking-wider t-dim mb-2">{cat}</p>
-                    <div className="space-y-1.5">
-                      {items.map(item => {
-                        const qtd = qtdItem(item.id);
-                        return (
-                          <div key={item.id} className="flex items-center gap-3 p-2.5 rounded-xl transition-all"
-                            style={{ background: qtd > 0 ? 'rgba(var(--accent-rgb),0.08)' : 'var(--space-elev)', border: `1px solid ${qtd > 0 ? 'rgba(var(--accent-rgb),0.25)' : 'var(--hairline)'}` }}>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold t-strong truncate">{item.nome}</p>
-                              <p className="text-xs font-black" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</p>
-                            </div>
-                            {qtd === 0 ? (
-                              <button onClick={() => addItem(item)}
-                                className="w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90"
-                                style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
-                                <Plus size={16} strokeWidth={2.5} />
-                              </button>
-                            ) : (
-                              <div className="flex items-center gap-1.5">
-                                <button onClick={() => setQtd(item.id, qtd - 1)}
-                                  className="w-7 h-7 flex items-center justify-center rounded-lg transition-all active:scale-90"
-                                  style={{ background: 'var(--space-elev-2)', color: 'var(--txt-dim)' }}>
-                                  {qtd === 1 ? <Trash2 size={13} strokeWidth={2} style={{ color: '#f87171' }} /> : <span className="text-sm font-black">−</span>}
-                                </button>
-                                <span className="text-sm font-black t-strong w-5 text-center">{qtd}</span>
-                                <button onClick={() => setQtd(item.id, qtd + 1)}
-                                  className="w-7 h-7 flex items-center justify-center rounded-lg transition-all active:scale-90"
-                                  style={{ background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }}>
-                                  <span className="text-sm font-black">+</span>
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-                {Object.keys(porCategoria).length === 0 && (
-                  <p className="text-center t-dim text-sm py-10">Nenhum item encontrado</p>
-                )}
-              </div>
+        {/* ── Coluna esquerda: cardápio ── */}
+        <div className="flex flex-col flex-1 min-w-0" style={{ borderRight: '1px solid var(--hairline)' }}>
+          {/* Header */}
+          <div className="shrink-0 flex items-center gap-3 px-4 py-3" style={{ borderBottom: '1px solid var(--hairline)' }}>
+            <div className="flex-1 min-w-0">
+              <p className="font-black t-strong text-sm leading-none">Novo pedido</p>
             </div>
-          )}
+            {/* Botão carrinho no mobile */}
+            <button className="sm:hidden relative px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5"
+              style={{ background: carrinho.length > 0 ? 'rgba(var(--accent-rgb),0.12)' : 'var(--space-elev)', color: carrinho.length > 0 ? 'var(--accent)' : 'var(--txt-dim)', border: `1px solid ${carrinho.length > 0 ? 'rgba(var(--accent-rgb),0.3)' : 'var(--hairline)'}` }}
+              onClick={() => setPainelAberto(v => !v)}>
+              <ShoppingBag size={13} strokeWidth={2} />
+              {totalItens > 0 && <span>{totalItens}</span>}
+            </button>
+            <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-xl t-dim shrink-0"
+              style={{ background: 'var(--space-elev-2)' }}><X size={15} /></button>
+          </div>
 
-          {/* ── ETAPA CLIENTE ── */}
-          {etapa === 'cliente' && (
-            <div className="px-4 py-4 space-y-4">
-
-              {/* Tipo de entrega */}
-              <div className="flex gap-2">
-                {[{ v: 'entrega', l: '🛵 Entrega' }, { v: 'retirada', l: '🏪 Retirada' }].map(t => (
-                  <button key={t.v} onClick={() => setTipoEntrega(t.v)}
-                    className="flex-1 py-2.5 rounded-xl text-sm font-black transition-all"
-                    style={{ background: tipoEntrega === t.v ? 'rgba(var(--accent-rgb),0.15)' : 'var(--space-elev)', color: tipoEntrega === t.v ? 'var(--accent)' : 'var(--txt-dim)', border: `1px solid ${tipoEntrega === t.v ? 'rgba(var(--accent-rgb),0.3)' : 'var(--hairline)'}` }}>
-                    {t.l}
-                  </button>
-                ))}
-              </div>
-
-              {/* Dados do cliente */}
-              <div className="space-y-2">
-                {[
-                  { k: 'nome',      ph: 'Nome do cliente *', type: 'text' },
-                  { k: 'telefone',  ph: 'Telefone (opcional)', type: 'tel' },
-                  ...(tipoEntrega === 'entrega' ? [
-                    { k: 'endereco', ph: 'Endereço', type: 'text' },
-                    { k: 'bairro',   ph: 'Bairro', type: 'text' },
-                  ] : []),
-                ].map(({ k, ph, type }) => (
-                  <input key={k} type={type} placeholder={ph} value={cliente[k]}
-                    onChange={e => setCliente(prev => ({ ...prev, [k]: e.target.value }))}
-                    className="w-full text-sm rounded-xl px-3 py-2.5 outline-none"
-                    style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
-                ))}
-              </div>
-
-              {/* Pagamento */}
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-wider t-dim mb-2">Pagamento</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {PGTO_OPTS.map(o => (
-                    <button key={o.v} onClick={() => setPgto(o.v)}
-                      className="py-2 rounded-xl text-xs font-bold transition-all"
-                      style={{ background: pgto === o.v ? 'rgba(var(--accent-rgb),0.15)' : 'var(--space-elev)', color: pgto === o.v ? 'var(--accent)' : 'var(--txt-dim)', border: `1px solid ${pgto === o.v ? 'rgba(var(--accent-rgb),0.3)' : 'var(--hairline)'}` }}>
-                      {o.l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Troco (dinheiro) */}
-              {pgto === 'dinheiro' && (
-                <input type="number" placeholder="Troco para (R$)" value={troco}
-                  onChange={e => setTroco(e.target.value)} min="0" step="0.01"
-                  className="w-full text-sm rounded-xl px-3 py-2.5 outline-none"
-                  style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
-              )}
-
-              {/* Frete */}
-              {tipoEntrega === 'entrega' && (
-                <input type="number" placeholder="Frete (R$)" value={frete}
-                  onChange={e => setFrete(e.target.value)} min="0" step="0.01"
-                  className="w-full text-sm rounded-xl px-3 py-2.5 outline-none"
-                  style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
-              )}
-
-              {/* Observação */}
-              <textarea placeholder="Observação (opcional)" value={obs}
-                onChange={e => setObs(e.target.value)} rows={2}
-                className="w-full text-sm rounded-xl px-3 py-2.5 outline-none resize-none"
+          {/* Busca */}
+          <div className="shrink-0 px-3 pt-2.5 pb-2">
+            <div className="relative">
+              <SearchIcon size={13} className="absolute left-3 top-1/2 -translate-y-1/2 t-dim" strokeWidth={2} />
+              <input ref={buscaRef} value={busca} onChange={e => { setBusca(e.target.value); setCatAtiva(''); }}
+                placeholder="Buscar item…"
+                className="w-full text-sm rounded-xl pl-8 pr-3 py-2 outline-none"
                 style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* Footer */}
-        <div className="shrink-0 px-4 py-3 space-y-2" style={{ borderTop: '1px solid var(--hairline)' }}>
-          {/* Resumo do carrinho */}
-          {carrinho.length > 0 && (
-            <div className="flex items-center justify-between px-1">
-              <span className="text-xs t-dim">{carrinho.reduce((s, c) => s + c.qtd, 0)} item(s)</span>
-              <span className="text-sm font-black t-strong">{brl(totalFinal)}</span>
+          {/* Filtros de categoria */}
+          {!busca && (
+            <div className="shrink-0 px-3 pb-2 flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+              <button onClick={() => setCatAtiva('')}
+                className="shrink-0 px-3 py-1 rounded-xl text-xs font-bold transition-all"
+                style={{ background: !catAtiva ? 'rgba(var(--accent-rgb),0.15)' : 'var(--space-elev)', color: !catAtiva ? 'var(--accent)' : 'var(--txt-dim)', border: `1px solid ${!catAtiva ? 'rgba(var(--accent-rgb),0.3)' : 'var(--hairline)'}` }}>
+                Todos
+              </button>
+              {categorias.map(cat => (
+                <button key={cat} onClick={() => setCatAtiva(cat === catAtiva ? '' : cat)}
+                  className="shrink-0 px-3 py-1 rounded-xl text-xs font-bold transition-all whitespace-nowrap"
+                  style={{ background: catAtiva === cat ? 'rgba(var(--accent-rgb),0.15)' : 'var(--space-elev)', color: catAtiva === cat ? 'var(--accent)' : 'var(--txt-dim)', border: `1px solid ${catAtiva === cat ? 'rgba(var(--accent-rgb),0.3)' : 'var(--hairline)'}` }}>
+                  {cat}
+                </button>
+              ))}
             </div>
           )}
-          <button onClick={etapa === 'itens' ? () => setEtapa('cliente') : enviar}
-            disabled={enviando || carrinho.length === 0}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-black text-white text-sm transition-all active:scale-95 disabled:opacity-50"
-            style={{ background: 'var(--accent)' }}>
-            {enviando ? 'Enviando…' : etapa === 'itens'
-              ? <><span>Continuar</span><ChevronDown size={16} strokeWidth={2.5} style={{ transform: 'rotate(-90deg)' }} /></>
-              : <><Plus size={16} strokeWidth={2.5} /> Criar pedido · {brl(totalFinal)}</>}
-          </button>
+
+          {/* Lista de itens */}
+          <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-3">
+            {Object.entries(porCategoria).map(([cat, items]) => (
+              <div key={cat}>
+                {!catAtiva && <p className="text-[10px] font-black uppercase tracking-wider t-dim mb-1.5 mt-1">{cat}</p>}
+                <div className="space-y-1">
+                  {items.map(item => {
+                    const qtd = qtdItem(item.id);
+                    return (
+                      <div key={item.id}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all"
+                        style={{ background: qtd > 0 ? 'rgba(var(--accent-rgb),0.08)' : 'var(--space-elev)', border: `1px solid ${qtd > 0 ? 'rgba(var(--accent-rgb),0.25)' : 'transparent'}` }}>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold t-strong leading-tight truncate">{item.nome}</p>
+                          <p className="text-xs font-black" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</p>
+                        </div>
+                        {qtd === 0 ? (
+                          <button onClick={() => addItem(item)}
+                            className="w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90 shrink-0"
+                            style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
+                            <Plus size={16} strokeWidth={2.5} />
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button onClick={() => setQtd(item.id, qtd - 1)}
+                              className="w-7 h-7 flex items-center justify-center rounded-lg transition-all active:scale-90"
+                              style={{ background: 'var(--space-elev-2)' }}>
+                              {qtd === 1 ? <Trash2 size={13} strokeWidth={2} style={{ color: '#f87171' }} /> : <span className="text-sm font-black t-dim">−</span>}
+                            </button>
+                            <span className="text-sm font-black t-strong w-5 text-center">{qtd}</span>
+                            <button onClick={() => addItem(item)}
+                              className="w-7 h-7 flex items-center justify-center rounded-lg transition-all active:scale-90"
+                              style={{ background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }}>
+                              <span className="text-sm font-black">+</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            {Object.keys(porCategoria).length === 0 && (
+              <p className="text-center t-dim text-sm py-10">Nenhum item encontrado</p>
+            )}
+          </div>
         </div>
+
+        {/* ── Coluna direita: resumo + cliente (sempre visível no desktop) ── */}
+        <div className="hidden sm:flex flex-col shrink-0" style={{ width: 280 }}>
+          <PainelDireito />
+        </div>
+
+        {/* ── Painel mobile: slide-up quando aberto ── */}
+        {painelAberto && (
+          <div className="sm:hidden fixed inset-0 z-10 flex flex-col justify-end"
+            style={{ background: 'rgba(0,0,0,0.5)' }}
+            onClick={e => { if (e.target === e.currentTarget) setPainelAberto(false); }}>
+            <div className="rounded-t-3xl overflow-hidden flex flex-col" style={{ background: 'var(--space-surface)', maxHeight: '85vh', border: '1px solid var(--hairline)' }}>
+              <div className="shrink-0 flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--hairline)' }}>
+                <p className="font-black t-strong text-sm">Resumo do pedido</p>
+                <button onClick={() => setPainelAberto(false)} className="w-7 h-7 flex items-center justify-center rounded-xl t-dim" style={{ background: 'var(--space-elev-2)' }}><X size={15} /></button>
+              </div>
+              <div className="flex-1 overflow-y-auto flex flex-col">
+                <PainelDireito />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
