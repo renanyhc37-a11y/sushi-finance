@@ -22,6 +22,7 @@ const insumosRouter = require('./routes/insumos');
 const fluxoCaixaRouter = require('./routes/fluxoCaixa');
 const notasRouter = require('./routes/notas');
 const cardapioRouter = require('./routes/cardapio');
+const setupRouter = require('./routes/setup');
 const { router: pdvRouter } = require('./routes/pdv');
 const whatsappRouter = require('./routes/whatsapp');
 const clientesRouter = require('./routes/clientes');
@@ -117,6 +118,9 @@ app.get('/wa-version.html', (req, res) => {
 
 // Cardápio e criação de pedidos — públicos (sem auth)
 app.use('/api/cardapio', cardapioRouter);
+
+// Setup de implantação — requer auth mas registrado antes do middleware global
+app.use('/api/setup', require('./middleware/requireAuth').requireAuth, setupRouter);
 
 // SSE registrados ANTES do requireAuth (EventSource não suporta headers)
 const { sseHandler, ssePublicoHandler } = require('./routes/pdv');

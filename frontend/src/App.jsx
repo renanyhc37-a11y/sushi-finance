@@ -50,6 +50,7 @@ const Caixa            = React.lazy(() => import('./pages/Caixa'));
 const Producao         = React.lazy(() => import('./pages/Producao'));
 const FluxoCaixa       = React.lazy(() => import('./pages/FluxoCaixa'));
 const CmvProdutos      = React.lazy(() => import('./pages/CmvProdutos'));
+const Setup            = React.lazy(() => import('./pages/Setup'));
 import NotasRapidas from './components/NotasRapidas';
 import OfflineIndicator from './components/OfflineIndicator';
 import ServidorMonitor from './components/ServidorMonitor';
@@ -468,6 +469,24 @@ function Layout({ logout }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dark, toggleTheme] = useTheme();
   const navigate = useNavigate();
+  const [setupPendente, setSetupPendente] = useState(false);
+  const [setupChecked, setSetupChecked] = useState(false);
+
+  useEffect(() => {
+    fetch(`${BASE}/setup/status`, { headers: { Authorization: `Bearer ${getToken()}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !d.concluido) setSetupPendente(true); })
+      .catch(() => {})
+      .finally(() => setSetupChecked(true));
+  }, []);
+
+  if (!setupChecked) return null; // aguarda verificação silenciosa
+
+  if (setupPendente) return (
+    <React.Suspense fallback={null}>
+      <Setup onConcluido={() => setSetupPendente(false)} />
+    </React.Suspense>
+  );
 
   return (
     <>
@@ -544,6 +563,7 @@ function Layout({ logout }) {
               <Route path="/cmv-produtos" element={<CmvProdutos />} />
               <Route path="/producao" element={<Producao />} />
               <Route path="/alterar-senha" element={<AlterarSenha />} />
+              <Route path="/setup" element={<Setup onConcluido={() => navigate('/dashboard')} />} />
             </Routes>
             </React.Suspense>
           </main>
