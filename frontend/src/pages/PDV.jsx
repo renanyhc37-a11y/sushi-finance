@@ -7,7 +7,7 @@ import {
   Bell, ChefHat, CheckCircle2, Bike, X, Check, Smartphone, Banknote,
   CreditCard, MapPin, Star, Gift, AlertTriangle, ChevronDown, MessageCircle,
   Printer, RefreshCw, Circle, Undo2, ConciergeBell, Inbox, Clock, Pause,
-  Volume2, Play, ShoppingBag,
+  Volume2, Play, ShoppingBag, Plus, Trash2, Search as SearchIcon,
 } from 'lucide-react';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
@@ -479,6 +479,279 @@ function BannerNovoPedido({ pedidos, onAceitar, onIrParaNovos }) {
   );
 }
 
+// ── Modal: novo pedido pelo operador ─────────────────────────
+const PGTO_OPTS = [
+  { v: 'pix',         l: 'PIX' },
+  { v: 'dinheiro',    l: 'Dinheiro' },
+  { v: 'cartao_cred', l: 'Crédito' },
+  { v: 'cartao_deb',  l: 'Débito' },
+];
+
+function ModalNovoPedido({ onClose, onCriado }) {
+  const [cardapio, setCardapio] = useState([]);
+  const [busca, setBusca] = useState('');
+  const [carrinho, setCarrinho] = useState([]); // [{ item, qtd }]
+  const [cliente, setCliente] = useState({ nome: '', telefone: '', endereco: '', bairro: '' });
+  const [pgto, setPgto] = useState('pix');
+  const [tipoEntrega, setTipoEntrega] = useState('entrega');
+  const [troco, setTroco] = useState('');
+  const [obs, setObs] = useState('');
+  const [frete, setFrete] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [etapa, setEtapa] = useState('itens'); // 'itens' | 'cliente'
+
+  useEffect(() => {
+    fetch(`${BASE}/cardapio/itens`, { headers: authH() })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setCardapio(Array.isArray(data) ? data.filter(i => i.disponivel) : []))
+      .catch(() => {});
+  }, []);
+
+  const itensFiltrados = cardapio.filter(i =>
+    !busca || i.nome.toLowerCase().includes(busca.toLowerCase()) ||
+    (i.categoria_nome || '').toLowerCase().includes(busca.toLowerCase())
+  );
+
+  // agrupa por categoria
+  const porCategoria = itensFiltrados.reduce((acc, i) => {
+    const cat = i.categoria_nome || 'Sem categoria';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(i);
+    return acc;
+  }, {});
+
+  function addItem(item) {
+    setCarrinho(prev => {
+      const existe = prev.find(c => c.item.id === item.id);
+      if (existe) return prev.map(c => c.item.id === item.id ? { ...c, qtd: c.qtd + 1 } : c);
+      return [...prev, { item, qtd: 1 }];
+    });
+  }
+  function setQtd(id, qtd) {
+    if (qtd <= 0) setCarrinho(prev => prev.filter(c => c.item.id !== id));
+    else setCarrinho(prev => prev.map(c => c.item.id === id ? { ...c, qtd } : c));
+  }
+
+  const subtotal = carrinho.reduce((s, c) => s + c.item.preco * c.qtd, 0);
+  const totalFinal = subtotal + Number(frete || 0);
+  const qtdItem = id => carrinho.find(c => c.item.id === id)?.qtd || 0;
+
+  async function enviar() {
+    if (!cliente.nome.trim()) { toast.error('Informe o nome do cliente'); return; }
+    if (carrinho.length === 0) { toast.error('Adicione pelo menos um item'); return; }
+    setEnviando(true);
+    try {
+      const r = await fetch(`${BASE}/pdv/pedido`, {
+        method: 'POST', headers: authH(),
+        body: JSON.stringify({
+          cliente_nome: cliente.nome,
+          cliente_telefone: cliente.telefone,
+          cliente_endereco: tipoEntrega === 'retirada' ? 'Retirada no balcão' : cliente.endereco,
+          bairro: cliente.bairro,
+          observacao: obs,
+          forma_pagamento: pgto,
+          tipo_entrega: tipoEntrega,
+          frete: Number(frete || 0),
+          troco_para: Number(troco || 0),
+          itens: carrinho.map(c => ({ item_id: c.item.id, quantidade: c.qtd })),
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) { toast.error(data.erro || 'Erro ao criar pedido'); return; }
+      toast.success(`Pedido #${data.numero} criado!`);
+      onCriado?.();
+      onClose();
+    } catch { toast.error('Erro de conexão'); }
+    setEnviando(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden"
+        style={{ background: 'var(--space-surface)', border: '1px solid var(--hairline)', maxHeight: '94vh' }}>
+
+        {/* Header */}
+        <div className="shrink-0 flex items-center gap-3 px-5 py-4" style={{ borderBottom: '1px solid var(--hairline)' }}>
+          <div className="flex-1">
+            <p className="font-black t-strong text-base leading-none">Novo pedido</p>
+            <p className="text-xs t-dim mt-0.5">Lançamento pelo operador</p>
+          </div>
+          {/* Abas itens / cliente */}
+          <div className="flex gap-1">
+            {[{ id: 'itens', l: `Itens${carrinho.length > 0 ? ` (${carrinho.length})` : ''}` }, { id: 'cliente', l: 'Cliente' }].map(a => (
+              <button key={a.id} onClick={() => setEtapa(a.id)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                style={{ background: etapa === a.id ? 'rgba(var(--accent-rgb),0.15)' : 'var(--space-elev)', color: etapa === a.id ? 'var(--accent)' : 'var(--txt-dim)', border: `1px solid ${etapa === a.id ? 'rgba(var(--accent-rgb),0.3)' : 'transparent'}` }}>
+                {a.l}
+              </button>
+            ))}
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl t-dim shrink-0"
+            style={{ background: 'var(--space-elev-2)' }}><X size={16} /></button>
+        </div>
+
+        {/* Corpo */}
+        <div className="flex-1 overflow-y-auto">
+
+          {/* ── ETAPA ITENS ── */}
+          {etapa === 'itens' && (
+            <div className="flex flex-col h-full">
+              {/* Busca */}
+              <div className="px-4 pt-3 pb-2 shrink-0">
+                <div className="relative">
+                  <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 t-dim" strokeWidth={2} />
+                  <input value={busca} onChange={e => setBusca(e.target.value)}
+                    placeholder="Buscar item…"
+                    className="w-full text-sm rounded-xl pl-8 pr-3 py-2 outline-none"
+                    style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
+                </div>
+              </div>
+
+              {/* Itens do cardápio */}
+              <div className="flex-1 overflow-y-auto px-4 pb-3 space-y-4">
+                {Object.entries(porCategoria).map(([cat, items]) => (
+                  <div key={cat}>
+                    <p className="text-[10px] font-black uppercase tracking-wider t-dim mb-2">{cat}</p>
+                    <div className="space-y-1.5">
+                      {items.map(item => {
+                        const qtd = qtdItem(item.id);
+                        return (
+                          <div key={item.id} className="flex items-center gap-3 p-2.5 rounded-xl transition-all"
+                            style={{ background: qtd > 0 ? 'rgba(var(--accent-rgb),0.08)' : 'var(--space-elev)', border: `1px solid ${qtd > 0 ? 'rgba(var(--accent-rgb),0.25)' : 'var(--hairline)'}` }}>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-bold t-strong truncate">{item.nome}</p>
+                              <p className="text-xs font-black" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</p>
+                            </div>
+                            {qtd === 0 ? (
+                              <button onClick={() => addItem(item)}
+                                className="w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90"
+                                style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.25)' }}>
+                                <Plus size={16} strokeWidth={2.5} />
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <button onClick={() => setQtd(item.id, qtd - 1)}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg transition-all active:scale-90"
+                                  style={{ background: 'var(--space-elev-2)', color: 'var(--txt-dim)' }}>
+                                  {qtd === 1 ? <Trash2 size={13} strokeWidth={2} style={{ color: '#f87171' }} /> : <span className="text-sm font-black">−</span>}
+                                </button>
+                                <span className="text-sm font-black t-strong w-5 text-center">{qtd}</span>
+                                <button onClick={() => setQtd(item.id, qtd + 1)}
+                                  className="w-7 h-7 flex items-center justify-center rounded-lg transition-all active:scale-90"
+                                  style={{ background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }}>
+                                  <span className="text-sm font-black">+</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {Object.keys(porCategoria).length === 0 && (
+                  <p className="text-center t-dim text-sm py-10">Nenhum item encontrado</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── ETAPA CLIENTE ── */}
+          {etapa === 'cliente' && (
+            <div className="px-4 py-4 space-y-4">
+
+              {/* Tipo de entrega */}
+              <div className="flex gap-2">
+                {[{ v: 'entrega', l: '🛵 Entrega' }, { v: 'retirada', l: '🏪 Retirada' }].map(t => (
+                  <button key={t.v} onClick={() => setTipoEntrega(t.v)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-black transition-all"
+                    style={{ background: tipoEntrega === t.v ? 'rgba(var(--accent-rgb),0.15)' : 'var(--space-elev)', color: tipoEntrega === t.v ? 'var(--accent)' : 'var(--txt-dim)', border: `1px solid ${tipoEntrega === t.v ? 'rgba(var(--accent-rgb),0.3)' : 'var(--hairline)'}` }}>
+                    {t.l}
+                  </button>
+                ))}
+              </div>
+
+              {/* Dados do cliente */}
+              <div className="space-y-2">
+                {[
+                  { k: 'nome',      ph: 'Nome do cliente *', type: 'text' },
+                  { k: 'telefone',  ph: 'Telefone (opcional)', type: 'tel' },
+                  ...(tipoEntrega === 'entrega' ? [
+                    { k: 'endereco', ph: 'Endereço', type: 'text' },
+                    { k: 'bairro',   ph: 'Bairro', type: 'text' },
+                  ] : []),
+                ].map(({ k, ph, type }) => (
+                  <input key={k} type={type} placeholder={ph} value={cliente[k]}
+                    onChange={e => setCliente(prev => ({ ...prev, [k]: e.target.value }))}
+                    className="w-full text-sm rounded-xl px-3 py-2.5 outline-none"
+                    style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
+                ))}
+              </div>
+
+              {/* Pagamento */}
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider t-dim mb-2">Pagamento</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {PGTO_OPTS.map(o => (
+                    <button key={o.v} onClick={() => setPgto(o.v)}
+                      className="py-2 rounded-xl text-xs font-bold transition-all"
+                      style={{ background: pgto === o.v ? 'rgba(var(--accent-rgb),0.15)' : 'var(--space-elev)', color: pgto === o.v ? 'var(--accent)' : 'var(--txt-dim)', border: `1px solid ${pgto === o.v ? 'rgba(var(--accent-rgb),0.3)' : 'var(--hairline)'}` }}>
+                      {o.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Troco (dinheiro) */}
+              {pgto === 'dinheiro' && (
+                <input type="number" placeholder="Troco para (R$)" value={troco}
+                  onChange={e => setTroco(e.target.value)} min="0" step="0.01"
+                  className="w-full text-sm rounded-xl px-3 py-2.5 outline-none"
+                  style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
+              )}
+
+              {/* Frete */}
+              {tipoEntrega === 'entrega' && (
+                <input type="number" placeholder="Frete (R$)" value={frete}
+                  onChange={e => setFrete(e.target.value)} min="0" step="0.01"
+                  className="w-full text-sm rounded-xl px-3 py-2.5 outline-none"
+                  style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
+              )}
+
+              {/* Observação */}
+              <textarea placeholder="Observação (opcional)" value={obs}
+                onChange={e => setObs(e.target.value)} rows={2}
+                className="w-full text-sm rounded-xl px-3 py-2.5 outline-none resize-none"
+                style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="shrink-0 px-4 py-3 space-y-2" style={{ borderTop: '1px solid var(--hairline)' }}>
+          {/* Resumo do carrinho */}
+          {carrinho.length > 0 && (
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs t-dim">{carrinho.reduce((s, c) => s + c.qtd, 0)} item(s)</span>
+              <span className="text-sm font-black t-strong">{brl(totalFinal)}</span>
+            </div>
+          )}
+          <button onClick={etapa === 'itens' ? () => setEtapa('cliente') : enviar}
+            disabled={enviando || carrinho.length === 0}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-black text-white text-sm transition-all active:scale-95 disabled:opacity-50"
+            style={{ background: 'var(--accent)' }}>
+            {enviando ? 'Enviando…' : etapa === 'itens'
+              ? <><span>Continuar</span><ChevronDown size={16} strokeWidth={2.5} style={{ transform: 'rotate(-90deg)' }} /></>
+              : <><Plus size={16} strokeWidth={2.5} /> Criar pedido · {brl(totalFinal)}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Componente principal ──────────────────────────────────────
 const hoje = () => new Date().toISOString().slice(0, 10);
 
@@ -511,6 +784,7 @@ export default function PDV() {
   const [statusLoja, setStatusLoja] = useState(null); // null | 'aberto_forcado' | 'fechado_forcado' | 'fechamento_temp' | 'auto'
   const [pausaMin, setPausaMin] = useState(null);
   const [mostrarControlesLoja, setMostrarControlesLoja] = useState(false);
+  const [novoPedidoAberto, setNovoPedidoAberto] = useState(false);
 
   const carregarStatusLoja = useCallback(async () => {
     try {
@@ -1077,6 +1351,14 @@ export default function PDV() {
         </div>
       )}
 
+      {/* Modal novo pedido manual */}
+      {novoPedidoAberto && (
+        <ModalNovoPedido
+          onClose={() => setNovoPedidoAberto(false)}
+          onCriado={() => carregar(true)}
+        />
+      )}
+
       {/* Modal detalhes completo do pedido */}
       {pedidoModal && (() => {
         const p = pedidos.find(x => x.id === pedidoModal.id) || pedidoModal;
@@ -1320,6 +1602,13 @@ export default function PDV() {
 
           {/* Controles */}
           <div className="flex items-center gap-2">
+            {/* Novo pedido manual */}
+            <button onClick={() => setNovoPedidoAberto(true)}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95"
+              style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}
+              title="Criar pedido manualmente para um cliente">
+              <Plus size={13} strokeWidth={2.5} /> <span className="hidden sm:inline">Novo pedido</span>
+            </button>
             {/* Exportar fila (contingência) — imprime a lista ativa por prioridade */}
             <button onClick={exportarFila}
               className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95"

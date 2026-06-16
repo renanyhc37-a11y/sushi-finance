@@ -367,6 +367,83 @@ router.get('/metricas-hoje', (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
+// POST /api/pdv/pedido — operador lança pedido manualmente (sem restrições de loja aberta/bairro)
+router.post('/pedido', (req, res) => {
+  try {
+    const { cliente_nome, cliente_telefone, cliente_endereco, bairro, observacao,
+            forma_pagamento, tipo_entrega, itens, troco_para, frete = 0 } = req.body;
+
+    if (!cliente_nome?.trim()) return res.status(400).json({ erro: 'Nome obrigatório' });
+    if (!Array.isArray(itens) || itens.length === 0) return res.status(400).json({ erro: 'Nenhum item' });
+
+    // Busca preços reais — nunca confia no valor vindo do frontend
+    const buscaItem = db.prepare('SELECT id, nome, preco FROM cardapio_itens WHERE id = ?');
+    const itensValidos = [];
+    for (const i of itens) {
+      const qtd = Math.max(1, Math.floor(Number(i.quantidade) || 1));
+      const ref = buscaItem.get(Number(i.item_id));
+      if (!ref) return res.status(400).json({ erro: `Item #${i.item_id} não encontrado` });
+      itensValidos.push({ item_nome: ref.nome, quantidade: qtd, valor_unitario: Number(ref.preco) });
+    }
+
+    const subtotal = itensValidos.reduce((s, i) => s + i.valor_unitario * i.quantidade, 0);
+    const total = subtotal + Number(frete || 0);
+
+    // Numeração
+    const getCfg = k => db.prepare('SELECT valor FROM config WHERE chave=?').get(k)?.valor;
+    let numero;
+    const comandaProx = getCfg('comanda_proximo');
+    if (comandaProx != null && String(comandaProx).trim() !== '') {
+      numero = Math.max(1, parseInt(comandaProx, 10) || 1);
+      db.prepare("INSERT OR REPLACE INTO config (chave,valor) VALUES ('comanda_proximo',?)").run(String(numero + 1));
+    } else {
+      const hoje = new Date().toISOString().slice(0, 10);
+      const ultimo = db.prepare("SELECT MAX(numero) as n FROM pdv_pedidos WHERE date(created_at)=?").get(hoje);
+      numero = (ultimo?.n || 0) + 1;
+    }
+
+    const ehRetirada = tipo_entrega === 'retirada';
+    const trocoPara = (forma_pagamento === 'dinheiro' && Number(troco_para) > total) ? Number(troco_para) : null;
+    const enderecoFinal = ehRetirada ? 'Retirada no balcão' : (cliente_endereco?.trim() || '');
+
+    const { lastInsertRowid: pedidoId } = db.prepare(
+      `INSERT INTO pdv_pedidos
+         (numero, cliente_nome, cliente_telefone, cliente_endereco, bairro, observacao,
+          forma_pagamento, total, frete, troco_para, tipo_entrega)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(numero, cliente_nome.trim(), cliente_telefone?.trim() || null,
+          enderecoFinal, bairro?.trim() || null, observacao?.trim() || null,
+          forma_pagamento || null, total, Number(frete || 0), trocoPara, ehRetirada ? 'retirada' : 'entrega');
+
+    const insItem = db.prepare('INSERT INTO pdv_itens (pedido_id, item_nome, quantidade, valor_unitario) VALUES (?,?,?,?)');
+    itensValidos.forEach(i => insItem.run(pedidoId, i.item_nome, i.quantidade, i.valor_unitario));
+
+    // Atualiza/cria cliente na base
+    if (cliente_telefone?.trim()) {
+      const tel = cliente_telefone.replace(/\D/g, '');
+      const PEDIDOS_POR_RECOMPENSA = 10;
+      const existing = db.prepare('SELECT * FROM clientes WHERE telefone=?').get(tel);
+      if (existing) {
+        const novo_total = existing.total_pedidos + 1;
+        db.prepare(`UPDATE clientes SET nome=?, endereco=?, total_pedidos=?,
+          recompensas_ganhas=?, updated_at=CURRENT_TIMESTAMP WHERE telefone=?`)
+          .run(cliente_nome.trim(), enderecoFinal, novo_total,
+               Math.floor(novo_total / PEDIDOS_POR_RECOMPENSA), tel);
+      } else {
+        db.prepare(`INSERT INTO clientes (telefone, nome, endereco, total_pedidos, recompensas_ganhas)
+          VALUES (?,?,?,1,0)`).run(tel, cliente_nome.trim(), enderecoFinal);
+      }
+    }
+
+    const pedido = db.prepare('SELECT * FROM pdv_pedidos WHERE id=?').get(pedidoId);
+    pedido.itens = itensValidos;
+    pedido.cliente_total_pedidos = 1;
+
+    broadcast('novo_pedido', pedido);
+    res.status(201).json(pedido);
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // SSE público — sem autenticação, só recebe status_atualizado
 function ssePublicoHandler(req, res) {
   res.setHeader('Content-Type', 'text/event-stream');
