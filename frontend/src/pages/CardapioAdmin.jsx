@@ -177,9 +177,9 @@ function ModalItem({ item, categorias, catIdInicial, onClose, onSalvo }) {
           method: 'POST', headers: authH(), body: fd,
         });
         if (!fRes.ok) {
-          let msg = 'Falha no upload da foto';
-          try { const j = await fRes.json(); msg = j.erro || msg; } catch {}
-          toast.error(`Item salvo mas: ${msg}`);
+          let msg = `HTTP ${fRes.status}`;
+          try { const j = await fRes.json(); msg = j.erro || `HTTP ${fRes.status}`; } catch {}
+          toast.error(`Falha no upload: ${msg}`);
         }
       }
 
