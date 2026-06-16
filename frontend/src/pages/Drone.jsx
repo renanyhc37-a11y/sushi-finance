@@ -49,6 +49,7 @@ const MAX_ALT    = 120;   // metros
 const BATT_HOVER = 0.007; // % por frame pairando
 const BATT_MOVE  = 0.010; // % extra por frame movendo
 const BATT_CLIMB = 0.014; // % extra subindo
+const BATT_LOW   = 20;    // limiar de aviso
 
 // ── Cenários ─────────────────────────────────────────────────────
 const SCENARIOS = [
@@ -230,17 +231,15 @@ function drawMap(ctx, g) {
         // Topo do prédio
         ctx.fillStyle = night ? '#18263a' : C.buildTop;
         ctx.fillRect(bx + 6, by + 6, BW - 12, h);
-        // Janelas
-        if (!night) {
-          ctx.fillStyle = 'rgba(150,200,255,0.08)';
-        } else {
-          ctx.fillStyle = 'rgba(255,220,100,0.15)';
-        }
+        // Janelas (seed determinística por bloco para não piscar)
         const wCols = Math.floor((BW - 20) / 20);
         const wRows = Math.floor(h / 20);
         for (let wr = 0; wr < wRows; wr++) {
           for (let wc = 0; wc < wCols; wc++) {
-            if (night && Math.random() > 0.4) continue; // nem todas acesas
+            const seed = (r * 100 + c * 10 + wr * 7 + wc * 3) % 10;
+            const acesa = !night || seed < 6;
+            if (!acesa) continue;
+            ctx.fillStyle = night ? 'rgba(255,220,100,0.18)' : 'rgba(150,200,255,0.07)';
             ctx.fillRect(bx + 12 + wc * 20, by + 10 + wr * 20, 10, 12);
           }
         }
@@ -552,6 +551,7 @@ export default function Drone() {
       rafRef.current = requestAnimationFrame(loop);
       const g = gameRef.current;
       if (!g) return;
+      if (g.over) return;
       g.frame++;
       g.missionTime = Date.now() - g.startTime;
 
@@ -616,8 +616,8 @@ export default function Drone() {
 
         // Pouso automático se bateria = 0
         if (g.battery <= 0) {
-          d.alt = 0; g.landed = true;
-          endGame(g, 'battery');
+          d.alt = 0; g.landed = true; d.vx = 0; d.vy = 0;
+          if (!g.over) { g.over = true; endGame(g, 'battery'); }
           return;
         }
 
@@ -710,6 +710,7 @@ export default function Drone() {
         g.flash = 60;
 
         if (g.deliveryCount >= g.scenario.entregas) {
+          g.over = true;
           setTimeout(() => endGame(g, 'success'), 1500);
         }
       }
