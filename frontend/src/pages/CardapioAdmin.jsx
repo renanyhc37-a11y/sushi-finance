@@ -496,7 +496,9 @@ function ModalBanner({ banner, onClose, onSalvo }) {
       // 1. Salva dados do banner
       const url = isNovo ? `${BASE}/ia/banners` : `${BASE}/ia/banners/${banner.id}`;
       const method = isNovo ? 'POST' : 'PUT';
+      toast(`${method} → ${url}`, { duration: 4000 });
       const r = await fetch(url, { method, headers: authJ(), body: JSON.stringify(form) });
+      toast(`Status: ${r.status}`, { duration: 5000 });
       if (!r.ok) {
         let msg = `HTTP ${r.status}`;
         try { const d = await r.json(); msg = d.erro || msg; } catch {}
