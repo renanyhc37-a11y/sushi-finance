@@ -421,14 +421,16 @@ router.post('/pedido', (req, res) => {
     // Atualiza/cria cliente na base
     if (cliente_telefone?.trim()) {
       const tel = cliente_telefone.replace(/\D/g, '');
-      const PEDIDOS_POR_RECOMPENSA = 10;
       const existing = db.prepare('SELECT * FROM clientes WHERE telefone=?').get(tel);
       if (existing) {
+        // Fidelidade básica (10 pedidos) só avança se não há promoção customizada de pedidos ativa
+        const temPromoAtiva = db.prepare("SELECT COUNT(*) as n FROM promocoes WHERE tipo='pedidos' AND ativo=1").get().n > 0;
+        const PEDIDOS_POR_RECOMPENSA = 10;
         const novo_total = existing.total_pedidos + 1;
         db.prepare(`UPDATE clientes SET nome=?, endereco=?, total_pedidos=?,
           recompensas_ganhas=?, updated_at=CURRENT_TIMESTAMP WHERE telefone=?`)
           .run(cliente_nome.trim(), enderecoFinal, novo_total,
-               Math.floor(novo_total / PEDIDOS_POR_RECOMPENSA), tel);
+               temPromoAtiva ? existing.recompensas_ganhas : Math.floor(novo_total / PEDIDOS_POR_RECOMPENSA), tel);
       } else {
         db.prepare(`INSERT INTO clientes (telefone, nome, endereco, total_pedidos, recompensas_ganhas)
           VALUES (?,?,?,1,0)`).run(tel, cliente_nome.trim(), enderecoFinal);

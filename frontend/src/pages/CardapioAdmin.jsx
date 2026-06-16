@@ -1295,6 +1295,16 @@ function ModalCriarPromocao({ sugestao, onClose, onSalvo }) {
               style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.08)' }} />
           </div>
 
+          {/* Aviso conflito com fidelidade básica */}
+          {form.tipo === 'pedidos' && (
+            <div className="rounded-xl p-3 flex gap-2" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)' }}>
+              <span className="shrink-0 text-base">⚠️</span>
+              <p className="text-xs" style={{ color: '#fbbf24' }}>
+                <strong>Plano básico pausado automaticamente.</strong> Enquanto esta promoção estiver ativa, o contador de "10 pedidos = recompensa" ficará congelado para não conflitar. Ele volta ao normal quando você desativar esta promoção.
+              </p>
+            </div>
+          )}
+
           {/* Preview resumo */}
           <div className="rounded-xl p-3" style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)' }}>
             <p className="text-xs t-dim">
