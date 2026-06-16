@@ -1715,8 +1715,10 @@ export default function CardapioAdmin() {
   async function carregarBanners() {
     try {
       const r = await fetch(`${BASE}/ia/banners`, { headers: authH() });
-      if (r.ok) setBanners(await r.json());
-    } catch {}
+      toast(`GET banners: ${r.status}`, { duration: 4000 });
+      if (r.ok) { const d = await r.json(); toast(`${d.length} banners carregados`, { duration: 4000 }); setBanners(d); }
+      else toast.error(`Erro GET banners: ${r.status}`);
+    } catch (e) { toast.error(`carregarBanners: ${e.message}`); }
   }
 
   async function gerarSugestoesIA() {
