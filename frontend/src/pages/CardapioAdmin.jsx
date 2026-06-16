@@ -463,6 +463,7 @@ function ModalBanner({ banner, onClose, onSalvo }) {
     cor2: banner?.cor2 || '#9a3412',
     img: banner?.img || '',
     ordem: banner?.ordem || 0,
+    item_id: banner?.item_id ?? null,
   });
   const [fotoFile, setFotoFile] = useState(null);
   const [fotoPreview, setFotoPreview] = useState(banner?.img ? banner.img : null);
@@ -472,6 +473,13 @@ function ModalBanner({ banner, onClose, onSalvo }) {
 
   const TAGS = ['🔥 Promoção', '⭐ Destaque', '🚚 Frete Grátis', '✨ Novidade', '💚 Fidelidade', '🎉 Especial'];
   const EMJS = ['🍣','🔥','🎉','⭐','🚚','🦐','🐟','🥑','🍱','💚','✨','🎋'];
+  const [itensCardapio, setItensCardapio] = useState([]);
+  useEffect(() => {
+    fetch(`${BASE}/cardapio`)
+      .then(r => r.json())
+      .then(cats => setItensCardapio(cats.flatMap(c => (c.itens || []).map(i => ({ ...i, _cat: c.nome })))))
+      .catch(() => {});
+  }, []);
 
   function onFotoChange(e) {
     const file = e.target.files[0];
@@ -615,9 +623,24 @@ function ModalBanner({ banner, onClose, onSalvo }) {
           {/* Destaque + Emoji */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-bold t-dim mb-1 block">DESTAQUE</label>
-              <input value={form.destaque} onChange={e => set('destaque', e.target.value)}
-                placeholder="R$ 89,90" className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none"
+              <label className="text-xs font-bold t-dim mb-1 block">DESTAQUE (prêmio/recompensa)</label>
+              <select
+                value={form.item_id ?? ''}
+                onChange={e => {
+                  const id = e.target.value ? Number(e.target.value) : null;
+                  const item = itensCardapio.find(i => i.id === id);
+                  set('item_id', id);
+                  if (item) set('destaque', item.nome);
+                }}
+                className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none mb-1"
+                style={{ background: 'var(--hairline)', border: '1px solid var(--hairline)' }}>
+                <option value="">— texto livre —</option>
+                {itensCardapio.map(i => (
+                  <option key={i.id} value={i.id}>{i._cat} › {i.nome}</option>
+                ))}
+              </select>
+              <input value={form.destaque} onChange={e => { set('destaque', e.target.value); set('item_id', null); }}
+                placeholder="Ex: Temaki Philadelphia" className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none"
                 style={{ background: 'var(--hairline)', border: '1px solid var(--hairline)' }} />
             </div>
             <div>

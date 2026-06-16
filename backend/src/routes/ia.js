@@ -222,14 +222,21 @@ router.post('/banners', (req, res) => {
 
 // PUT /ia/banners/:id
 router.put('/banners/:id', (req, res) => {
-  const { tag, titulo, subtitulo, destaque, emoji, cor1, cor2, img, ativo, ordem, item_id } = req.body;
-  db.prepare(
-    `UPDATE banners_promocao SET tag=?, titulo=?, subtitulo=?, destaque=?, emoji=?,
-     cor1=?, cor2=?, img=?, ativo=?, ordem=?, item_id=? WHERE id=?`
-  ).run(tag, titulo, subtitulo, destaque, emoji, cor1, cor2, img,
-       ativo !== undefined ? (ativo ? 1 : 0) : 1, ordem || 0,
-       item_id !== undefined ? item_id : null, req.params.id);
-  res.json({ ok: true });
+  try {
+    const { tag, titulo, subtitulo, destaque, emoji, cor1, cor2, img, ativo, ordem, item_id } = req.body;
+    if (!titulo) return res.status(400).json({ erro: 'titulo obrigatório' });
+    db.prepare(
+      `UPDATE banners_promocao SET tag=?, titulo=?, subtitulo=?, destaque=?, emoji=?,
+       cor1=?, cor2=?, img=?, ativo=?, ordem=?, item_id=? WHERE id=?`
+    ).run(tag, titulo, subtitulo || '', destaque || '', emoji || '🍣',
+         cor1 || '#7c2d12', cor2 || '#9a3412', img || '',
+         ativo !== undefined ? (ativo ? 1 : 0) : 1, ordem || 0,
+         item_id !== undefined ? item_id : null, req.params.id);
+    res.json({ ok: true, id: Number(req.params.id) });
+  } catch (e) {
+    console.error('[ia] PUT /banners/:id erro:', e.message);
+    res.status(500).json({ erro: e.message });
+  }
 });
 
 // PATCH /ia/banners/:id/item — vincula item do cardápio ao banner
