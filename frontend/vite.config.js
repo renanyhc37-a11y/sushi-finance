@@ -14,7 +14,7 @@ export default defineConfig({
       manifest: {
         name: 'Sushi Control',
         short_name: 'Sushi Control',
-        description: 'Sistema financeiro para delivery de sushi',
+        description: 'Sistema financeiro para delivery de sushi - v2',
         theme_color: '#f97316',
         background_color: '#0a0a0a',
         display: 'standalone',

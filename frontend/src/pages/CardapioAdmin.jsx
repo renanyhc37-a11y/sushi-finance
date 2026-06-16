@@ -497,7 +497,11 @@ function ModalBanner({ banner, onClose, onSalvo }) {
       const url = isNovo ? `${BASE}/ia/banners` : `${BASE}/ia/banners/${banner.id}`;
       const method = isNovo ? 'POST' : 'PUT';
       const r = await fetch(url, { method, headers: authJ(), body: JSON.stringify(form) });
-      if (!r.ok) throw new Error((await r.json()).erro || 'Erro');
+      if (!r.ok) {
+        let msg = `HTTP ${r.status}`;
+        try { const d = await r.json(); msg = d.erro || msg; } catch {}
+        throw new Error(msg);
+      }
       const salvo = await r.json();
       const bannerId = salvo.id || banner?.id;
 
