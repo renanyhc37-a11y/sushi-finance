@@ -1175,6 +1175,13 @@ function ModalCriarPromocao({ sugestao, onClose, onSalvo }) {
     emoji: sugestao?.emoji || '🎁',
   });
   const [salvando, setSalvando] = useState(false);
+  const [itensCardapio, setItensCardapio] = useState([]);
+  useEffect(() => {
+    fetch(`${BASE}/cardapio`)
+      .then(r => r.json())
+      .then(cats => setItensCardapio(cats.flatMap(c => (c.itens || []).map(i => ({ ...i, _cat: c.nome })))))
+      .catch(() => {});
+  }, []);
 
   async function salvar() {
     if (!form.nome.trim()) return toast.error('Nome é obrigatório');
@@ -1254,6 +1261,18 @@ function ModalCriarPromocao({ sugestao, onClose, onSalvo }) {
           {/* Recompensa */}
           <div>
             <label className="text-[10px] t-dim font-bold tracking-widest mb-1.5 block">RECOMPENSA / PRÊMIO</label>
+            {itensCardapio.length > 0 && (
+              <select
+                className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none mb-2"
+                style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.08)' }}
+                defaultValue=""
+                onChange={e => { if (e.target.value) setForm(p => ({ ...p, recompensa: e.target.value })); }}>
+                <option value="">— escolher item do cardápio —</option>
+                {itensCardapio.map(i => (
+                  <option key={i.id} value={`1 ${i.nome} grátis`}>{i._cat} › {i.nome}</option>
+                ))}
+              </select>
+            )}
             <input value={form.recompensa} onChange={e => setForm(p => ({ ...p, recompensa: e.target.value }))}
               placeholder="Ex: 1 Temaki Philadelphia grátis, 1 Hot grátis…"
               className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none"
