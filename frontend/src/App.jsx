@@ -51,6 +51,7 @@ const Producao         = React.lazy(() => import('./pages/Producao'));
 const FluxoCaixa       = React.lazy(() => import('./pages/FluxoCaixa'));
 const CmvProdutos      = React.lazy(() => import('./pages/CmvProdutos'));
 const Setup            = React.lazy(() => import('./pages/Setup'));
+const DroneSimulator   = React.lazy(() => import('./pages/Drone'));
 import NotasRapidas from './components/NotasRapidas';
 import OfflineIndicator from './components/OfflineIndicator';
 import ServidorMonitor from './components/ServidorMonitor';
@@ -108,6 +109,13 @@ const NAV_GRUPOS = [
       { to: '/insumos',          icon: Boxes,      label: 'Insumos'         },
       { to: '/importar-cardapio',icon: Upload,     label: 'Importar'        },
       { to: '/whatsapp',         icon: Smartphone, label: 'Config WhatsApp' },
+    ],
+  },
+  {
+    grupo: 'Drone 🚁',
+    cor: '#38bdf8',
+    itens: [
+      { to: '/drone', icon: Bot, label: '🚁 Simulador de Entrega' },
     ],
   },
 ];
@@ -564,6 +572,7 @@ function Layout({ logout }) {
               <Route path="/producao" element={<Producao />} />
               <Route path="/alterar-senha" element={<AlterarSenha />} />
               <Route path="/setup" element={<Setup onConcluido={() => navigate('/dashboard')} />} />
+              <Route path="/drone" element={<DroneSimulator />} />
             </Routes>
             </React.Suspense>
           </main>
