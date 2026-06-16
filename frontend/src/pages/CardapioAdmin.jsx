@@ -1475,8 +1475,9 @@ export default function CardapioAdmin() {
   const [modalItem, setModalItem] = useState(null); // null | 'novo' | item
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('cardapio_view') || 'grid');
   const [buscaItem, setBuscaItem] = useState('');
-  const abaInicial = new URLSearchParams(window.location.search).get('aba') || 'cardapio';
-  const [aba, setAba] = useState(abaInicial); // 'cardapio' | 'cupons' | 'horario' | 'ia'
+  const abaInicial = new URLSearchParams(window.location.search).get('aba') || localStorage.getItem('cardapio_aba') || 'cardapio';
+  const [aba, setAba] = useState(abaInicial);
+  const trocarAba = (k) => { setAba(k); localStorage.setItem('cardapio_aba', k); };
   const [cupons, setCupons] = useState([]);
   const [modalCupom, setModalCupom] = useState(null); // null | 'novo' | cupom
   const [horario, setHorario] = useState(null);
@@ -2031,7 +2032,7 @@ export default function CardapioAdmin() {
             { key: 'horario',  Icon: Clock,          labelFull: 'Horário' },
             { key: 'ia',       Icon: Bot,            labelFull: 'IA' },
           ].map(t => (
-            <button key={t.key} onClick={() => setAba(t.key)}
+            <button key={t.key} onClick={() => trocarAba(t.key)}
               className="flex-1 px-2 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
               style={aba === t.key
                 ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.3)' }
