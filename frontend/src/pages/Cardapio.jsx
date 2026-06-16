@@ -224,11 +224,16 @@ function Carrossel({ onBannerClick }) {
   const timerRef = useRef(null);
 
   // Carrega banners do banco; usa BANNERS hardcoded como fallback
+  // Polling a cada 90s para refletir alterações sem o cliente precisar atualizar
   useEffect(() => {
-    fetch(`${BASE}/cardapio/banners`)
-      .then(r => r.ok ? r.json() : [])
-      .then(data => { if (data.length > 0) setBannersDB(data); })
-      .catch(() => {});
+    const carregar = () =>
+      fetch(`${BASE}/cardapio/banners`)
+        .then(r => r.ok ? r.json() : [])
+        .then(data => { if (data.length > 0) setBannersDB(data); })
+        .catch(() => {});
+    carregar();
+    const t = setInterval(carregar, 90_000);
+    return () => clearInterval(t);
   }, []);
 
   const lista = bannersDB.length > 0 ? bannersDB : BANNERS;
@@ -686,10 +691,14 @@ export default function Cardapio() {
   }, []);
 
   useEffect(() => {
-    fetch(`${BASE}/cardapio`)
-      .then(r => r.json())
-      .then(data => { setCategorias(data); if (data.length) setCatAtiva(data[0].id); })
-      .catch(() => toast.error('Erro ao carregar o cardápio'));
+    const carregarCardapio = () =>
+      fetch(`${BASE}/cardapio`)
+        .then(r => r.json())
+        .then(data => { setCategorias(data); if (data.length) setCatAtiva(id => id || data[0].id); })
+        .catch(() => {});
+    carregarCardapio();
+    const t = setInterval(carregarCardapio, 120_000); // atualiza a cada 2 min
+
     fetch(`${BASE}/cardapio/horario`)
       .then(r => r.json())
       .then(data => setHorarioStatus(data))
@@ -715,6 +724,7 @@ export default function Cardapio() {
         });
       })
       .catch(() => {});
+    return () => clearInterval(t);
   }, []);
 
   const totalItens = carrinho.reduce((s, i) => s + i.qty, 0);
