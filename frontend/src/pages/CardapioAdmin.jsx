@@ -1977,7 +1977,7 @@ export default function CardapioAdmin() {
         style={{ background: 'var(--surface-glass)', backdropFilter: 'blur(16px)', borderBottom: '1px solid var(--hairline)' }}>
         <div className="max-w-6xl mx-auto flex items-center gap-2">
           <div className="flex-1 min-w-0">
-            <h1 className="text-base font-black t-strong leading-none">Cardápio Admin</h1>
+            <h1 className="text-base font-black t-strong leading-none">Cardápio Admin <span className="text-[9px] font-normal opacity-40">v2.1</span></h1>
             <p className="text-[10px] t-dim mt-0.5">{categorias.length} cat. · {totalItens} itens</p>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
