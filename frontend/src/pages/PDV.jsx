@@ -1283,18 +1283,6 @@ export default function PDV() {
 
           {/* Métricas do dia */}
           <div className="flex items-center gap-2">
-            {[
-              { label: 'Novos',      val: resumo.novo || 0,       cor: '#3b82f6', show: true },
-              { label: 'Preparando', val: resumo.preparando || 0, cor: 'var(--accent-2)', show: true },
-              { label: 'Prontos',    val: resumo.pronto || 0,     cor: '#10b981', show: true },
-              { label: 'Entregues',  val: resumo.entregue || 0,   cor: '#6b7280', show: true },
-            ].map(({ label, val, cor }) => (
-              <div key={label} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl"
-                style={{ background: `${cor}12`, border: `1px solid ${cor}30` }}>
-                <span className="text-lg font-black leading-none" style={{ color: cor }}>{val}</span>
-                <span className="text-[10px] t-dim leading-none hidden sm:block">{label}</span>
-              </div>
-            ))}
             {metricasHoje ? (
               <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl"
                 style={{ background: 'rgba(var(--accent-rgb),0.08)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
