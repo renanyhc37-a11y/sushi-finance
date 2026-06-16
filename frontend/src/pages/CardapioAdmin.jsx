@@ -1176,6 +1176,7 @@ function ModalCriarPromocao({ sugestao, onClose, onSalvo }) {
   });
   const [salvando, setSalvando] = useState(false);
   const [itensCardapio, setItensCardapio] = useState([]);
+  const [itemRecompensa, setItemRecompensa] = useState('');
   useEffect(() => {
     fetch(`${BASE}/cardapio`)
       .then(r => r.json())
@@ -1263,13 +1264,16 @@ function ModalCriarPromocao({ sugestao, onClose, onSalvo }) {
             <label className="text-[10px] t-dim font-bold tracking-widest mb-1.5 block">RECOMPENSA / PRÊMIO</label>
             {itensCardapio.length > 0 && (
               <select
+                value={itemRecompensa}
                 className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none mb-2"
                 style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.08)' }}
-                defaultValue=""
-                onChange={e => { if (e.target.value) setForm(p => ({ ...p, recompensa: e.target.value })); }}>
+                onChange={e => {
+                  setItemRecompensa(e.target.value);
+                  if (e.target.value) setForm(p => ({ ...p, recompensa: `1 ${itensCardapio.find(i => String(i.id) === e.target.value)?.nome} grátis` }));
+                }}>
                 <option value="">— escolher item do cardápio —</option>
                 {itensCardapio.map(i => (
-                  <option key={i.id} value={`1 ${i.nome} grátis`}>{i._cat} › {i.nome}</option>
+                  <option key={i.id} value={String(i.id)}>{i._cat} › {i.nome}</option>
                 ))}
               </select>
             )}
