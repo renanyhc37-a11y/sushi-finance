@@ -724,19 +724,24 @@ export default function Cardapio() {
   const nudgeTimerRef = useRef(null);
   const onTrocoBlur = useCallback(v => setForm(p => ({ ...p, troco_para: v })), []);
 
-  // Sugestões de upsell: prioriza bebidas/sobremesas/molhos, exclui itens já no carrinho
+  // Sugestões de upsell: itens marcados como is_sugestao têm prioridade absoluta
   function getSugestoes(carr) {
     const ids = new Set(carr.map(c => c.id));
     const PRIO = /bebida|suco|refri|água|agua|drink|cerveja|saquê|sake|chá|cha\b|sobremesa|doce|mochi|sorvete|extra|adicional|molho|tarê|tare|teriy|acompan|sobrem/i;
     const PRIO_ITEM = /tarê|tare|molho|sobremesa|mochi|sorvete|refri|suco|bebida|cerveja/i;
-    const prio = [], outros = [];
+    const marcados = [], prio = [], outros = [];
     for (const cat of categorias) {
       for (const item of (cat.itens || [])) {
         if (!item.disponivel || ids.has(item.id)) continue;
-        if (PRIO.test(cat.nome) || PRIO_ITEM.test(item.nome)) prio.push({ ...item, _catNome: cat.nome });
-        else outros.push({ ...item, _catNome: cat.nome });
+        const enriched = { ...item, _catNome: cat.nome };
+        if (item.is_sugestao) marcados.push(enriched);
+        else if (PRIO.test(cat.nome) || PRIO_ITEM.test(item.nome)) prio.push(enriched);
+        else outros.push(enriched);
       }
     }
+    // Se há itens marcados manualmente, usa só eles (até 6)
+    if (marcados.length > 0) return marcados.slice(0, 6);
+    // Fallback: comportamento automático por regex
     const outrosBaratos = outros.sort((a, b) => a.preco - b.preco).slice(0, 2);
     return [...prio.slice(0, 5), ...outrosBaratos].slice(0, 6);
   }

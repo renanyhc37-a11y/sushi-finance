@@ -327,7 +327,7 @@ router.post('/itens', requireAuth, (req, res) => {
 
 // PATCH /api/cardapio/itens/:id
 router.patch('/itens/:id', requireAuth, (req, res) => {
-  const { nome, descricao, preco, emoji, disponivel, ordem, categoria_id } = req.body;
+  const { nome, descricao, preco, emoji, disponivel, ordem, categoria_id, is_sugestao } = req.body;
   const item = db.prepare('SELECT * FROM cardapio_itens WHERE id = ?').get(req.params.id);
   if (!item) return res.status(404).json({ erro: 'Item não encontrado' });
   db.prepare(`UPDATE cardapio_itens SET
@@ -337,11 +337,14 @@ router.patch('/itens/:id', requireAuth, (req, res) => {
     emoji      = COALESCE(?, emoji),
     disponivel = COALESCE(?, disponivel),
     ordem      = COALESCE(?, ordem),
-    categoria_id = COALESCE(?, categoria_id)
+    categoria_id = COALESCE(?, categoria_id),
+    is_sugestao  = COALESCE(?, is_sugestao)
     WHERE id = ?
   `).run(nome ?? null, descricao ?? null, preco !== undefined ? Number(preco) : null,
     emoji ?? null, disponivel !== undefined ? (disponivel ? 1 : 0) : null,
-    ordem ?? null, categoria_id ?? null, req.params.id);
+    ordem ?? null, categoria_id ?? null,
+    is_sugestao !== undefined ? (is_sugestao ? 1 : 0) : null,
+    req.params.id);
   res.json(db.prepare('SELECT * FROM cardapio_itens WHERE id = ?').get(req.params.id));
 });
 

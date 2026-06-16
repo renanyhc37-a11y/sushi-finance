@@ -156,6 +156,7 @@ const migrations = [
   `ALTER TABLE lista_compras ADD COLUMN unidade_comprada TEXT`,
   `ALTER TABLE catalogo_compras ADD COLUMN ultimo_preco REAL`,
   `ALTER TABLE catalogo_compras ADD COLUMN ultimo_preco_em TEXT`,
+  `ALTER TABLE cardapio_itens ADD COLUMN is_sugestao INTEGER NOT NULL DEFAULT 0`,
 ];
 for (const sql of migrations) {
   try { raw.exec(sql); } catch (_) { /* coluna já existe */ }

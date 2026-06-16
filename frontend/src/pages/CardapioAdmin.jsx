@@ -138,6 +138,7 @@ function ModalItem({ item, categorias, catIdInicial, onClose, onSalvo }) {
     emoji: item?.emoji || 'fish',
     categoria_id: item?.categoria_id || catIdInicial || categorias[0]?.id || '',
     disponivel: item?.disponivel !== 0,
+    is_sugestao: item?.is_sugestao === 1,
   });
   const [foto, setFoto] = useState(item?.foto || null);
   const [fotoFile, setFotoFile] = useState(null);
@@ -312,6 +313,21 @@ function ModalItem({ item, categorias, catIdInicial, onClose, onSalvo }) {
             <span className="text-sm font-bold" style={{ color: form.disponivel ? '#10b981' : '#ef4444' }}>
               {form.disponivel ? 'Disponível — aparece no cardápio' : 'Indisponível — oculto para clientes'}
             </span>
+          </button>
+
+          {/* Sugestão toggle */}
+          <button onClick={() => setForm(f => ({ ...f, is_sugestao: !f.is_sugestao }))}
+            className="flex items-center gap-3 w-full p-3 rounded-xl transition-all"
+            style={{ background: form.is_sugestao ? 'rgba(245,158,11,0.08)' : 'rgba(100,116,139,0.06)', border: `1px solid ${form.is_sugestao ? 'rgba(245,158,11,0.35)' : 'var(--hairline)'}` }}>
+            <div className="w-10 h-6 rounded-full relative shrink-0" style={{ background: form.is_sugestao ? '#f59e0b' : '#374151' }}>
+              <div className="w-4 h-4 bg-white rounded-full absolute top-1 transition-all" style={{ left: form.is_sugestao ? '22px' : '4px' }} />
+            </div>
+            <div>
+              <span className="text-sm font-bold block" style={{ color: form.is_sugestao ? '#f59e0b' : 'var(--txt-dim)' }}>
+                {form.is_sugestao ? '⭐ Sugerido como adicional' : 'Não sugerido como adicional'}
+              </span>
+              <span className="text-xs" style={{ color: 'var(--txt-dim)' }}>Aparece na seção de sugestões ao finalizar pedido</span>
+            </div>
           </button>
         </div>
 
