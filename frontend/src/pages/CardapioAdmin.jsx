@@ -1143,7 +1143,7 @@ function ModalCriarPromocao({ sugestao, onClose, onSalvo }) {
     descricao: sugestao?.descricao || '',
     tipo: 'pedidos',
     meta: 5,
-    recompensa: sugestao?.descricao || '',
+    recompensa: '',
     emoji: sugestao?.emoji || '🎁',
   });
   const [salvando, setSalvando] = useState(false);
@@ -1227,11 +1227,17 @@ function ModalCriarPromocao({ sugestao, onClose, onSalvo }) {
           <div>
             <label className="text-[10px] t-dim font-bold tracking-widest mb-1.5 block">RECOMPENSA / PRÊMIO</label>
             <input value={form.recompensa} onChange={e => setForm(p => ({ ...p, recompensa: e.target.value }))}
-              placeholder="Ex: 1 Temaki de Salmão grátis"
+              placeholder="Ex: 1 Temaki Philadelphia grátis, 1 Hot grátis…"
               className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none"
-              style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.08)' }}
+              style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(16,185,129,0.4)' }}
               onFocus={e => e.target.style.borderColor = '#10b981'}
-              onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
+              onBlur={e => e.target.style.borderColor = 'rgba(16,185,129,0.4)'} />
+            {sugestao?.descricao && (
+              <p className="text-xs t-faint mt-1.5 flex items-start gap-1">
+                <span className="shrink-0">💡</span>
+                <span>Sugestão da IA: <em>"{sugestao.descricao}"</em> — edite acima para personalizar o prêmio.</span>
+              </p>
+            )}
           </div>
 
           {/* Emoji */}
