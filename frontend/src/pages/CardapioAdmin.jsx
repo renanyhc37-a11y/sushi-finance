@@ -176,7 +176,11 @@ function ModalItem({ item, categorias, catIdInicial, onClose, onSalvo }) {
         const fRes = await fetch(`${BASE}/cardapio/itens/${salvo.id}/foto`, {
           method: 'POST', headers: authH(), body: fd,
         });
-        if (!fRes.ok) toast.error('Item salvo mas falha no upload da foto');
+        if (!fRes.ok) {
+          let msg = 'Falha no upload da foto';
+          try { const j = await fRes.json(); msg = j.erro || msg; } catch {}
+          toast.error(`Item salvo mas: ${msg}`);
+        }
       }
 
       toast.success(isNovo ? '✅ Item criado!' : '✅ Item salvo!');

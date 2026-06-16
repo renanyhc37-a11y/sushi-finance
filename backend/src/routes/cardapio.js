@@ -10,8 +10,8 @@ try {
   const multer = require('multer');
   const UPLOAD_DIR = path.join(__dirname, '..', '..', '..', 'frontend', 'public', 'cardapio');
   if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  const MIME_PERMITIDOS = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-  const EXT_SEGURAS = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
+  const MIME_PERMITIDOS = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
+  const EXT_SEGURAS = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif', 'image/heic': '.heic', 'image/heif': '.heif' };
   const storage = multer.diskStorage({
     destination: (_, __, cb) => cb(null, UPLOAD_DIR),
     filename: (_, file, cb) => {
@@ -21,9 +21,9 @@ try {
   });
   const fileFilter = (_, file, cb) => {
     if (MIME_PERMITIDOS.includes(file.mimetype)) cb(null, true);
-    else cb(new Error('Tipo de arquivo não permitido. Use JPEG, PNG, WebP ou GIF.'));
+    else cb(new Error(`Tipo de arquivo não permitido: ${file.mimetype}. Use JPEG, PNG, WebP ou GIF.`));
   };
-  upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 }, fileFilter });
+  upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 }, fileFilter });
 } catch {
   upload = null;
   console.warn('[cardapio] multer não instalado — upload de fotos desativado. Rode: npm install multer');
