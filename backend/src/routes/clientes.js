@@ -55,6 +55,152 @@ router.get('/aniversarios', (req, res) => {
   res.json(lista);
 });
 
+// GET /api/clientes/:id/perfil — análise comportamental completa do cliente
+router.get('/:id/perfil', (req, res) => {
+  const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(req.params.id);
+  if (!cliente) return res.status(404).json({ erro: 'Cliente não encontrado' });
+
+  const tel = cliente.telefone;
+
+  // Todos os pedidos não-cancelados
+  const pedidos = db.prepare(`
+    SELECT p.id, p.numero, p.total, p.forma_pagamento, p.tipo_entrega,
+           p.created_at, p.status, p.desconto, p.frete, p.bairro,
+           p.cliente_endereco
+    FROM pdv_pedidos p
+    WHERE p.cliente_telefone = ? AND p.status != 'cancelado'
+    ORDER BY p.created_at ASC
+  `).all(tel);
+
+  const pedidosCancelados = db.prepare(
+    "SELECT COUNT(*) as n FROM pdv_pedidos WHERE cliente_telefone = ? AND status = 'cancelado'"
+  ).get(tel).n;
+
+  if (!pedidos.length) {
+    return res.json({ cliente: comFidelidade(cliente), pedidos: [], perfil: null, pedidosCancelados });
+  }
+
+  // Itens de todos os pedidos
+  const ids = pedidos.map(p => p.id);
+  const itens = db.prepare(`
+    SELECT pi.pedido_id, pi.item_nome, pi.quantidade, pi.valor_unitario
+    FROM pdv_itens pi WHERE pi.pedido_id IN (${ids.map(() => '?').join(',')})
+  `).all(...ids);
+
+  // ── Métricas gerais ──────────────────────────────────────────
+  const totais = pedidos.map(p => p.total);
+  const totalGasto = totais.reduce((s, v) => s + v, 0);
+  const ticketMedio = totalGasto / pedidos.length;
+  const ticketMaximo = Math.max(...totais);
+  const ticketMinimo = Math.min(...totais);
+
+  // ── Recência / frequência ────────────────────────────────────
+  const datas = pedidos.map(p => new Date(p.created_at + (p.created_at.includes('T') ? '' : 'Z')));
+  const primeiro = datas[0];
+  const ultimo = datas[datas.length - 1];
+  const diasCliente = Math.max(1, Math.round((ultimo - primeiro) / 86400000));
+  const diasDesdeUltimo = Math.round((Date.now() - ultimo) / 86400000);
+
+  let intervaloMedioArr = [];
+  for (let i = 1; i < datas.length; i++) {
+    intervaloMedioArr.push(Math.round((datas[i] - datas[i - 1]) / 86400000));
+  }
+  const intervaloMedio = intervaloMedioArr.length
+    ? Math.round(intervaloMedioArr.reduce((s, v) => s + v, 0) / intervaloMedioArr.length)
+    : null;
+
+  // ── Dias da semana ───────────────────────────────────────────
+  const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const diasSemana = Array(7).fill(0);
+  datas.forEach(d => diasSemana[d.getDay()]++);
+  const diaCampeao = diasSemana.indexOf(Math.max(...diasSemana));
+
+  // ── Horários ─────────────────────────────────────────────────
+  const horas = Array(24).fill(0);
+  datas.forEach(d => horas[d.getHours()]++);
+  const horaCampeao = horas.indexOf(Math.max(...horas));
+
+  // ── Forma de pagamento ───────────────────────────────────────
+  const pgto = {};
+  pedidos.forEach(p => { pgto[p.forma_pagamento || 'outro'] = (pgto[p.forma_pagamento || 'outro'] || 0) + 1; });
+  const pgtoFavorito = Object.entries(pgto).sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  // ── Tipo de entrega ──────────────────────────────────────────
+  const retiradas = pedidos.filter(p => p.tipo_entrega === 'retirada').length;
+  const entregas = pedidos.length - retiradas;
+
+  // ── Itens mais pedidos ───────────────────────────────────────
+  const contItens = {};
+  itens.forEach(i => {
+    if (!contItens[i.item_nome]) contItens[i.item_nome] = { nome: i.item_nome, qtd: 0, gasto: 0 };
+    contItens[i.item_nome].qtd += i.quantidade;
+    contItens[i.item_nome].gasto += i.quantidade * i.valor_unitario;
+  });
+  const itensFavoritos = Object.values(contItens)
+    .sort((a, b) => b.qtd - a.qtd)
+    .slice(0, 8);
+
+  // ── Evolução mensal ──────────────────────────────────────────
+  const porMes = {};
+  pedidos.forEach(p => {
+    const mes = p.created_at.slice(0, 7);
+    if (!porMes[mes]) porMes[mes] = { mes, pedidos: 0, gasto: 0 };
+    porMes[mes].pedidos++;
+    porMes[mes].gasto += p.total;
+  });
+  const evolucaoMensal = Object.values(porMes).sort((a, b) => a.mes.localeCompare(b.mes)).slice(-12);
+
+  // ── Segmentação RFM simplificada ─────────────────────────────
+  let segmento = 'novo';
+  if (pedidos.length >= 10 && diasDesdeUltimo <= 30) segmento = 'fiel';
+  else if (pedidos.length >= 5 && diasDesdeUltimo <= 14) segmento = 'recorrente';
+  else if (pedidos.length >= 10 && diasDesdeUltimo > 60) segmento = 'em_risco';
+  else if (diasDesdeUltimo > 90) segmento = 'inativo';
+  else if (pedidos.length >= 3) segmento = 'regular';
+
+  // ── Tendência (últimos 3 meses vs 3 meses anteriores) ────────
+  const agora = Date.now();
+  const ultimos3 = pedidos.filter(p => agora - new Date(p.created_at).getTime() < 90 * 86400000);
+  const anteriores3 = pedidos.filter(p => {
+    const d = agora - new Date(p.created_at).getTime();
+    return d >= 90 * 86400000 && d < 180 * 86400000;
+  });
+  const tendencia = anteriores3.length === 0 ? 'subindo'
+    : ultimos3.length > anteriores3.length ? 'subindo'
+    : ultimos3.length < anteriores3.length ? 'caindo'
+    : 'estavel';
+
+  res.json({
+    cliente: comFidelidade(cliente),
+    pedidosCancelados,
+    perfil: {
+      totalPedidos: pedidos.length,
+      totalGasto,
+      ticketMedio,
+      ticketMaximo,
+      ticketMinimo,
+      primeiro: primeiro.toISOString(),
+      ultimo: ultimo.toISOString(),
+      diasCliente,
+      diasDesdeUltimo,
+      intervaloMedio,
+      diasSemana: diasSemana.map((v, i) => ({ dia: DIAS[i], pedidos: v })),
+      diaCampeao: DIAS[diaCampeao],
+      horas: horas.map((v, h) => ({ hora: h, pedidos: v })),
+      horaCampeao,
+      pgto,
+      pgtoFavorito,
+      retiradas,
+      entregas,
+      itensFavoritos,
+      evolucaoMensal,
+      segmento,
+      tendencia,
+    },
+    pedidos: pedidos.slice(-20).reverse(), // últimos 20 para o histórico
+  });
+});
+
 // GET /api/clientes/:id/pedidos — histórico de pedidos do cliente
 router.get('/:id/pedidos', (req, res) => {
   const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(req.params.id);

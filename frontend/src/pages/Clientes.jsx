@@ -3,7 +3,8 @@ import toast, { Toaster } from 'react-hot-toast';
 import { getToken } from '../hooks/useAuth';
 import {
   Users, Fish, Gift, Search, RefreshCw, Star, Sparkles, Repeat, Crown, MoonStar,
-  Smartphone, MapPin, X, Target, CheckCircle2, Cake,
+  Smartphone, MapPin, X, Target, CheckCircle2, Cake, TrendingUp, TrendingDown,
+  Minus, Clock, Calendar, CreditCard, ShoppingBag, Bike, BarChart2, Award,
 } from 'lucide-react';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
@@ -36,17 +37,38 @@ function BarraProgresso({ progresso, meta, cor = '#10b981' }) {
   );
 }
 
+const SEGMENTO_CFG = {
+  fiel:       { label: 'Cliente Fiel',   cor: '#f59e0b', bg: 'rgba(245,158,11,0.12)',  Icon: Crown },
+  recorrente: { label: 'Recorrente',     cor: '#10b981', bg: 'rgba(16,185,129,0.1)',   Icon: Repeat },
+  regular:    { label: 'Regular',        cor: '#3b82f6', bg: 'rgba(59,130,246,0.1)',   Icon: Star },
+  novo:       { label: 'Novo cliente',   cor: '#8b5cf6', bg: 'rgba(139,92,246,0.1)',   Icon: Sparkles },
+  em_risco:   { label: 'Em risco',       cor: '#f97316', bg: 'rgba(249,115,22,0.1)',   Icon: TrendingDown },
+  inativo:    { label: 'Inativo',        cor: '#6b7280', bg: 'rgba(107,114,128,0.1)',  Icon: MoonStar },
+};
+
+const PGTO_LABEL = { pix: 'PIX', dinheiro: 'Dinheiro', cartao_cred: 'Crédito', cartao_deb: 'Débito' };
+
+function MiniBar({ valor, max, cor }) {
+  const pct = max > 0 ? Math.round((valor / max) * 100) : 0;
+  return (
+    <div className="flex-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)', height: 5 }}>
+      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: cor, transition: 'width .4s' }} />
+    </div>
+  );
+}
+
 function ModalCliente({ cliente, onClose, onResgatar }) {
-  const [pedidos, setPedidos] = useState([]);
+  const [dados, setDados] = useState(null);
   const [promocoes, setPromocoes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [resgatando, setResgatando] = useState(null); // id da cliente_promo sendo resgatada
+  const [resgatando, setResgatando] = useState(null);
+  const [aba, setAba] = useState('perfil'); // 'perfil' | 'historico' | 'fidelidade'
 
   useEffect(() => {
     Promise.all([
-      fetch(`${BASE}/clientes/${cliente.id}/pedidos`, { headers: authH() }).then(r => r.ok ? r.json() : []),
+      fetch(`${BASE}/clientes/${cliente.id}/perfil`, { headers: authH() }).then(r => r.ok ? r.json() : null),
       fetch(`${BASE}/promocoes/cliente/${cliente.id}`, { headers: authH() }).then(r => r.ok ? r.json() : []),
-    ]).then(([p, pr]) => { setPedidos(p); setPromocoes(pr); setLoading(false); })
+    ]).then(([d, pr]) => { setDados(d); setPromocoes(pr); setLoading(false); })
       .catch(() => setLoading(false));
   }, [cliente.id]);
 
@@ -62,172 +84,368 @@ function ModalCliente({ cliente, onClose, onResgatar }) {
     setResgatando(null);
   }
 
-  const fid = cliente.fidelidade;
-
   async function handleResgatar() {
+    const fid = dados?.cliente?.fidelidade;
     if (!fid || fid.recompensas_disponiveis <= 0) return;
-    setResgatando(true);
+    setResgatando('fid');
     try {
-      const res = await fetch(`${BASE}/clientes/${cliente.id}/resgatar`, {
-        method: 'POST', headers: authH(),
-      });
+      const res = await fetch(`${BASE}/clientes/${cliente.id}/resgatar`, { method: 'POST', headers: authH() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro || 'Erro');
       toast.success('🎁 Brinde resgatado com sucesso!');
       onResgatar(data.cliente);
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setResgatando(false);
-    }
+      setDados(prev => ({ ...prev, cliente: { ...prev.cliente, ...data.cliente } }));
+    } catch (err) { toast.error(err.message); }
+    setResgatando(null);
   }
 
+  const perfil = dados?.perfil;
+  const fid = dados?.cliente?.fidelidade || cliente.fidelidade;
+  const pedidos = dados?.pedidos || [];
+  const seg = perfil ? (SEGMENTO_CFG[perfil.segmento] || SEGMENTO_CFG.novo) : null;
+  const maxDiaSemana = perfil ? Math.max(...perfil.diasSemana.map(d => d.pedidos)) : 1;
+  const maxItem = perfil?.itensFavoritos?.[0]?.qtd || 1;
+  const maxMes = perfil ? Math.max(...perfil.evolucaoMensal.map(m => m.gasto)) : 1;
+
+  const ABAS = [
+    { id: 'perfil',    label: 'Perfil' },
+    { id: 'historico', label: 'Pedidos' },
+    { id: 'fidelidade',label: 'Fidelidade' },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
-      <div className="w-full max-w-lg rounded-2xl overflow-hidden flex flex-col max-h-[90vh]"
-        style={{ background: '#111', border: '1px solid #1a1a1a' }}>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(5px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col"
+        style={{ background: 'var(--space-surface)', border: '1px solid var(--hairline)', maxHeight: '92vh' }}>
 
         {/* Header */}
-        <div className="px-5 py-4 flex items-center justify-between shrink-0"
-          style={{ borderBottom: '1px solid #1a1a1a' }}>
+        <div className="shrink-0 px-5 py-4" style={{ borderBottom: '1px solid var(--hairline)' }}>
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black"
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-black shrink-0"
               style={{ background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
               {cliente.nome.charAt(0).toUpperCase()}
             </div>
-            <div>
-              <p className="font-black text-white text-lg leading-none">{cliente.nome}</p>
-              <p className="text-xs text-zinc-500 mt-0.5 flex items-center gap-1"><Smartphone size={11} strokeWidth={1.75} /> {cliente.telefone}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-600"
-            style={{ background: '#1a1a1a' }}><X size={17} strokeWidth={1.75} /></button>
-        </div>
-
-        <div className="overflow-y-auto flex-1 p-4 space-y-4">
-
-          {/* Endereço */}
-          {cliente.endereco && (
-            <div className="flex items-start gap-2.5 p-3 rounded-xl" style={{ background: '#161616' }}>
-              <span className="mt-0.5 text-zinc-500 shrink-0"><MapPin size={15} strokeWidth={1.75} /></span>
-              <p className="text-sm text-zinc-400">{cliente.endereco}</p>
-            </div>
-          )}
-
-          {/* Fidelidade */}
-          {fid && (
-            <div className="rounded-xl p-4" style={{ background: 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.2)' }}>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="text-xs font-black tracking-widest text-violet-400">CARTÃO FIDELIDADE</p>
-                  <p className="text-xs text-zinc-600 mt-0.5">{fid.total_pedidos} pedido{fid.total_pedidos !== 1 ? 's' : ''} no total</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-black text-violet-300">{fid.pedidos_no_ciclo}<span className="text-sm text-zinc-600">/10</span></p>
-                  <p className="text-[10px] text-zinc-600">neste ciclo</p>
-                </div>
-              </div>
-              <Selos atual={fid.pedidos_no_ciclo} />
-              <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(139,92,246,0.15)' }}>
-                {fid.recompensas_disponiveis > 0 ? (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-yellow-400 flex items-center gap-1.5"><Gift size={14} strokeWidth={1.75} /> {fid.recompensas_disponiveis} brinde{fid.recompensas_disponiveis > 1 ? 's' : ''} disponível{fid.recompensas_disponiveis > 1 ? 'is' : ''}</p>
-                      <p className="text-[10px] text-zinc-600 mt-0.5">1 Temaki Salmão grátis</p>
-                    </div>
-                    <button onClick={handleResgatar} disabled={resgatando}
-                      className="px-4 py-2 rounded-xl text-sm font-black disabled:opacity-50 active:scale-95 transition-transform"
-                      style={{ background: 'rgba(234,179,8,0.2)', color: '#eab308', border: '1px solid rgba(234,179,8,0.3)' }}>
-                      {resgatando ? '...' : <span className="flex items-center gap-1.5">Resgatar <Gift size={14} strokeWidth={1.75} /></span>}
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-xs text-zinc-600">
-                    Faltam <span className="text-violet-400 font-bold">{fid.proximo_em}</span> pedido{fid.proximo_em !== 1 ? 's' : ''} para ganhar brinde
-                    {fid.recompensas_ganhas > 0 && <span className="ml-2 text-zinc-700">· {fid.recompensas_ganhas} ganho{fid.recompensas_ganhas > 1 ? 's' : ''} no total</span>}
-                  </p>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-black t-strong text-lg leading-none">{cliente.nome}</p>
+                {seg && (
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1"
+                    style={{ background: seg.bg, color: seg.cor }}>
+                    <seg.Icon size={9} strokeWidth={2.5} /> {seg.label}
+                  </span>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Promoções de fidelidade */}
-          {promocoes.length > 0 && (
-            <div>
-              <p className="text-xs font-black tracking-widest text-zinc-600 mb-2 flex items-center gap-1.5"><Target size={12} strokeWidth={1.75} /> PROMOÇÕES ATIVAS</p>
-              <div className="space-y-2">
-                {promocoes.map(cp => {
-                  const pct = Math.min(100, Math.round(((cp.progresso || 0) / cp.meta) * 100));
-                  const completo = cp.completado && !cp.recompensa_resgatada;
-                  return (
-                    <div key={cp.id} className="rounded-xl p-3"
-                      style={{
-                        background: completo ? 'rgba(16,185,129,0.08)' : 'rgba(255,255,255,0.03)',
-                        border: `1px solid ${completo ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.07)'}`,
-                      }}>
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <span className="text-xl shrink-0">{cp.emoji}</span>
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-white truncate">{cp.nome}</p>
-                            <p className="text-[11px] text-zinc-600 truncate flex items-center gap-1"><Gift size={10} strokeWidth={1.75} className="shrink-0" /> {cp.recompensa}</p>
-                          </div>
-                        </div>
-                        {completo ? (
-                          <button onClick={() => resgatarPromocao(cp)} disabled={resgatando === cp.id}
-                            className="px-3 py-1.5 rounded-lg text-xs font-black shrink-0 disabled:opacity-50 active:scale-95 transition-transform"
-                            style={{ background: 'rgba(16,185,129,0.2)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
-                            {resgatando === cp.id ? '...' : <span className="flex items-center gap-1"><Gift size={12} strokeWidth={1.75} /> Resgatar</span>}
-                          </button>
-                        ) : (
-                          <span className="text-xs font-black shrink-0" style={{ color: 'var(--accent)' }}>
-                            {cp.progresso || 0}/{cp.meta}
-                          </span>
-                        )}
-                      </div>
-                      {/* Barra de progresso com selos */}
-                      <BarraProgresso progresso={cp.progresso || 0} meta={cp.meta} cor={completo ? '#10b981' : 'var(--accent)'} />
-                      <p className="text-[10px] text-zinc-700 mt-1.5">
-                        {completo
-                          ? <span className="flex items-center gap-1"><CheckCircle2 size={11} strokeWidth={1.75} className="text-emerald-500" /> Completado! Clique para resgatar o prêmio.</span>
-                          : `Faltam ${cp.meta - (cp.progresso || 0)} ${cp.tipo === 'pedidos' ? 'pedidos' : 'R$'} para ganhar`}
-                      </p>
-                    </div>
-                  );
-                })}
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                <span className="text-xs t-dim flex items-center gap-1"><Smartphone size={11} /> {cliente.telefone}</span>
+                {cliente.endereco && <span className="text-xs t-dim flex items-center gap-1 truncate max-w-[180px]"><MapPin size={11} /> {cliente.endereco}</span>}
               </div>
             </div>
-          )}
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl t-dim shrink-0"
+              style={{ background: 'var(--space-elev-2)' }}><X size={16} /></button>
+          </div>
 
-          {/* Histórico de pedidos */}
-          <div>
-            <p className="text-xs font-black tracking-widest text-zinc-600 mb-2">HISTÓRICO DE PEDIDOS</p>
-            {loading ? (
-              <p className="text-xs text-zinc-700 py-4 text-center animate-pulse">Carregando...</p>
-            ) : pedidos.length === 0 ? (
-              <p className="text-xs text-zinc-700 py-4 text-center">Nenhum pedido encontrado</p>
-            ) : (
-              <div className="space-y-2">
-                {pedidos.map(p => (
-                  <div key={p.id} className="flex items-center justify-between p-3 rounded-xl" style={{ background: '#161616' }}>
-                    <div>
-                      <p className="text-sm font-bold text-white">Pedido #{p.numero}</p>
-                      <p className="text-[11px] text-zinc-600">{new Date(p.created_at).toLocaleDateString('pt-BR')} · {
-                        { pix: 'PIX', dinheiro: 'Dinheiro', cartao_cred: 'Crédito', cartao_deb: 'Débito' }[p.forma_pagamento] || p.forma_pagamento || '—'
-                      }</p>
+          {/* Abas */}
+          <div className="flex gap-1 mt-3">
+            {ABAS.map(a => (
+              <button key={a.id} onClick={() => setAba(a.id)}
+                className="flex-1 py-1.5 rounded-xl text-xs font-bold transition-all"
+                style={{
+                  background: aba === a.id ? 'rgba(var(--accent-rgb),0.15)' : 'var(--space-elev)',
+                  color: aba === a.id ? 'var(--accent)' : 'var(--txt-dim)',
+                  border: `1px solid ${aba === a.id ? 'rgba(var(--accent-rgb),0.3)' : 'transparent'}`,
+                }}>
+                {a.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Corpo */}
+        <div className="overflow-y-auto flex-1 px-4 py-4 space-y-4">
+          {loading ? (
+            <div className="py-16 text-center t-dim text-sm animate-pulse">Carregando perfil…</div>
+          ) : !perfil ? (
+            <div className="py-16 text-center t-dim text-sm">Nenhum pedido registrado ainda.</div>
+          ) : (
+
+            /* ── ABA PERFIL ── */
+            aba === 'perfil' ? (<>
+
+              {/* KPIs principais */}
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: 'Total gasto',   val: brl(perfil.totalGasto),              cor: '#10b981', Icon: TrendingUp },
+                  { label: 'Ticket médio',  val: brl(perfil.ticketMedio),             cor: 'var(--accent)', Icon: BarChart2 },
+                  { label: 'Pedidos',       val: perfil.totalPedidos,                 cor: '#3b82f6', Icon: CheckCircle2 },
+                  { label: 'Últ. pedido',   val: `${perfil.diasDesdeUltimo}d atrás`,  cor: perfil.diasDesdeUltimo > 30 ? '#ef4444' : '#10b981', Icon: Clock },
+                ].map(({ label, val, cor, Icon }) => (
+                  <div key={label} className="p-3 rounded-2xl"
+                    style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Icon size={12} strokeWidth={1.75} style={{ color: cor }} />
+                      <span className="text-[10px] font-bold t-dim uppercase tracking-wider">{label}</span>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-black text-white">{brl(p.total)}</p>
-                      <p className="text-[10px] mt-0.5 font-semibold" style={{
-                        color: { entregue: '#10b981', cancelado: '#ef4444', pronto: 'var(--accent-2)', preparando: 'var(--accent-2)', novo: '#3b82f6' }[p.status] || '#666'
-                      }}>{p.status}</p>
-                    </div>
+                    <p className="text-base font-black t-strong">{val}</p>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+
+              {/* Tendência + intervalo */}
+              <div className="flex gap-2">
+                <div className="flex-1 p-3 rounded-2xl flex items-center gap-3"
+                  style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                  {perfil.tendencia === 'subindo'
+                    ? <TrendingUp size={20} style={{ color: '#10b981' }} strokeWidth={1.75} />
+                    : perfil.tendencia === 'caindo'
+                      ? <TrendingDown size={20} style={{ color: '#ef4444' }} strokeWidth={1.75} />
+                      : <Minus size={20} style={{ color: '#6b7280' }} strokeWidth={1.75} />}
+                  <div>
+                    <p className="text-[10px] font-bold t-dim uppercase tracking-wider">Tendência</p>
+                    <p className="text-sm font-black" style={{ color: perfil.tendencia === 'subindo' ? '#10b981' : perfil.tendencia === 'caindo' ? '#ef4444' : '#6b7280' }}>
+                      {perfil.tendencia === 'subindo' ? 'Crescendo' : perfil.tendencia === 'caindo' ? 'Caindo' : 'Estável'}
+                    </p>
+                  </div>
+                </div>
+                {perfil.intervaloMedio && (
+                  <div className="flex-1 p-3 rounded-2xl flex items-center gap-3"
+                    style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                    <Calendar size={20} strokeWidth={1.75} style={{ color: '#8b5cf6' }} />
+                    <div>
+                      <p className="text-[10px] font-bold t-dim uppercase tracking-wider">Frequência</p>
+                      <p className="text-sm font-black t-strong">a cada {perfil.intervaloMedio}d</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Dias da semana */}
+              <div className="p-4 rounded-2xl space-y-2"
+                style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-black uppercase tracking-wider t-dim">Dias da semana</p>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)' }}>
+                    prefere {perfil.diaCampeao}
+                  </span>
+                </div>
+                <div className="flex items-end gap-1 h-16">
+                  {perfil.diasSemana.map(({ dia, pedidos: qt }) => {
+                    const pct = maxDiaSemana > 0 ? (qt / maxDiaSemana) * 100 : 0;
+                    const ativo = dia === perfil.diaCampeao;
+                    return (
+                      <div key={dia} className="flex-1 flex flex-col items-center gap-1">
+                        <div className="w-full rounded-t-md" style={{ height: `${Math.max(4, pct * 0.52)}px`, background: ativo ? 'var(--accent)' : 'rgba(255,255,255,0.08)', transition: 'height .3s' }} />
+                        <span className="text-[9px] font-bold" style={{ color: ativo ? 'var(--accent)' : 'var(--txt-dim)' }}>{dia}</span>
+                        {qt > 0 && <span className="text-[9px] t-dim">{qt}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Horário favorito + Pagamento + Entrega */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-3 rounded-2xl text-center"
+                  style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                  <Clock size={16} strokeWidth={1.75} className="mx-auto mb-1" style={{ color: '#f59e0b' }} />
+                  <p className="text-[10px] t-dim font-bold">Horário</p>
+                  <p className="text-sm font-black t-strong mt-0.5">{String(perfil.horaCampeao).padStart(2,'0')}h</p>
+                </div>
+                <div className="p-3 rounded-2xl text-center"
+                  style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                  <CreditCard size={16} strokeWidth={1.75} className="mx-auto mb-1" style={{ color: '#3b82f6' }} />
+                  <p className="text-[10px] t-dim font-bold">Pagamento</p>
+                  <p className="text-sm font-black t-strong mt-0.5">{PGTO_LABEL[perfil.pgtoFavorito] || perfil.pgtoFavorito || '—'}</p>
+                </div>
+                <div className="p-3 rounded-2xl text-center"
+                  style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                  {perfil.retiradas > perfil.entregas
+                    ? <ShoppingBag size={16} strokeWidth={1.75} className="mx-auto mb-1" style={{ color: '#8b5cf6' }} />
+                    : <Bike size={16} strokeWidth={1.75} className="mx-auto mb-1" style={{ color: '#10b981' }} />}
+                  <p className="text-[10px] t-dim font-bold">Tipo</p>
+                  <p className="text-sm font-black t-strong mt-0.5">{perfil.retiradas > perfil.entregas ? 'Retirada' : 'Entrega'}</p>
+                </div>
+              </div>
+
+              {/* Itens favoritos */}
+              {perfil.itensFavoritos.length > 0 && (
+                <div className="p-4 rounded-2xl"
+                  style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                  <p className="text-[10px] font-black uppercase tracking-wider t-dim mb-3">Itens favoritos</p>
+                  <div className="space-y-2.5">
+                    {perfil.itensFavoritos.map((item, i) => (
+                      <div key={item.nome} className="flex items-center gap-2">
+                        <span className="text-[10px] font-black t-dim w-4 shrink-0">{i + 1}</span>
+                        <span className="text-xs t-strong flex-1 truncate">{item.nome}</span>
+                        <MiniBar valor={item.qtd} max={maxItem} cor="var(--accent)" />
+                        <span className="text-[10px] font-black t-dim shrink-0 w-8 text-right">{item.qtd}×</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Evolução mensal */}
+              {perfil.evolucaoMensal.length > 1 && (
+                <div className="p-4 rounded-2xl"
+                  style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                  <p className="text-[10px] font-black uppercase tracking-wider t-dim mb-3">Gasto mensal</p>
+                  <div className="flex items-end gap-1 h-16">
+                    {perfil.evolucaoMensal.map(m => {
+                      const pct = maxMes > 0 ? (m.gasto / maxMes) * 100 : 0;
+                      const [ano, mes] = m.mes.split('-');
+                      const label = `${mes}/${ano.slice(2)}`;
+                      return (
+                        <div key={m.mes} className="flex-1 flex flex-col items-center gap-0.5" title={`${label}: ${brl(m.gasto)}`}>
+                          <div className="w-full rounded-t" style={{ height: `${Math.max(3, pct * 0.52)}px`, background: 'rgba(var(--accent-rgb),0.6)', transition: 'height .3s' }} />
+                          <span className="text-[8px] t-dim">{label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Ticket min/max */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-3 rounded-2xl" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                  <p className="text-[10px] t-dim font-bold mb-1">Menor pedido</p>
+                  <p className="text-sm font-black t-strong">{brl(perfil.ticketMinimo)}</p>
+                </div>
+                <div className="p-3 rounded-2xl" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                  <p className="text-[10px] t-dim font-bold mb-1">Maior pedido</p>
+                  <p className="text-sm font-black t-strong">{brl(perfil.ticketMaximo)}</p>
+                </div>
+              </div>
+
+              {/* Cancelamentos */}
+              {dados.pedidosCancelados > 0 && (
+                <div className="flex items-center gap-2 p-3 rounded-xl"
+                  style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                  <X size={14} style={{ color: '#f87171' }} strokeWidth={2} />
+                  <p className="text-xs t-dim">{dados.pedidosCancelados} pedido{dados.pedidosCancelados > 1 ? 's' : ''} cancelado{dados.pedidosCancelados > 1 ? 's' : ''} no histórico</p>
+                </div>
+              )}
+
+            </>) :
+
+            /* ── ABA HISTÓRICO ── */
+            aba === 'historico' ? (
+              <div className="space-y-2">
+                {pedidos.length === 0
+                  ? <p className="py-12 text-center text-sm t-dim">Nenhum pedido</p>
+                  : pedidos.map(p => (
+                    <div key={p.id} className="flex items-center justify-between p-3 rounded-xl"
+                      style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                      <div>
+                        <p className="text-sm font-bold t-strong">#{p.numero}</p>
+                        <p className="text-[11px] t-dim">
+                          {new Date(p.created_at).toLocaleDateString('pt-BR')} · {PGTO_LABEL[p.forma_pagamento] || '—'}
+                          {p.tipo_entrega === 'retirada' && ' · Retirada'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-black t-strong">{brl(p.total)}</p>
+                        <p className="text-[10px] mt-0.5 font-semibold" style={{
+                          color: { entregue: '#10b981', cancelado: '#ef4444', pronto: '#f59e0b', preparando: '#f59e0b', novo: '#3b82f6' }[p.status] || '#666'
+                        }}>{p.status}</p>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            ) :
+
+            /* ── ABA FIDELIDADE ── */
+            (<>
+              {/* Cartão fidelidade */}
+              {fid && (
+                <div className="rounded-2xl p-4" style={{ background: 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.2)' }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-xs font-black tracking-widest" style={{ color: '#a78bfa' }}>CARTÃO FIDELIDADE</p>
+                      <p className="text-xs t-dim mt-0.5">{fid.total_pedidos} pedido{fid.total_pedidos !== 1 ? 's' : ''} no total</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-black" style={{ color: '#c4b5fd' }}>{fid.pedidos_no_ciclo}<span className="text-sm t-dim">/10</span></p>
+                      <p className="text-[10px] t-dim">neste ciclo</p>
+                    </div>
+                  </div>
+                  <Selos atual={fid.pedidos_no_ciclo} />
+                  <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(139,92,246,0.15)' }}>
+                    {fid.recompensas_disponiveis > 0 ? (
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-bold flex items-center gap-1.5" style={{ color: '#eab308' }}><Gift size={14} /> {fid.recompensas_disponiveis} brinde{fid.recompensas_disponiveis > 1 ? 's' : ''} disponível{fid.recompensas_disponiveis > 1 ? 'is' : ''}</p>
+                          <p className="text-[10px] t-dim mt-0.5">1 Temaki Salmão grátis</p>
+                        </div>
+                        <button onClick={handleResgatar} disabled={!!resgatando}
+                          className="px-4 py-2 rounded-xl text-sm font-black disabled:opacity-50 active:scale-95 transition-transform"
+                          style={{ background: 'rgba(234,179,8,0.2)', color: '#eab308', border: '1px solid rgba(234,179,8,0.3)' }}>
+                          {resgatando === 'fid' ? '…' : <span className="flex items-center gap-1.5">Resgatar <Gift size={14} /></span>}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs t-dim">
+                        Faltam <span className="font-bold" style={{ color: '#a78bfa' }}>{fid.proximo_em}</span> pedido{fid.proximo_em !== 1 ? 's' : ''} para ganhar brinde
+                        {fid.recompensas_ganhas > 0 && <span className="ml-2 t-faint">· {fid.recompensas_ganhas} ganho{fid.recompensas_ganhas > 1 ? 's' : ''} no total</span>}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Promoções */}
+              {promocoes.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-black tracking-widest t-dim mb-2 flex items-center gap-1.5"><Target size={12} /> PROMOÇÕES ATIVAS</p>
+                  <div className="space-y-2">
+                    {promocoes.map(cp => {
+                      const completo = cp.completado && !cp.recompensa_resgatada;
+                      return (
+                        <div key={cp.id} className="rounded-xl p-3"
+                          style={{ background: completo ? 'rgba(16,185,129,0.08)' : 'var(--space-elev)', border: `1px solid ${completo ? 'rgba(16,185,129,0.3)' : 'var(--hairline)'}` }}>
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <span className="text-xl shrink-0">{cp.emoji}</span>
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold t-strong truncate">{cp.nome}</p>
+                                <p className="text-[11px] t-dim truncate flex items-center gap-1"><Gift size={10} /> {cp.recompensa}</p>
+                              </div>
+                            </div>
+                            {completo ? (
+                              <button onClick={() => resgatarPromocao(cp)} disabled={resgatando === cp.id}
+                                className="px-3 py-1.5 rounded-lg text-xs font-black shrink-0 disabled:opacity-50"
+                                style={{ background: 'rgba(16,185,129,0.2)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
+                                {resgatando === cp.id ? '…' : <span className="flex items-center gap-1"><Gift size={12} /> Resgatar</span>}
+                              </button>
+                            ) : (
+                              <span className="text-xs font-black shrink-0" style={{ color: 'var(--accent)' }}>{cp.progresso || 0}/{cp.meta}</span>
+                            )}
+                          </div>
+                          <BarraProgresso progresso={cp.progresso || 0} meta={cp.meta} cor={completo ? '#10b981' : 'var(--accent)'} />
+                          <p className="text-[10px] t-dim mt-1.5">
+                            {completo
+                              ? <span className="flex items-center gap-1"><CheckCircle2 size={11} className="text-emerald-500" /> Completado! Clique para resgatar.</span>
+                              : `Faltam ${cp.meta - (cp.progresso || 0)} ${cp.tipo === 'pedidos' ? 'pedidos' : 'R$'} para ganhar`}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {promocoes.length === 0 && !fid?.recompensas_disponiveis && (
+                <div className="py-12 text-center t-dim text-sm">
+                  <Award size={28} className="mx-auto mb-3 opacity-30" strokeWidth={1.5} />
+                  <p>Nenhuma promoção ativa para este cliente.</p>
+                </div>
+              )}
+            </>)
+          )}
         </div>
       </div>
     </div>
