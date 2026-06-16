@@ -66,11 +66,13 @@ try { db.exec('ALTER TABLE banners_promocao ADD COLUMN item_id INTEGER'); } catc
 
 // ── Helpers ───────────────────────────────────────────────────
 function getContextoDados() {
-  const produtos = db.prepare(`
-    SELECT p.nome, p.preco_venda, c.nome as categoria
-    FROM produtos p
-    LEFT JOIN categorias_produto c ON c.id = p.categoria_id
-    WHERE p.ativo = 1 ORDER BY p.nome
+  // Cardápio real (cardapio_itens + categorias)
+  const itens = db.prepare(`
+    SELECT i.nome, i.preco, i.descricao, c.nome as categoria
+    FROM cardapio_itens i
+    LEFT JOIN cardapio_categorias c ON c.id = i.categoria_id
+    WHERE i.disponivel = 1
+    ORDER BY c.nome, i.nome
   `).all();
 
   const faturamento = db.prepare(`
@@ -79,15 +81,15 @@ function getContextoDados() {
     ORDER BY data DESC LIMIT 30
   `).all();
 
+  // Top itens do cardápio mais pedidos
   const topPedidos = db.prepare(`
-    SELECT p.nome, SUM(ip.quantidade) as total_vendido
+    SELECT ip.nome_item as nome, SUM(ip.quantidade) as total_vendido
     FROM itens_pedido ip
-    JOIN produtos p ON p.id = ip.produto_id
-    GROUP BY ip.produto_id
+    GROUP BY ip.nome_item
     ORDER BY total_vendido DESC LIMIT 10
   `).all();
 
-  return { produtos, faturamento, topPedidos };
+  return { itens, faturamento, topPedidos };
 }
 
 // ── POST /ia/sugestoes — gera sugestões com Claude ───────────
@@ -99,18 +101,24 @@ router.post('/sugestoes', async (req, res) => {
     });
   }
 
+  const { pedido_operador } = req.body || {};
+
   try {
     const ctx = getContextoDados();
     const client = new Anthropic({ apiKey });
 
+    const secaoOperador = pedido_operador?.trim()
+      ? `\n## Instrução do operador:\n"${pedido_operador.trim()}"\nLeve essa instrução em consideração e priorize sugestões que atendam a esse pedido.\n`
+      : '';
+
     const prompt = `Você é um consultor especializado em delivery de sushi no Brasil.
 
-Analise os dados abaixo e crie 6 sugestões criativas de combos e promoções para aumentar o ticket médio e atrair mais clientes.
+Analise os dados abaixo e crie 6 sugestões criativas de combos e promoções para aumentar o ticket médio e atrair mais clientes. Use APENAS itens que existem no cardápio listado abaixo.
+${secaoOperador}
+## Cardápio atual (${ctx.itens.length} itens disponíveis):
+${ctx.itens.map(p => `- ${p.nome} (${p.categoria || 'sem categoria'}) — R$ ${Number(p.preco).toFixed(2).replace('.', ',')}`).join('\n')}
 
-## Cardápio atual (${ctx.produtos.length} produtos):
-${ctx.produtos.map(p => `- ${p.nome} (${p.categoria || 'sem categoria'}) — ${Number(p.preco_venda).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`).join('\n')}
-
-## Produtos mais vendidos:
+## Itens mais pedidos:
 ${ctx.topPedidos.length ? ctx.topPedidos.map(t => `- ${t.nome}: ${t.total_vendido} unidades`).join('\n') : 'Sem dados de vendas ainda.'}
 
 ## Faturamento recente (últimos 30 dias):

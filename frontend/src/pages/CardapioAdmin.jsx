@@ -1451,6 +1451,7 @@ export default function CardapioAdmin() {
   // IA
   const [sugestoesIA, setSugestoesIA] = useState([]);
   const [gerandoIA, setGerandoIA] = useState(false);
+  const [pedidoOperador, setPedidoOperador] = useState('');
   const [banners, setBanners] = useState([]);
   const [modalBanner, setModalBanner] = useState(null);
   const [modalCriarItem, setModalCriarItem] = useState(null); // banner a virar item // null | 'novo' | banner
@@ -1687,7 +1688,7 @@ export default function CardapioAdmin() {
     setGerandoIA(true);
     setSugestoesIA([]);
     try {
-      const r = await fetch(`${BASE}/ia/sugestoes`, { method: 'POST', headers: authJ() });
+      const r = await fetch(`${BASE}/ia/sugestoes`, { method: 'POST', headers: authJ(), body: JSON.stringify({ pedido_operador: pedidoOperador }) });
       const data = await r.json();
       if (!r.ok) throw new Error(data.erro || 'Erro');
       setSugestoesIA(data.sugestoes || []);
@@ -2723,16 +2724,39 @@ export default function CardapioAdmin() {
 
           {/* Botão gerar + info */}
           <div className="rounded-2xl p-5" style={{ background: 'linear-gradient(135deg,rgba(var(--accent-rgb),0.08),rgba(139,92,246,0.08))', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
-            <div className="flex items-start gap-4 flex-wrap">
-              <div className="flex-1 min-w-0">
-                <h2 className="t-strong font-black text-base flex items-center gap-2"><Bot size={18} strokeWidth={1.75} /> Sugestões de IA</h2>
-                <p className="t-dim text-sm mt-1">
-                  A IA analisa seu cardápio e histórico de vendas para sugerir combos e promoções personalizadas.
-                  Com 1 clique você adiciona ao banner do cardápio ou cria um novo item.
+            <div className="flex items-start gap-3 mb-4">
+              <Bot size={18} strokeWidth={1.75} style={{ color: 'var(--accent)', marginTop: 2, flexShrink: 0 }} />
+              <div>
+                <h2 className="t-strong font-black text-base">Sugestões de IA</h2>
+                <p className="t-dim text-sm mt-0.5">
+                  A IA analisa o cardápio real da loja e o histórico de vendas para sugerir combos e promoções. Com 1 clique você adiciona ao banner ou cria um novo item.
                 </p>
               </div>
+            </div>
+
+            {/* Instrução do operador */}
+            <div className="mb-3">
+              <label className="text-xs font-bold t-dim uppercase tracking-wider block mb-1.5">
+                Instrução para a IA <span className="font-normal normal-case opacity-60">(opcional)</span>
+              </label>
+              <textarea
+                value={pedidoOperador}
+                onChange={e => setPedidoOperador(e.target.value)}
+                placeholder="Ex: quero promover o salmão essa semana, criar um combo família para o fim de semana, frete grátis acima de R$ 60..."
+                rows={2}
+                disabled={gerandoIA}
+                className="input w-full text-sm resize-none"
+                style={{ lineHeight: 1.5 }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-xs t-faint flex items-start gap-1.5">
+                <Lightbulb size={12} strokeWidth={1.75} className="shrink-0 mt-0.5" />
+                <span>Requer <strong className="t-dim">ANTHROPIC_API_KEY</strong> no <code className="text-orange-400">.env</code></span>
+              </p>
               <button onClick={gerarSugestoesIA} disabled={gerandoIA}
-                className="px-5 py-3 rounded-xl font-black t-strong text-sm shrink-0 flex items-center gap-2 disabled:opacity-60"
+                className="px-5 py-2.5 rounded-xl font-black t-strong text-sm shrink-0 flex items-center gap-2 disabled:opacity-60"
                 style={{ background: 'linear-gradient(135deg,var(--accent),#a855f7)' }}>
                 {gerandoIA ? (
                   <><Loader2 size={15} strokeWidth={2} className="animate-spin" /> Gerando...</>
@@ -2741,11 +2765,6 @@ export default function CardapioAdmin() {
                 )}
               </button>
             </div>
-            {sugestoesIA.length === 0 && !gerandoIA && (
-              <p className="text-xs t-faint mt-3 flex items-start gap-1.5">
-                <Lightbulb size={13} strokeWidth={1.75} className="shrink-0 mt-0.5" /> <span>Certifique-se de ter a <strong className="t-dim">ANTHROPIC_API_KEY</strong> configurada no arquivo <code className="text-orange-400">.env</code> do backend.</span>
-              </p>
-            )}
           </div>
 
           {/* Cards de sugestões */}
