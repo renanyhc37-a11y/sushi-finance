@@ -81,11 +81,11 @@ function getContextoDados() {
     ORDER BY data DESC LIMIT 30
   `).all();
 
-  // Top itens do cardápio mais pedidos
+  // Top itens do delivery mais pedidos (pdv_itens.item_nome)
   const topPedidos = db.prepare(`
-    SELECT ip.nome_item as nome, SUM(ip.quantidade) as total_vendido
-    FROM itens_pedido ip
-    GROUP BY ip.nome_item
+    SELECT item_nome as nome, SUM(quantidade) as total_vendido
+    FROM pdv_itens
+    GROUP BY item_nome
     ORDER BY total_vendido DESC LIMIT 10
   `).all();
 
