@@ -9,7 +9,7 @@ const set = (k, v) => db.prepare('INSERT OR REPLACE INTO config (chave,valor) VA
 router.get('/status', (req, res) => {
   const concluido = get('setup_concluido') === '1';
   const totalIngredientes = db.prepare('SELECT COUNT(*) as n FROM ingredientes').get().n;
-  const totalItensCardapio = db.prepare('SELECT COUNT(*) as n FROM cardapio_itens WHERE ativo=1').get().n;
+  const totalItensCardapio = db.prepare('SELECT COUNT(*) as n FROM cardapio_itens WHERE disponivel=1').get().n;
   const totalFichas = db.prepare('SELECT COUNT(DISTINCT item_id) as n FROM cardapio_ficha_tecnica').get().n;
   const totalPedidos = db.prepare('SELECT COUNT(*) as n FROM pdv_pedidos').get().n;
 
