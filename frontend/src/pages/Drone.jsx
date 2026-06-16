@@ -1,781 +1,704 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 
-// ═══════════════════════════════════════════════════════════════════
-//  SUSHI DRONE GCS — Ground Control Station · 37 Sushi Paranavaí
-//  Simulador de treinamento para operadores de drone delivery
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+//  SUSHI DRONE SIM — DJI Flight Style · 37 Sushi Paranavaí
+// ═══════════════════════════════════════════════════════════
 
-// ── Mapa: Paranavaí fictício ──────────────────────────────────────
-const MW = 680, MH = 520; // canvas do mapa
+// ── Mundo (metros) ────────────────────────────────────────
+const BASE = { x: 450, y: 350 };
 
-// Grid de ruas (define toda a malha urbana)
-const STREET_W = 22;
-// Ruas verticais (x)
-const VX = [0, 22, 182, 204, 364, 386, 546, 568, 680];
-// Ruas horizontais (y)
-const HY = [0, 22, 172, 194, 344, 366, 520];
-
-// Blocos entre ruas: [x1, y1, x2, y2, tipo, nome, andares]
-// tipo: 'res'|'com'|'park'|'base'|'delivery'
-const BLOCKS = [
-  // col 0 (x: 22→182)
-  { x: 22, y: 22,  w: 160, h: 150, tipo: 'res', andares: 3, nome: 'Residencial Norte' },
-  { x: 22, y: 194, w: 160, h: 150, tipo: 'park', nome: 'Praça Central' },
-  { x: 22, y: 366, w: 160, h: 154, tipo: 'res', andares: 2, nome: 'Residencial Sul' },
-  // col 1 (x: 204→364)
-  { x: 204, y: 22,  w: 160, h: 150, tipo: 'com', andares: 5, nome: 'Centro Comercial' },
-  { x: 204, y: 194, w: 160, h: 150, tipo: 'base', andares: 1, nome: '37 Sushi — BASE' },
-  { x: 204, y: 366, w: 160, h: 154, tipo: 'res', andares: 3, nome: 'Vila Nova' },
-  // col 2 (x: 386→546)
-  { x: 386, y: 22,  w: 160, h: 150, tipo: 'res', andares: 4, nome: 'Edificio Alto' },
-  { x: 386, y: 194, w: 160, h: 150, tipo: 'com', andares: 3, nome: 'Comercial Leste' },
-  { x: 386, y: 366, w: 160, h: 154, tipo: 'park', nome: 'Parque Eco' },
-  // col 3 (x: 568→680)
-  { x: 568, y: 22,  w: 112, h: 150, tipo: 'res', andares: 2 },
-  { x: 568, y: 194, w: 112, h: 150, tipo: 'res', andares: 3 },
-  { x: 568, y: 366, w: 112, h: 154, tipo: 'com', andares: 4 },
+// Prédios 3D: { x, y (SW corner), w, d (depth N), h (altura), col:[r,g,b] }
+const BLDGS = [
+  { x:100, y:40,  w:130, d:100, h:48, col:[40,68,105] },
+  { x:260, y:60,  w:80,  d:70,  h:22, col:[30,52,80]  },
+  { x:360, y:45,  w:110, d:90,  h:35, col:[38,60,94]  },
+  { x:500, y:40,  w:100, d:95,  h:44, col:[44,70,108] },
+  { x:630, y:50,  w:120, d:85,  h:28, col:[34,56,86]  },
+  { x:770, y:38,  w:110, d:105, h:56, col:[50,76,116] },
+  { x:60,  y:150, w:110, d:90,  h:34, col:[40,64,98]  },
+  { x:60,  y:280, w:100, d:90,  h:20, col:[28,46,72]  },
+  { x:60,  y:400, w:115, d:90,  h:46, col:[48,72,110] },
+  { x:160, y:190, w:75,  d:65,  h:14, col:[25,42,65]  },
+  { x:200, y:310, w:85,  d:75,  h:30, col:[36,58,90]  },
+  { x:310, y:200, w:95,  d:80,  h:18, col:[30,50,78]  },
+  { x:560, y:210, w:90,  d:80,  h:24, col:[34,56,86]  },
+  { x:650, y:190, w:80,  d:70,  h:38, col:[44,68,104] },
+  { x:760, y:170, w:110, d:85,  h:40, col:[46,70,108] },
+  { x:760, y:280, w:100, d:85,  h:26, col:[36,58,88]  },
+  { x:760, y:390, w:110, d:85,  h:52, col:[52,78,118] },
+  { x:660, y:300, w:95,  d:80,  h:36, col:[42,66,102] },
+  { x:80,  y:470, w:105, d:85,  h:22, col:[32,52,80]  },
+  { x:220, y:460, w:125, d:95,  h:38, col:[42,66,100] },
+  { x:380, y:480, w:85,  d:75,  h:16, col:[28,46,70]  },
+  { x:510, y:455, w:105, d:100, h:42, col:[46,70,108] },
+  { x:650, y:465, w:95,  d:85,  h:30, col:[38,60,92]  },
+  { x:770, y:472, w:105, d:85,  h:24, col:[34,54,82]  },
 ];
 
-// Ponto base (centro do bloco base)
-const BASE = { x: 284, y: 269 };
+// Parques (planos verdes em z=0)
+const PARKS = [
+  { x:155, y:155, w:180, h:120, col:[14,48,26] },
+  { x:500, y:148, w:220, h:120, col:[12,44,24] },
+  { x:295, y:375, w:190, h:135, col:[14,46,26] },
+  { x:118, y:372, w:155, h:115, col:[12,44,24] },
+  { x:555, y:342, w:185, h:140, col:[14,48,26] },
+];
+
+// Ruas (planos cinzas)
+const ROADS = [
+  { x:0,   y:195, w:900, h:18 },
+  { x:0,   y:325, w:900, h:18 },
+  { x:0,   y:440, w:900, h:18 },
+  { x:195, y:0,   w:18,  h:700 },
+  { x:415, y:0,   w:18,  h:700 },
+  { x:625, y:0,   w:18,  h:700 },
+];
 
 // Pontos de entrega
-const DELIVERIES = [
-  { id: 'D1', x: 102,  y: 97,  r: 30, nome: 'Rua Norte, 12',    rua: 'Residencial Norte', alt_min: 8,  alt_max: 20 },
-  { id: 'D2', x: 284,  y: 97,  r: 30, nome: 'Av. Central, 77',  rua: 'Centro Comercial',  alt_min: 15, alt_max: 30 },
-  { id: 'D3', x: 466,  y: 97,  r: 30, nome: 'Rua Leste, 5',     rua: 'Edifício Alto',     alt_min: 20, alt_max: 40 },
-  { id: 'D4', x: 102,  y: 440, r: 30, nome: 'Rua Sul, 88',      rua: 'Residencial Sul',   alt_min: 8,  alt_max: 20 },
-  { id: 'D5', x: 466,  y: 440, r: 30, nome: 'Parque Eco, 3',    rua: 'Parque Eco',        alt_min: 5,  alt_max: 15 },
-  { id: 'D6', x: 624,  y: 280, r: 30, nome: 'Av. Extremo, 44',  rua: 'Comercial Leste',   alt_min: 10, alt_max: 25 },
+const SPOTS = [
+  { id:'D1', x:155, y:110, r:28, nome:'Rua Norte, 12',    alt_min:8,  alt_max:22 },
+  { id:'D2', x:700, y:95,  r:28, nome:'Av. Central, 88',  alt_min:15, alt_max:35 },
+  { id:'D3', x:155, y:530, r:28, nome:'Rua Sul, 3',       alt_min:8,  alt_max:20 },
+  { id:'D4', x:720, y:530, r:28, nome:'Bairro Eco, 44',   alt_min:5,  alt_max:18 },
+  { id:'D5', x:55,  y:315, r:28, nome:'Av. Oeste, 22',    alt_min:10, alt_max:28 },
+  { id:'D6', x:850, y:340, r:28, nome:'Rua Extremo, 5',   alt_min:12, alt_max:30 },
 ];
 
-// Zona de restrição (escola/hospital) — não voar abaixo de 50m
-const NO_FLY_LOW = { x: 540, y: 150, r: 60, label: 'RESTR.\nALT < 50m' };
-
-// ── Física ────────────────────────────────────────────────────────
-const ACCEL       = 0.28;
-const DRAG        = 0.84;
-const MAX_SPEED   = 7;
-const AUTO_SPEED  = 3.2;
-const ALT_RATE    = 2.0;
-const MAX_ALT     = 150;
-const BATT_HOVER  = 0.005;
-const BATT_MOVE   = 0.008;
-const BATT_CLIMB  = 0.012;
-const WINCH_SPEED = 0.8;  // m/s de descida do guincho
-const WINCH_DIST  = 12;   // metros de cabo
-const SIGNAL_BASE = 98;
-
-// ── Cenários ──────────────────────────────────────────────────────
 const SCENARIOS = [
-  {
-    id: 'tutorial', nome: 'Tutorial — Voo Livre',
-    desc: 'Aprenda os controles. 1 entrega, vento zero.',
-    icon: '🟢', wind: 0, night: false, deliveries: 1,
-    checklist: ['GPS', 'Bateria', 'Pacote'],
-  },
-  {
-    id: 'basico', nome: 'Operação Básica',
-    desc: 'Vento leve. 3 entregas consecutivas.',
-    icon: '🟡', wind: 1.2, night: false, deliveries: 3,
-    checklist: ['GPS', 'Bateria', 'Vento', 'Rota', 'Pacote'],
-  },
-  {
-    id: 'avancado', nome: 'Operação Avançada',
-    desc: 'Vento forte + zona restrita. 4 entregas.',
-    icon: '🔴', wind: 2.8, night: false, deliveries: 4,
-    checklist: ['GPS', 'Bateria', 'Vento', 'Rota', 'NOTAM', 'Pacote'],
-  },
-  {
-    id: 'noturno', nome: 'Turno Noturno',
-    desc: 'Visibilidade reduzida + vento moderado. 3 entregas.',
-    icon: '🌙', wind: 1.6, night: true, deliveries: 3,
-    checklist: ['GPS', 'Bateria', 'Luzes', 'Vento', 'Rota', 'Pacote'],
-  },
+  { id:'T', nome:'Tutorial',        icon:'🟢', wind:0,   night:false, n:1, desc:'Sem vento · 1 entrega' },
+  { id:'B', nome:'Operação Básica', icon:'🟡', wind:1.4, night:false, n:3, desc:'Vento leve · 3 entregas' },
+  { id:'A', nome:'Vento Forte',     icon:'🔴', wind:3.0, night:false, n:3, desc:'Condições adversas · 3 entregas' },
+  { id:'N', nome:'Turno Noturno',   icon:'🌙', wind:1.8, night:true,  n:3, desc:'Visibilidade reduzida · 3 entregas' },
 ];
 
-// ── Checklist ─────────────────────────────────────────────────────
-const CHECKLIST_INFO = {
-  GPS:    { label: 'Sinal GPS (≥8 satélites)',    sim: () => ({ sats: 10 + Math.floor(Math.random() * 4) }) },
-  Bateria:{ label: 'Bateria 100% carregada',       sim: () => ({ pct: 100 }) },
-  Vento:  { label: 'Verificar boletim de vento',   sim: () => ({ ok: true }) },
-  Rota:   { label: 'Aprovar rota de voo',          sim: () => ({ ok: true }) },
-  NOTAM:  { label: 'Verificar NOTAMs ativos',      sim: () => ({ notams: 1 }) },
-  Pacote: { label: 'Pacote seguro no compartimento',sim: () => ({ ok: true }) },
-  Luzes:  { label: 'LEDs de navegação ativos',     sim: () => ({ ok: true }) },
-};
+// ── Física ────────────────────────────────────────────────
+const MAX_H_SPEED = 12; // m/s
+const MAX_V_SPEED = 5;
+const H_ACCEL     = 0.45;
+const H_DRAG      = 0.87;
+const YAW_RATE    = 0.045;
+const ALT_ACCEL   = 0.18;
+const BATT_IDLE   = 0.004;
+const BATT_MOVE   = 0.007;
+const BATT_CLIMB  = 0.012;
+const WINCH_SPEED = 0.06; // fraction/frame
+const FOV_DEG     = 72;
 
-// ── Init ──────────────────────────────────────────────────────────
-function initGame(scen) {
-  const spots = [...DELIVERIES].sort(() => Math.random() - 0.5).slice(0, scen.deliveries);
+// ── Camera math ───────────────────────────────────────────
+function getVecs(heading, pitch) {
+  const cosP = Math.cos(pitch), sinP = Math.sin(pitch);
+  const sinH = Math.sin(heading), cosH = Math.cos(heading);
+  const fwd  = { x: sinH * cosP, y: cosH * cosP, z: sinP };
+  // Handle gimbal lock (straight up/down)
+  if (Math.abs(cosP) < 0.001) {
+    const s = pitch < 0 ? 1 : -1;
+    return {
+      fwd,
+      right: { x: cosH,       y: -sinH,      z: 0 },
+      up:    { x: sinH * s,   y: cosH * s,   z: 0 },
+    };
+  }
+  const rLen  = Math.sqrt(fwd.y * fwd.y + fwd.x * fwd.x) || 1;
+  const right = { x: fwd.y / rLen, y: -fwd.x / rLen, z: 0 };
+  const up    = {
+    x: right.y * fwd.z - right.z * fwd.y,
+    y: right.z * fwd.x - right.x * fwd.z,
+    z: right.x * fwd.y - right.y * fwd.x,
+  };
+  return { fwd, right, up };
+}
+
+function proj(wx, wy, wz, d, sw, sh) {
+  const { fwd, right, up } = getVecs(d.heading, d.gimbal);
+  const dx = wx - d.x, dy = wy - d.y, dz = wz - d.alt;
+  const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+  const v   = { x: dx, y: dy, z: dz };
+  const cz  = dot(v, fwd);
+  if (cz < 0.5) return null;
+  const f   = (sw / 2) / Math.tan((FOV_DEG * Math.PI) / 360);
   return {
-    scen,
-    drone: { x: BASE.x, y: BASE.y, vx: 0, vy: 0, alt: 0, heading: -Math.PI / 2 },
-    battery: 100,
-    signal: SIGNAL_BASE,
-    wind: { angle: Math.random() * Math.PI * 2, speed: scen.wind },
-    windActual: { angle: Math.random() * Math.PI * 2, speed: scen.wind * (0.7 + Math.random() * 0.6) },
-    windTimer: 0,
-    queue: spots,
-    currentSpot: null,
-    mode: 'manual',   // 'manual' | 'auto'
-    phase: 'idle',    // 'idle'|'flying'|'approaching'|'hovering'|'delivering'|'rth'|'done'
-    winch: 0,         // metros de cabo baixados (0..WINCH_DIST)
-    winching: false,
-    packageDropped: false,
-    deliveryCount: 0,
-    totalScore: 0,
-    log: [],
-    frame: 0,
-    missionStart: Date.now(),
-    statusMsg: '',
-    statusTimer: 0,
-    flash: '',        // '' | 'green' | 'red'
-    flashTimer: 0,
-    particles: [],
-    over: false,
-    trails: [],
+    x: dot(v, right) / cz * f + sw / 2,
+    y: -dot(v, up)   / cz * f + sh / 2,
+    z: cz,
+    s: f / cz,
   };
 }
 
-// ── Canvas drawing ────────────────────────────────────────────────
-function hexA(hex, a) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g2 = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g2},${b},${a})`;
+// ── Render 3D camera ──────────────────────────────────────
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function rgb(r, g, b) { return `rgb(${clamp(r,0,255)},${clamp(g,0,255)},${clamp(b,0,255)})`; }
+
+function polyScreen(ctx, pts, color, alpha) {
+  if (pts.length < 3) return;
+  if (pts.some(p => !p)) return;
+  ctx.globalAlpha = alpha ?? 1;
+  ctx.fillStyle   = color;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
 }
 
-function drawMap(ctx, g) {
-  const night = g.scen.night;
-  const bg    = night ? '#050d1c' : '#0a1628';
+function render3D(ctx, drone, spots, activeSpot, frame, night) {
+  const W = ctx.canvas.width, H = ctx.canvas.height;
 
-  // Fundo
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, MW, MH);
+  // ── Sky / ground fill ────────────────────────────────
+  const skyLo   = night ? '#020812' : '#0d1f3c';
+  const skyHi   = night ? '#000508' : '#071528';
+  const gndCol  = night ? '#050d0a' : '#0b1a10';
+  const gnd     = night ? [6, 18, 10]   : [14, 36, 18];
 
-  // Ruas
-  const streetColor = night ? '#0d1c30' : '#111e33';
-  ctx.fillStyle = streetColor;
-  VX.forEach((x, i) => {
-    if (i < VX.length - 1 && VX[i + 1] - x <= STREET_W + 2) {
-      ctx.fillRect(x, 0, VX[i + 1] - x, MH);
-    }
-  });
-  HY.forEach((y, i) => {
-    if (i < HY.length - 1 && HY[i + 1] - y <= STREET_W + 2) {
-      ctx.fillRect(0, y, MW, HY[i + 1] - y);
-    }
-  });
+  const grd = ctx.createLinearGradient(0, 0, 0, H * 0.4);
+  grd.addColorStop(0, skyHi);
+  grd.addColorStop(1, skyLo);
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H * 0.4);
+  ctx.fillStyle = gndCol;
+  ctx.fillRect(0, H * 0.4, W, H * 0.6);
 
-  // Linhas tracejadas nas ruas
-  ctx.strokeStyle = night ? '#131f33' : '#162035';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([14, 18]);
-  // horizontais
-  [97, 269, 440].forEach(y => {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MW, y); ctx.stroke();
-  });
-  // verticais
-  [102, 284, 466, 624].forEach(x => {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MH); ctx.stroke();
-  });
-  ctx.setLineDash([]);
-
-  // Blocos
-  BLOCKS.forEach(b => {
-    let fill, topFill, label;
-    if (b.tipo === 'park') {
-      fill    = night ? '#0b2217' : '#0d2e1c';
-      topFill = night ? '#0e2d1e' : '#113d26';
-      // Árvores estilizadas
-      ctx.fillStyle = fill;
-      ctx.fillRect(b.x, b.y, b.w, b.h);
-      ctx.fillStyle = topFill;
-      const seedR = (b.x * 7 + b.y * 3) % 10;
-      for (let i = 0; i < 8; i++) {
-        const tx = b.x + 16 + ((seedR * 17 + i * 23) % (b.w - 32));
-        const ty = b.y + 14 + ((seedR * 11 + i * 31) % (b.h - 28));
-        ctx.beginPath(); ctx.arc(tx, ty, 10 + (i % 3) * 4, 0, Math.PI * 2); ctx.fill();
+  // ── Ground plane (projected grid) ────────────────────
+  // Sample a grid of ground points around the drone
+  const STEP = 40, RANGE = 400;
+  const gridPts = [];
+  for (let gx = -RANGE; gx <= RANGE; gx += STEP) {
+    for (let gy = -RANGE; gy <= RANGE; gy += STEP) {
+      const p = proj(drone.x + gx, drone.y + gy, 0, drone, W, H);
+      if (p && p.x > -100 && p.x < W + 100 && p.y > -100 && p.y < H + 100) {
+        gridPts.push({ wx: gx, wy: gy, sx: p.x, sy: p.y });
       }
-    } else if (b.tipo === 'base') {
-      fill = night ? '#1a0e04' : '#160c02';
-      ctx.fillStyle = fill;
-      ctx.fillRect(b.x, b.y, b.w, b.h);
-      // Heliponto
-      ctx.fillStyle = night ? '#3b1a06' : '#2d1405';
-      ctx.fillRect(b.x + 20, b.y + 20, b.w - 40, b.h - 40);
-      // Círculo H
-      ctx.strokeStyle = '#f97316';
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(b.x + b.w / 2, b.y + b.h / 2, 38, 0, Math.PI * 2); ctx.stroke();
-      ctx.strokeStyle = hexA('#f97316', 0.4);
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(b.x + b.w / 2, b.y + b.h / 2, 52, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = '#f97316';
-      ctx.font = 'bold 20px monospace';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('H', b.x + b.w / 2, b.y + b.h / 2 - 8);
-      ctx.font = 'bold 8px monospace';
-      ctx.fillText('37 SUSHI', b.x + b.w / 2, b.y + b.h / 2 + 10);
-      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    } else {
-      // Residencial / comercial
-      const isComm = b.tipo === 'com';
-      fill    = night ? (isComm ? '#0c1929' : '#0d1829') : (isComm ? '#0f2040' : '#0e1c32');
-      topFill = night ? (isComm ? '#152a42' : '#142035') : (isComm ? '#1a3358' : '#182d4a');
-      ctx.fillStyle = fill;
-      ctx.fillRect(b.x, b.y, b.w, b.h);
-      // Topo
-      const hv = Math.min((b.andares || 2) * 20, b.h - 10);
-      ctx.fillStyle = topFill;
-      ctx.fillRect(b.x + 5, b.y + 5, b.w - 10, hv);
-      // Janelas
-      const wc = Math.floor((b.w - 20) / 18), wr = Math.floor(hv / 18);
-      for (let row = 0; row < wr; row++) {
-        for (let col = 0; col < wc; col++) {
-          const seed = ((b.x + b.y) * 3 + row * 7 + col * 11) % 10;
-          const lit  = night ? seed < 6 : true;
-          if (!lit) continue;
-          ctx.fillStyle = night ? `rgba(255,220,100,${0.1 + seed * 0.025})` : 'rgba(120,180,255,0.06)';
-          ctx.fillRect(b.x + 12 + col * 18, b.y + 8 + row * 18, 10, 11);
+    }
+  }
+
+  // Draw road patches
+  ROADS.forEach(r => {
+    const corners = [
+      proj(r.x,     r.y,     0, drone, W, H),
+      proj(r.x+r.w, r.y,     0, drone, W, H),
+      proj(r.x+r.w, r.y+r.h, 0, drone, W, H),
+      proj(r.x,     r.y+r.h, 0, drone, W, H),
+    ];
+    polyScreen(ctx, corners, night ? '#0d1520' : '#111e2c');
+  });
+
+  // Draw park patches
+  PARKS.forEach(p => {
+    const corners = [
+      proj(p.x,     p.y,     0, drone, W, H),
+      proj(p.x+p.w, p.y,     0, drone, W, H),
+      proj(p.x+p.w, p.y+p.h, 0, drone, W, H),
+      proj(p.x,     p.y+p.h, 0, drone, W, H),
+    ];
+    polyScreen(ctx, corners, rgb(...p.col));
+  });
+
+  // ── Buildings ─────────────────────────────────────────
+  // Sort back to front (painter's algorithm)
+  const sorted = [...BLDGS].sort((a, b) => {
+    const ca = Math.hypot(a.x + a.w / 2 - drone.x, a.y + a.d / 2 - drone.y);
+    const cb = Math.hypot(b.x + b.w / 2 - drone.x, b.y + b.d / 2 - drone.y);
+    return cb - ca;
+  });
+
+  sorted.forEach(b => {
+    const [r, g, bl] = b.col;
+    // 8 corners: bottom (z=0) then top (z=h)
+    const corners = [
+      [b.x,     b.y,     0], [b.x+b.w, b.y,     0],
+      [b.x+b.w, b.y+b.d, 0], [b.x,     b.y+b.d, 0],
+      [b.x,     b.y,     b.h], [b.x+b.w, b.y,     b.h],
+      [b.x+b.w, b.y+b.d, b.h], [b.x,     b.y+b.d, b.h],
+    ].map(([x, y, z]) => proj(x, y, z, drone, W, H));
+
+    const [p0,p1,p2,p3,p4,p5,p6,p7] = corners;
+
+    // Top face
+    polyScreen(ctx, [p4,p5,p6,p7], rgb(r+22, g+28, bl+35));
+
+    // South face (y = b.y) — visible if drone.y < b.y
+    if (drone.y <= b.y + b.d / 2)
+      polyScreen(ctx, [p0,p1,p5,p4], rgb(r+8, g+12, bl+18));
+
+    // North face (y = b.y+b.d)
+    if (drone.y >= b.y + b.d / 2)
+      polyScreen(ctx, [p3,p2,p6,p7], rgb(r-6, g-4, bl+2));
+
+    // East face (x = b.x+b.w)
+    if (drone.x >= b.x + b.w / 2)
+      polyScreen(ctx, [p1,p2,p6,p5], rgb(r+4, g+8, bl+14));
+
+    // West face (x = b.x)
+    if (drone.x <= b.x + b.w / 2)
+      polyScreen(ctx, [p0,p3,p7,p4], rgb(r-8, g-5, bl+0));
+
+    // Night windows on top face
+    if (night && p4 && p5 && p6 && p7) {
+      const cx = (p4.x + p5.x + p6.x + p7.x) / 4;
+      const cy = (p4.y + p5.y + p6.y + p7.y) / 4;
+      const sc = p4.s * 18;
+      const rows = Math.floor(b.h / 10), cols = Math.floor(b.w / 14);
+      for (let ri = 0; ri < Math.min(rows, 4); ri++) {
+        for (let ci = 0; ci < Math.min(cols, 5); ci++) {
+          const seed = (b.x + b.y + ri * 7 + ci * 11) % 10;
+          if (seed > 5) continue;
+          ctx.fillStyle = `rgba(255,220,100,${0.1 + seed * 0.03})`;
+          ctx.fillRect(cx - sc * 0.6 + ci * (sc * 0.28), cy - sc * 0.4 + ri * (sc * 0.22), sc * 0.15, sc * 0.12);
         }
       }
     }
-    // Borda
-    ctx.strokeStyle = night ? '#0e1e35' : '#13233d';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
   });
 
-  // Zona de restrição
-  const nfz = NO_FLY_LOW;
-  ctx.strokeStyle = '#ef4444';
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([6, 6]);
-  ctx.globalAlpha = 0.6;
-  ctx.beginPath(); ctx.arc(nfz.x, nfz.y, nfz.r, 0, Math.PI * 2); ctx.stroke();
-  ctx.globalAlpha = 0.08;
-  ctx.fillStyle = '#ef4444';
-  ctx.fill();
-  ctx.globalAlpha = 1;
-  ctx.setLineDash([]);
-  ctx.fillStyle = '#ef4444';
-  ctx.font = 'bold 7px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('RESTR.', nfz.x, nfz.y - 4);
-  ctx.fillText('<50m', nfz.x, nfz.y + 6);
-  ctx.textAlign = 'left';
-}
-
-function drawDeliveryZone(ctx, spot, frame, active, night) {
-  const pulse = Math.sin(frame * 0.07);
-  const r     = spot.r + (active ? pulse * 6 : 0);
-
-  ctx.strokeStyle = active ? '#fbbf24' : hexA('#fbbf24', 0.35);
-  ctx.lineWidth   = active ? 2 : 1;
-  ctx.globalAlpha = active ? (0.7 + pulse * 0.25) : 0.4;
-  ctx.beginPath(); ctx.arc(spot.x, spot.y, r, 0, Math.PI * 2); ctx.stroke();
-  if (active) {
-    ctx.globalAlpha = 0.06 + Math.abs(pulse) * 0.04;
-    ctx.fillStyle = '#fbbf24';
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-
-  // Ícone de entrega
-  ctx.font = active ? '14px serif' : '10px serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('📦', spot.x, spot.y);
-
-  // Label
-  if (active) {
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = 'bold 9px monospace';
-    ctx.fillText(spot.id, spot.x, spot.y - spot.r - 8);
-    ctx.fillStyle = hexA('#fbbf24', 0.8);
-    ctx.font = '8px monospace';
-    ctx.fillText(spot.nome, spot.x, spot.y + spot.r + 10);
-  } else {
-    ctx.fillStyle = hexA('#94a3b8', 0.6);
-    ctx.font = '8px monospace';
-    ctx.fillText(spot.id, spot.x, spot.y - spot.r - 5);
-  }
-  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-}
-
-function drawTrails(ctx, trails) {
-  trails.forEach((t, i) => {
-    ctx.globalAlpha = (i / trails.length) * 0.3;
-    ctx.fillStyle = '#60a5fa';
-    ctx.fillRect(t.x - 1, t.y - 1, 2, 2);
-  });
-  ctx.globalAlpha = 1;
-}
-
-function drawDrone(ctx, d, frame, winch, winching, packageDropped, night) {
-  const { x, y, alt, heading } = d;
-
-  // Sombra no chão (proporcional à altitude)
-  if (alt > 1) {
-    const off = alt * 0.25;
-    const sr  = 16 + alt * 0.06;
-    ctx.fillStyle = `rgba(0,0,0,${Math.max(0.05, 0.28 - alt * 0.002)})`;
-    ctx.beginPath();
-    ctx.ellipse(x + off, y + off, sr, sr * 0.45, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(heading);
-
-  const ARM = 14;
-  const spin = frame * 0.5;
-
-  // Braços
-  [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([sx, sy]) => {
-    ctx.strokeStyle = night ? '#2d3f5a' : '#374151';
-    ctx.lineWidth = 3.5;
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(sx * ARM, sy * ARM); ctx.stroke();
-  });
-
-  // Rotores
-  [[-ARM,-ARM],[ARM,-ARM],[-ARM,ARM],[ARM,ARM]].forEach(([rx, ry], i) => {
-    ctx.save();
-    ctx.translate(rx, ry);
-    // Motor base
-    ctx.fillStyle = '#1e293b';
-    ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
-    // Hélices (2 pás, giradas por alternância de frame)
-    ctx.strokeStyle = night ? '#93c5fd' : '#94a3b8';
-    ctx.lineWidth = 2.5;
-    ctx.globalAlpha = 0.7;
-    ctx.save();
-    ctx.rotate(spin + i * Math.PI / 2);
-    ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(9, 0); ctx.stroke();
-    ctx.restore();
-    ctx.save();
-    ctx.rotate(spin + i * Math.PI / 2 + Math.PI / 2);
-    ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(9, 0); ctx.stroke();
-    ctx.restore();
+  // ── Base helipad ─────────────────────────────────────
+  const bp = proj(BASE.x, BASE.y, 0, drone, W, H);
+  if (bp) {
+    const sc = clamp(bp.s * 30, 4, 80);
+    ctx.strokeStyle = '#f97316';
+    ctx.lineWidth   = 2;
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath(); ctx.arc(bp.x, bp.y, sc, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(bp.x, bp.y, sc * 0.6, 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 1;
-    ctx.restore();
-  });
-
-  // Corpo central
-  ctx.fillStyle = night ? '#1e3a5f' : '#1e293b';
-  ctx.fillRect(-7, -7, 14, 14);
-  ctx.fillStyle = night ? '#3b82f6' : '#475569';
-  ctx.fillRect(-5, -5, 10, 10);
-
-  // LED frontal (verde)
-  ctx.fillStyle = night ? '#22c55e' : '#4ade80';
-  ctx.fillRect(3, -6, 3, 3);
-  // LED traseiro (vermelho)
-  if (night) {
-    ctx.fillStyle = '#ef4444';
-    ctx.fillRect(-5, 3, 3, 3);
+    ctx.fillStyle   = '#f97316';
+    ctx.font        = `bold ${clamp(sc * 0.7, 8, 22)}px monospace`;
+    ctx.textAlign   = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('H', bp.x, bp.y);
+    ctx.textAlign   = 'left';
+    ctx.textBaseline = 'alphabetic';
   }
 
+  // ── Delivery zones ────────────────────────────────────
+  spots.forEach(spot => {
+    const sp = proj(spot.x, spot.y, 0, drone, W, H);
+    if (!sp) return;
+    const sc    = clamp(sp.s * spot.r, 5, 60);
+    const isAct = activeSpot?.id === spot.id;
+    const pulse = Math.abs(Math.sin(frame * 0.07));
+
+    ctx.strokeStyle = isAct ? '#fbbf24' : 'rgba(251,191,36,0.4)';
+    ctx.lineWidth   = isAct ? 2.5 : 1;
+    ctx.globalAlpha = isAct ? (0.6 + pulse * 0.3) : 0.4;
+    ctx.beginPath(); ctx.arc(sp.x, sp.y, sc * (isAct ? 1 + pulse * 0.1 : 1), 0, Math.PI * 2); ctx.stroke();
+    if (isAct) {
+      ctx.fillStyle = 'rgba(251,191,36,0.08)';
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // ID label
+    ctx.fillStyle   = isAct ? '#fbbf24' : 'rgba(251,191,36,0.5)';
+    ctx.font        = `bold ${clamp(sp.s * 12, 7, 16)}px monospace`;
+    ctx.textAlign   = 'center';
+    ctx.fillText(spot.id, sp.x, sp.y - sc - 4);
+    ctx.textAlign   = 'left';
+  });
+
+  // ── Camera overlays ───────────────────────────────────
+  // Vignette
+  const vig = ctx.createRadialGradient(W/2, H/2, H*0.25, W/2, H/2, H*0.75);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0, 0, W, H);
+
+  // Crosshair
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth   = 1;
+  const cx2 = W / 2, cy2 = H / 2;
+  ctx.beginPath(); ctx.moveTo(cx2 - 20, cy2); ctx.lineTo(cx2 - 6, cy2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx2 + 6,  cy2); ctx.lineTo(cx2 + 20, cy2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx2, cy2 - 20); ctx.lineTo(cx2, cy2 - 6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx2, cy2 + 6);  ctx.lineTo(cx2, cy2 + 20); ctx.stroke();
+
+  // REC indicator
+  if (frame % 60 < 40) {
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath(); ctx.arc(16, 16, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font      = 'bold 10px monospace';
+    ctx.fillText('REC', 24, 20);
+  }
+
+  // Timestamp
+  const now = new Date();
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font      = '9px monospace';
+  ctx.fillText(now.toTimeString().slice(0, 8), W - 70, 14);
+
+  // Gimbal angle indicator (right side)
+  const gimbalDeg = Math.round(drone.gimbal * 180 / Math.PI);
+  ctx.fillStyle   = 'rgba(255,255,255,0.4)';
+  ctx.font        = '9px monospace';
+  ctx.textAlign   = 'right';
+  ctx.fillText(`G ${gimbalDeg}°`, W - 4, H - 8);
+  ctx.textAlign   = 'left';
+
+  // Grid lines (corner markers — like DJI)
+  const gl = 20;
+  [
+    [0, 0, gl, 0, 0, gl],
+    [W, 0, W-gl, 0, W, gl],
+    [0, H, gl, H, 0, H-gl],
+    [W, H, W-gl, H, W, H-gl],
+  ].forEach(([x1,y1,x2,y2,x3,y3]) => {
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+    ctx.moveTo(x1, y1); ctx.lineTo(x3, y3);
+    ctx.stroke();
+  });
+
+  // Night overlay
+  if (night) {
+    ctx.fillStyle = 'rgba(0,10,20,0.22)';
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+// ── Minimap ───────────────────────────────────────────────
+function renderMinimap(ctx, drone, spots, activeSpot, trails, night) {
+  const S   = ctx.canvas.width;
+  const scl = S / 900; // world 900px → map S px
+
+  ctx.fillStyle = night ? 'rgba(0,8,18,0.92)' : 'rgba(8,18,32,0.88)';
+  ctx.fillRect(0, 0, S, S);
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth   = 1;
+  ctx.strokeRect(0, 0, S, S);
+
+  // Roads
+  ROADS.forEach(r => {
+    ctx.fillStyle = night ? '#0a1520' : '#111e2e';
+    ctx.fillRect(r.x * scl, r.y * scl, r.w * scl, r.h * scl);
+  });
+
+  // Parks
+  PARKS.forEach(p => {
+    ctx.fillStyle = rgb(...p.col);
+    ctx.fillRect(p.x * scl, p.y * scl, p.w * scl, p.h * scl);
+  });
+
+  // Buildings
+  BLDGS.forEach(b => {
+    const shade = Math.round(b.h / 4);
+    ctx.fillStyle = rgb(b.col[0] + shade, b.col[1] + shade, b.col[2] + shade + 10);
+    ctx.fillRect(b.x * scl, b.y * scl, b.w * scl, b.d * scl);
+  });
+
+  // Delivery spots
+  spots.forEach(spot => {
+    const isAct = activeSpot?.id === spot.id;
+    ctx.strokeStyle = isAct ? '#fbbf24' : 'rgba(251,191,36,0.4)';
+    ctx.lineWidth   = isAct ? 1.5 : 1;
+    ctx.beginPath();
+    ctx.arc(spot.x * scl, spot.y * scl, spot.r * scl, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(251,191,36,0.15)';
+    if (isAct) ctx.fill();
+    ctx.fillStyle = isAct ? '#fbbf24' : 'rgba(251,191,36,0.5)';
+    ctx.font      = `bold ${Math.round(6 * scl + 4)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(spot.id, spot.x * scl, spot.y * scl - spot.r * scl - 2);
+    ctx.textAlign = 'left';
+  });
+
+  // Base
+  ctx.strokeStyle = '#f97316';
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath(); ctx.arc(BASE.x * scl, BASE.y * scl, 8, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle   = '#f97316';
+  ctx.font        = 'bold 8px monospace';
+  ctx.textAlign   = 'center';
+  ctx.fillText('H', BASE.x * scl, BASE.y * scl + 3);
+  ctx.textAlign   = 'left';
+
+  // Trail
+  trails.forEach((t, i) => {
+    ctx.globalAlpha = (i / trails.length) * 0.5;
+    ctx.fillStyle   = '#60a5fa';
+    ctx.fillRect(t.x * scl - 1, t.y * scl - 1, 2, 2);
+  });
+  ctx.globalAlpha = 1;
+
+  // Drone icon
+  const dx2 = drone.x * scl, dy2 = drone.y * scl;
+  ctx.save();
+  ctx.translate(dx2, dy2);
+  ctx.rotate(drone.heading);
+  ctx.fillStyle   = '#fff';
+  ctx.beginPath();
+  ctx.moveTo(0, -6); ctx.lineTo(4, 5); ctx.lineTo(0, 3); ctx.lineTo(-4, 5); ctx.closePath();
+  ctx.fill();
   ctx.restore();
 
-  // Guincho / pacote
-  if (winching || (winch > 0 && !packageDropped)) {
-    const cableLen = (winch / WINCH_DIST) * 28;
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x, y + 6);
-    ctx.lineTo(x, y + 6 + cableLen);
-    ctx.stroke();
-    // Pacote
-    ctx.fillStyle = '#f97316';
-    ctx.fillRect(x - 5, y + 6 + cableLen, 10, 8);
-    ctx.strokeStyle = '#fb923c';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(x - 5, y + 6 + cableLen, 10, 8);
-  }
-
-  // Label altitude
-  if (alt > 3) {
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(x + 16, y - 20, 48, 14);
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '9px monospace';
-    ctx.fillText(`${Math.round(alt)}m`, x + 19, y - 9);
-  }
+  // Label "MAPA"
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.font      = '7px monospace';
+  ctx.fillText('MAPA', 3, 8);
 }
 
-function drawParticles(ctx, particles) {
-  particles.forEach(p => {
-    ctx.globalAlpha = p.life / p.maxLife;
-    ctx.fillStyle = p.color;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r || 2, 0, Math.PI * 2); ctx.fill();
-  });
-  ctx.globalAlpha = 1;
+// ── Init ──────────────────────────────────────────────────
+function initGame(scen) {
+  const queue = [...SPOTS].sort(() => Math.random() - 0.5).slice(0, scen.n);
+  return {
+    scen,
+    drone: { x: BASE.x, y: BASE.y, alt: 0, vx: 0, vy: 0, vz: 0, heading: 0, gimbal: -1.2 },
+    battery: 100,
+    signal:  98,
+    wind:    { angle: Math.random() * Math.PI * 2, speed: scen.wind },
+    windT:   0,
+    queue,
+    spot:    null,
+    winch:   0,
+    winching: false,
+    pkgOk:   false,
+    delivered: 0,
+    score:   0,
+    frame:   0,
+    t0:      Date.now(),
+    log:     ['[00:00] Aguardando pedido...'],
+    trails:  [],
+    particles: [],
+    over:    false,
+    rth:     false,
+    statusMsg: '',
+    statusT:   0,
+  };
 }
 
-function drawOverlayFlash(ctx, flash) {
-  if (!flash) return;
-  const color = flash === 'green' ? '34,197,94' : '239,68,68';
-  ctx.fillStyle = `rgba(${color},0.12)`;
-  ctx.fillRect(0, 0, MW, MH);
-}
-
-function spawnParticles(g, x, y, color) {
-  for (let i = 0; i < 20; i++) {
-    const a = (i / 20) * Math.PI * 2;
-    const s = 1 + Math.random() * 2.5;
-    g.particles.push({
-      x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-      color, life: 50, maxLife: 50, r: 2 + Math.random() * 2,
-    });
-  }
-}
-
-// ── Componente ────────────────────────────────────────────────────
+// ── Main component ────────────────────────────────────────
 export default function Drone() {
-  const canvasRef  = useRef(null);
-  const wrapRef    = useRef(null); // div focusável
-  const gameRef    = useRef(null);
-  const rafRef     = useRef(null);
-  const keysRef    = useRef({});
-  const touchRef   = useRef({ dx: 0, dy: 0, up: false, down: false });
+  const camRef   = useRef(null);
+  const mapRef   = useRef(null);
+  const wrapRef  = useRef(null);
+  const gameRef  = useRef(null);
+  const rafRef   = useRef(null);
+  const keysRef  = useRef({});
+  const touchRef = useRef({ dx: 0, dy: 0, up: false, down: false });
 
-  const [screen,   setScreen]   = useState('menu');  // 'menu'|'preflight'|'game'|'results'
-  const [selScen,  setSelScen]  = useState(0);
-  const [clDone,   setClDone]   = useState({});      // checklist items concluídos
-  const [tel,      setTel]      = useState({});       // telemetria (sync do gameRef)
-  const [results,  setResults]  = useState(null);
-  const [logLines, setLogLines] = useState([]);
+  const [screen,  setScreen]  = useState('menu');
+  const [selScen, setSelScen] = useState(0);
+  const [tel,     setTel]     = useState(null);
+  const [logLines,setLog]     = useState([]);
+  const [results, setResults] = useState(null);
 
-  // ── Focus wrapper para capturar teclado ──────────────────────
-  useEffect(() => {
-    if (screen === 'game') {
-      setTimeout(() => wrapRef.current?.focus(), 100);
-    }
-  }, [screen]);
-
-  const onKeyDown = useCallback(e => {
-    const game = ['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyF','KeyR'];
-    if (game.includes(e.code)) e.preventDefault();
+  // ── Keyboard ─────────────────────────────────────────
+  const onKD = useCallback(e => {
+    const g = ['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','Space',
+               'ArrowUp','ArrowDown','ArrowLeft','ArrowRight',
+               'KeyF','KeyR','BracketLeft','BracketRight'];
+    if (g.includes(e.code)) e.preventDefault();
     keysRef.current[e.code] = true;
   }, []);
+  const onKU = useCallback(e => { delete keysRef.current[e.code]; }, []);
 
-  const onKeyUp = useCallback(e => {
-    delete keysRef.current[e.code];
-  }, []);
+  useEffect(() => {
+    if (screen === 'game') setTimeout(() => wrapRef.current?.focus(), 80);
+  }, [screen]);
 
-  // ── Touch joystick ───────────────────────────────────────────
-  const joyOrigin = useRef(null);
-  const onJoyStart = e => {
-    const t = e.changedTouches[0];
-    joyOrigin.current = { x: t.clientX, y: t.clientY };
-  };
-  const onJoyMove = e => {
+  // ── Touch joystick ────────────────────────────────────
+  const joyOrig = useRef(null);
+  const onJoyS  = e => { const t = e.changedTouches[0]; joyOrig.current = { x: t.clientX, y: t.clientY }; };
+  const onJoyM  = e => {
     e.preventDefault();
-    if (!joyOrigin.current) return;
+    if (!joyOrig.current) return;
     const t = e.changedTouches[0];
-    touchRef.current.dx = Math.max(-1, Math.min(1, (t.clientX - joyOrigin.current.x) / 55));
-    touchRef.current.dy = Math.max(-1, Math.min(1, (t.clientY - joyOrigin.current.y) / 55));
+    touchRef.current.dx = Math.max(-1, Math.min(1, (t.clientX - joyOrig.current.x) / 55));
+    touchRef.current.dy = Math.max(-1, Math.min(1, (t.clientY - joyOrig.current.y) / 55));
   };
-  const onJoyEnd = () => {
-    joyOrigin.current = null;
-    touchRef.current.dx = 0;
-    touchRef.current.dy = 0;
-  };
+  const onJoyE  = () => { joyOrig.current = null; touchRef.current.dx = 0; touchRef.current.dy = 0; };
 
-  // ── Game loop ─────────────────────────────────────────────────
+  // ── Game loop ─────────────────────────────────────────
   useEffect(() => {
     if (screen !== 'game') { cancelAnimationFrame(rafRef.current); return; }
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const camCanvas = camRef.current;
+    const mapCanvas = mapRef.current;
+    if (!camCanvas || !mapCanvas) return;
+    const ctx2d = camCanvas.getContext('2d');
+    const mCtx  = mapCanvas.getContext('2d');
 
     function addLog(g, msg) {
-      const t = new Date(Date.now() - g.missionStart);
-      const ts = `${String(t.getMinutes()).padStart(2,'0')}:${String(t.getSeconds()).padStart(2,'0')}`;
+      const ms = Date.now() - g.t0;
+      const ts = `${String(Math.floor(ms/60000)).padStart(2,'0')}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}`;
       g.log.unshift(`[${ts}] ${msg}`);
-      if (g.log.length > 8) g.log.pop();
-    }
-
-    function setStatus(g, msg, flashColor) {
-      g.statusMsg = msg;
-      g.statusTimer = 120;
-      if (flashColor) { g.flash = flashColor; g.flashTimer = 40; }
-      addLog(g, msg);
+      if (g.log.length > 10) g.log.pop();
     }
 
     function endGame(g, reason) {
       if (g.over) return;
       g.over = true;
       cancelAnimationFrame(rafRef.current);
-      const elapsed = Math.floor((Date.now() - g.missionStart) / 1000);
-      const efficiency = g.deliveryCount > 0
-        ? Math.round((g.totalScore / g.deliveryCount))
-        : 0;
-      setResults({
-        reason, score: g.totalScore, efficiency,
-        deliveries: g.deliveryCount, total: g.scen.deliveries,
-        battery: Math.round(g.battery),
-        time: elapsed, scen: g.scen, log: [...g.log],
-      });
+      const t = Math.floor((Date.now() - g.t0) / 1000);
+      setResults({ reason, score: g.score, delivered: g.delivered, total: g.scen.n,
+        battery: Math.round(g.battery), time: t, scen: g.scen, log: [...g.log] });
       setScreen('results');
-    }
-
-    function handleDelivery(g) {
-      const spot = g.currentSpot;
-      const d    = g.drone;
-      if (!spot) return;
-      const dist = Math.hypot(d.x - spot.x, d.y - spot.y);
-      const inZone = dist < spot.r + 10;
-      const goodAlt = d.alt >= spot.alt_min && d.alt <= spot.alt_max;
-
-      if (!inZone) { setStatus(g, '⚠ Fora da zona de entrega — reposicione'); return; }
-      if (!goodAlt) {
-        const hint = d.alt < spot.alt_min ? `Suba para ${spot.alt_min}m+` : `Desça para max ${spot.alt_max}m`;
-        setStatus(g, `⚠ Altitude incorreta — ${hint}`);
-        return;
-      }
-      // Iniciar guincho
-      g.winching = true;
-      g.phase = 'delivering';
-      setStatus(g, '📦 Guincho ativado — baixando pacote...');
     }
 
     function loop() {
       rafRef.current = requestAnimationFrame(loop);
       const g = gameRef.current;
       if (!g || g.over) return;
-
       g.frame++;
-      const keys  = keysRef.current;
-      const touch = touchRef.current;
-      const d     = g.drone;
 
-      // ── Vento oscila ──────────────────────────────────────────
-      g.windTimer++;
-      if (g.windTimer > 200) {
-        g.windTimer = 0;
-        const base = g.scen.wind;
-        g.windActual = {
-          angle: g.windActual.angle + (Math.random() - 0.5) * 1.0,
-          speed: Math.max(0, base + (Math.random() - 0.5) * base * 0.8),
-        };
+      const keys = keysRef.current;
+      const tch  = touchRef.current;
+      const d    = g.drone;
+
+      // Vento oscila
+      g.windT++;
+      if (g.windT > 220) {
+        g.windT = 0;
+        const b = g.scen.wind;
+        g.wind = { angle: g.wind.angle + (Math.random() - 0.5) * 0.9, speed: Math.max(0, b + (Math.random() - 0.5) * b * 0.7) };
       }
 
-      // ── Guincho ───────────────────────────────────────────────
-      if (g.winching) {
-        g.winch = Math.min(WINCH_DIST, g.winch + WINCH_SPEED * 0.1);
-        if (g.winch >= WINCH_DIST) {
-          g.winching  = false;
-          g.packageDropped = true;
-          g.winch = 0;
+      // Controles
+      const pW = keys['KeyW'] || keys['ArrowUp']    || tch.dy < -0.25;
+      const pS = keys['KeyS'] || keys['ArrowDown']  || tch.dy >  0.25;
+      const pA = keys['KeyA'] || keys['ArrowLeft'];
+      const pD = keys['KeyD'] || keys['ArrowRight'];
+      const pE = keys['KeyE'] || keys['Space'] || tch.up;
+      const pQ = keys['KeyQ'] || tch.down;
+      const pF = keys['KeyF'];
+      const pR = keys['KeyR'];
+      const pGL = keys['BracketLeft'];
+      const pGR = keys['BracketRight'];
 
-          // Calcular pontuação
-          const timeSec   = (Date.now() - g.missionStart) / 1000;
-          const battBonus = Math.round(g.battery * 0.8);
-          const timeBonus = Math.max(0, Math.round(500 - timeSec * 3));
-          const pts = 200 + battBonus + timeBonus;
-          g.totalScore += pts;
-          g.deliveryCount++;
-          g.phase = 'idle';
-          g.currentSpot = null;
+      // Gimbal
+      if (pGL) d.gimbal = Math.max(-Math.PI / 2, d.gimbal - 0.025);
+      if (pGR) d.gimbal = Math.min(-0.2, d.gimbal + 0.025);
 
-          spawnParticles(g, d.x, d.y, '#fbbf24');
-          setStatus(g, `✅ Entregue em ${g.currentSpot?.nome || '?'}! +${pts} pts`, 'green');
-
-          if (g.deliveryCount >= g.scen.deliveries) {
-            setTimeout(() => endGame(g, 'success'), 1800);
-            return;
-          }
-        }
-      }
-
-      // ── Controles ─────────────────────────────────────────────
-      const pressW = keys['KeyW'] || keys['ArrowUp']    || touch.dy < -0.25;
-      const pressS = keys['KeyS'] || keys['ArrowDown']  || touch.dy >  0.25;
-      const pressA = keys['KeyA'] || keys['ArrowLeft']  || touch.dx < -0.25;
-      const pressD = keys['KeyD'] || keys['ArrowRight'] || touch.dx >  0.25;
-      const pressUp   = keys['KeyE'] || keys['Space'] || touch.up;
-      const pressDown = keys['KeyQ'] || touch.down;
-      const pressF    = keys['KeyF'];
-      const pressR    = keys['KeyR'];
+      // Yaw (A/D ou touch lateral sem joystick)
+      const yawL = keys['ArrowLeft']  || tch.dx < -0.25;
+      const yawR = keys['ArrowRight'] || tch.dx >  0.25;
+      if (pA && !yawL) d.heading -= YAW_RATE;
+      if (pD && !yawR) d.heading += YAW_RATE;
+      if (yawL) d.heading -= YAW_RATE;
+      if (yawR) d.heading += YAW_RATE;
 
       // RTH
-      if (pressR && !g.rth) {
-        g.rth = true;
-        g.mode = 'auto';
-        g.rthTarget = { x: BASE.x, y: BASE.y };
-        setStatus(g, '🏠 RTH ativado — retornando à base');
-      }
-      // Drop pacote (F)
-      if (pressF && !g.winching && d.alt > 1 && g.currentSpot && !g.packageDropped) {
-        handleDelivery(g);
-      }
-      // Cancelar RTH com qualquer tecla de movimento
-      if ((pressW || pressS || pressA || pressD) && g.rth) {
-        g.rth   = false;
-        g.mode  = 'manual';
-        setStatus(g, '✋ RTH cancelado — controle manual');
+      if (pR && !g.rth) { g.rth = true; addLog(g, '🏠 RTH ativado'); }
+      if ((pW || pS) && g.rth) { g.rth = false; addLog(g, '✋ RTH cancelado'); }
+
+      // Próximo pedido
+      if (!g.spot && g.queue.length > 0) {
+        g.spot = g.queue.shift();
+        g.pkgOk = false;
+        g.winch = 0;
+        addLog(g, `📋 Missão: ${g.spot.nome}`);
       }
 
-      // Próximo pedido (se idle e há fila)
-      if (g.phase === 'idle' && g.queue.length > 0 && !g.currentSpot) {
-        g.currentSpot    = g.queue.shift();
-        g.packageDropped = false;
-        g.winch          = 0;
-        setStatus(g, `📋 Nova missão: ${g.currentSpot.nome}`);
+      // Guincho
+      if (pF && !g.winching && d.alt > 1 && g.spot && !g.pkgOk) {
+        const dist = Math.hypot(d.x - g.spot.x, d.y - g.spot.y);
+        const ok   = dist < g.spot.r + 15 && d.alt >= g.spot.alt_min && d.alt <= g.spot.alt_max;
+        if (ok) { g.winching = true; addLog(g, '📦 Guincho ativado'); }
+        else addLog(g, `⚠ Reposicione — alt ideal ${g.spot.alt_min}–${g.spot.alt_max}m`);
+      }
+      if (g.winching) {
+        g.winch = Math.min(1, g.winch + WINCH_SPEED);
+        if (g.winch >= 1) {
+          g.winching = false; g.pkgOk = true; g.winch = 0;
+          const battB = Math.round(g.battery * 0.6);
+          const ms    = Date.now() - g.t0;
+          const timeB = Math.max(0, Math.round(600 - ms / 1000 * 3));
+          const pts   = 200 + battB + timeB;
+          g.score += pts;
+          g.delivered++;
+          addLog(g, `✅ Entregue! +${pts} pts`);
+          g.spot = null;
+          if (g.delivered >= g.scen.n) { setTimeout(() => endGame(g, 'success'), 1500); return; }
+        }
       }
 
-      // ── Física ────────────────────────────────────────────────
+      // Física
       let ax = 0, ay = 0;
-
       if (g.rth) {
-        // Auto-piloto RTH
-        const tx = g.rthTarget.x, ty = g.rthTarget.y;
-        const dx2 = tx - d.x, dy2 = ty - d.y;
-        const dist = Math.hypot(dx2, dy2);
-        if (dist > 5) {
-          ax = (dx2 / dist) * AUTO_SPEED * 0.15;
-          ay = (dy2 / dist) * AUTO_SPEED * 0.15;
-          if (d.alt < 40) d.alt = Math.min(40, d.alt + ALT_RATE);
+        const tx = BASE.x - d.x, ty = BASE.y - d.y;
+        const dist = Math.hypot(tx, ty);
+        if (dist > 8) {
+          const spd = Math.min(dist * 0.06, MAX_H_SPEED * 0.5);
+          ax = (tx / dist) * spd * 0.08;
+          ay = (ty / dist) * spd * 0.08;
+          if (d.alt < 50) d.alt = Math.min(50, d.alt + 0.5);
         } else {
-          // Pouso na base
-          d.alt = Math.max(0, d.alt - ALT_RATE * 1.5);
-          if (d.alt <= 0) {
-            d.alt = 0; d.vx = 0; d.vy = 0;
-            g.rth = false;
-            setStatus(g, '✅ Pousou na base!', 'green');
-            spawnParticles(g, d.x, d.y, '#22c55e');
-          }
+          d.alt = Math.max(0, d.alt - 1.2);
+          if (d.alt <= 0) { d.alt = 0; d.vx = 0; d.vy = 0; g.rth = false; addLog(g, '✅ Pousou na base'); }
         }
       } else {
-        // Controle manual
-        if (pressW) ay = -ACCEL;
-        if (pressS) ay =  ACCEL;
-        if (pressA) ax = -ACCEL;
-        if (pressD) ax =  ACCEL;
-
-        // Decolar automaticamente ao mover se no chão
-        if ((pressW || pressS || pressA || pressD) && d.alt < 5 && !g.winching) {
-          d.alt = Math.min(MAX_ALT, d.alt + ALT_RATE * 2);
-        }
+        // Movimento relativo ao heading do drone
+        const cosH = Math.cos(d.heading), sinH = Math.sin(d.heading);
+        let fwdF = 0, rgtF = 0;
+        if (pW) fwdF =  1;
+        if (pS) fwdF = -1;
+        // Strafe com setas (já usadas para yaw se A/D)
+        ax += (fwdF * sinH) * H_ACCEL;
+        ay += (fwdF * cosH) * H_ACCEL;
+        if (fwdF !== 0 && d.alt < 5) d.alt = Math.min(MAX_H_SPEED, d.alt + 0.8); // auto-lift
       }
 
-      // Altitude manual
-      if (pressUp   && !g.rth) d.alt = Math.min(MAX_ALT, d.alt + ALT_RATE);
-      if (pressDown && !g.rth) d.alt = Math.max(0, d.alt - ALT_RATE);
+      // Altitude
+      if (pE && !g.rth) d.vz = Math.min(MAX_V_SPEED, d.vz + ALT_ACCEL);
+      else if (pQ && !g.rth) d.vz = Math.max(-MAX_V_SPEED, d.vz - ALT_ACCEL);
+      else d.vz *= 0.82;
+
+      d.alt = Math.max(0, Math.min(150, d.alt + d.vz));
 
       // Vento
-      const wf = 0.3 + (d.alt / MAX_ALT) * 0.7;
-      const wdrift = g.windActual;
-      ax += Math.cos(wdrift.angle) * wdrift.speed * 0.035 * wf;
-      ay += Math.sin(wdrift.angle) * wdrift.speed * 0.035 * wf;
+      const wf = 0.3 + (d.alt / 150) * 0.7;
+      ax += Math.cos(g.wind.angle) * g.wind.speed * 0.03 * wf;
+      ay += Math.sin(g.wind.angle) * g.wind.speed * 0.03 * wf;
 
-      d.vx = (d.vx + ax) * DRAG;
-      d.vy = (d.vy + ay) * DRAG;
-      const sp = Math.sqrt(d.vx ** 2 + d.vy ** 2);
-      if (sp > MAX_SPEED) { d.vx = d.vx / sp * MAX_SPEED; d.vy = d.vy / sp * MAX_SPEED; }
+      d.vx = (d.vx + ax) * H_DRAG;
+      d.vy = (d.vy + ay) * H_DRAG;
+      const spd = Math.sqrt(d.vx * d.vx + d.vy * d.vy);
+      if (spd > MAX_H_SPEED) { d.vx = d.vx / spd * MAX_H_SPEED; d.vy = d.vy / spd * MAX_H_SPEED; }
 
-      // Heading visual
-      if (Math.abs(ax) > 0.01 || Math.abs(ay) > 0.01) {
-        const tH = Math.atan2(ay, ax) + Math.PI / 2;
-        const diff = ((tH - d.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-        d.heading += diff * 0.1;
-      }
-
-      d.x = Math.max(10, Math.min(MW - 10, d.x + d.vx));
-      d.y = Math.max(10, Math.min(MH - 10, d.y + d.vy));
-
-      // Pouso automático ao chegar a altitude 0
-      if (d.alt <= 0 && pressDown) {
-        d.alt = 0; d.vx *= 0.7; d.vy *= 0.7;
-      }
+      d.x = Math.max(20, Math.min(880, d.x + d.vx));
+      d.y = Math.max(20, Math.min(680, d.y + d.vy));
 
       // Bateria
-      const moving  = Math.abs(ax) > 0.01 || Math.abs(ay) > 0.01;
-      const climbing = pressUp || (g.rth && d.alt < 40);
-      let drain = d.alt > 0 ? BATT_HOVER : 0;
+      const moving  = spd > 0.2;
+      const climbing = d.vz > 0.1;
+      let drain = d.alt > 0 ? BATT_IDLE : 0;
       if (moving)  drain += BATT_MOVE;
       if (climbing) drain += BATT_CLIMB;
       g.battery = Math.max(0, g.battery - drain);
+      if (g.battery <= 0) { endGame(g, 'battery'); return; }
 
-      if (g.battery <= 0) {
-        d.alt = 0; d.vx = 0; d.vy = 0;
-        endGame(g, 'battery');
-        return;
-      }
+      // Sinal (distância da base)
+      g.signal = Math.max(18, 98 - Math.hypot(d.x - BASE.x, d.y - BASE.y) * 0.06);
 
-      // Sinal (diminui com distância da base)
-      const distBase = Math.hypot(d.x - BASE.x, d.y - BASE.y);
-      g.signal = Math.max(20, SIGNAL_BASE - distBase * 0.05);
-
-      // Partículas
-      g.particles = g.particles
-        .map(p => ({ ...p, x: p.x + p.vx, y: p.y + p.vy, vy: p.vy + 0.06, life: p.life - 1 }))
-        .filter(p => p.life > 0);
-
-      // Rastro
-      if (d.alt > 2 && g.frame % 4 === 0) {
+      // Trail
+      if (d.alt > 2 && g.frame % 5 === 0) {
         g.trails.push({ x: d.x, y: d.y });
-        if (g.trails.length > 60) g.trails.shift();
+        if (g.trails.length > 80) g.trails.shift();
       }
 
-      // Flash e status
-      if (g.flashTimer > 0) g.flashTimer--;
-      else g.flash = '';
-      if (g.statusTimer > 0) g.statusTimer--;
+      // ── Render ────────────────────────────────────────
+      const CW = camCanvas.width, CH = camCanvas.height;
+      render3D(ctx2d, d, SPOTS, g.spot, g.frame, g.scen.night);
+      renderMinimap(mCtx, d, SPOTS, g.spot, g.trails, g.scen.night);
 
-      // ── Render ────────────────────────────────────────────────
-      drawMap(ctx, g);
-      drawTrails(ctx, g.trails);
-
-      // Zonas de entrega
-      DELIVERIES.forEach(spot => {
-        const isActive = g.currentSpot?.id === spot.id;
-        const isDone   = g.log.some(l => l.includes(spot.nome));
-        if (!isDone) drawDeliveryZone(ctx, spot, g.frame, isActive, g.scen.night);
-      });
-
-      drawParticles(ctx, g.particles);
-      drawDrone(ctx, d, g.frame, g.winch, g.winching, g.packageDropped, g.scen.night);
-      drawOverlayFlash(ctx, g.flash);
-
-      // Status message no mapa
-      if (g.statusTimer > 0) {
-        const alpha = Math.min(1, g.statusTimer / 20);
-        ctx.fillStyle = `rgba(0,0,0,${0.65 * alpha})`;
-        ctx.fillRect(MW / 2 - 190, MH - 42, 380, 28);
-        ctx.fillStyle = g.flash === 'green' ? '#4ade80' : g.flash === 'red' ? '#f87171' : '#f1f5f9';
-        ctx.globalAlpha = alpha;
-        ctx.font = 'bold 11px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(g.statusMsg, MW / 2, MH - 23);
-        ctx.textAlign = 'left';
-        ctx.globalAlpha = 1;
-      }
-
-      // Sync telemetria a cada 4 frames
-      if (g.frame % 4 === 0) {
+      // Sync telemetria
+      if (g.frame % 3 === 0) {
+        const ms = Date.now() - g.t0;
         setTel({
-          battery: g.battery,
-          alt: Math.round(d.alt),
-          speed: Math.round(sp * 3.6),
-          wind: g.windActual,
-          signal: Math.round(g.signal),
-          heading: d.heading,
-          deliveries: g.deliveryCount,
-          total: g.scen.deliveries,
-          spot: g.currentSpot,
-          phase: g.phase,
-          winching: g.winching,
-          winch: g.winch,
-          rth: !!g.rth,
-          battery_warn: g.battery < 25,
+          battery: g.battery, signal: g.signal,
+          alt: Math.round(d.alt), spd: Math.round(spd * 3.6),
+          vspd: d.vz.toFixed(1),
+          heading: Math.round(((d.heading * 180 / Math.PI) % 360 + 360) % 360),
+          dist: Math.round(Math.hypot(d.x - BASE.x, d.y - BASE.y)),
+          wind: g.wind, gimbal: Math.round(d.gimbal * 180 / Math.PI),
+          delivered: g.delivered, total: g.scen.n,
+          spot: g.spot, winching: g.winching, winch: g.winch,
+          rth: g.rth, battery_warn: g.battery < 25,
+          time: Math.floor(ms / 1000),
         });
-        setLogLines([...g.log]);
+        setLog([...g.log]);
       }
     }
 
@@ -783,30 +706,21 @@ export default function Drone() {
     return () => cancelAnimationFrame(rafRef.current);
   }, [screen]);
 
-  // ── Checklist ─────────────────────────────────────────────────
-  const scen = SCENARIOS[selScen];
-  const allChecked = scen.checklist.every(k => clDone[k]);
-
   function startGame() {
-    const g = initGame(scen);
-    // Log inicial
-    g.log.push('[00:00] Missão iniciada — aguardando pedido');
-    gameRef.current = g;
-    setTel({});
-    setLogLines(g.log);
+    gameRef.current = initGame(SCENARIOS[selScen]);
+    setTel(null); setLog([]);
     setScreen('game');
   }
 
-  // ── TELA: MENU ────────────────────────────────────────────────
+  // ── MENU ─────────────────────────────────────────────
   if (screen === 'menu') return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10"
       style={{ background: 'var(--space-bg)' }}>
       <div style={{ fontSize: 52 }}>🚁</div>
-      <h1 className="text-3xl font-black mt-3" style={{ color: 'var(--accent)' }}>SUSHI DRONE GCS</h1>
-      <p className="text-sm mt-1 mb-1" style={{ color: 'var(--txt-dim)' }}>Ground Control Station · 37 Sushi Paranavaí</p>
-      <div className="mb-8 px-3 py-1 rounded-full text-xs font-bold"
-        style={{ background: 'rgba(251,146,60,0.1)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.25)' }}>
-        Simulador de Treinamento Operacional
+      <h1 className="text-3xl font-black mt-2" style={{ color: 'var(--accent)' }}>SUSHI DRONE SIM</h1>
+      <p className="text-sm mt-1 mb-1" style={{ color: 'var(--txt-dim)' }}>Simulador DJI · 37 Sushi Paranavaí</p>
+      <div className="mb-7 px-3 py-1 rounded-full text-xs font-bold" style={{ background: 'rgba(251,146,60,0.1)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.25)' }}>
+        Vista de câmera 3D · Física real · Modo DJI
       </div>
 
       <div className="w-full max-w-lg space-y-2 mb-6">
@@ -819,21 +733,22 @@ export default function Drone() {
               <p className="font-black text-sm" style={{ color: 'var(--txt)' }}>{s.nome}</p>
               <p className="text-xs" style={{ color: 'var(--txt-dim)' }}>{s.desc}</p>
             </div>
-            {selScen === i && <span className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }}>Selecionado</span>}
+            {selScen === i && <span className="text-xs font-bold px-2 py-1 rounded-lg" style={{ background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }}>✓</span>}
           </button>
         ))}
       </div>
 
-      <div className="w-full max-w-lg rounded-2xl px-5 py-4 mb-6"
-        style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+      <div className="w-full max-w-lg rounded-2xl px-5 py-4 mb-6" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
         <p className="text-xs font-black uppercase tracking-wider mb-3" style={{ color: 'var(--txt-dim)' }}>Controles</p>
         <div className="grid grid-cols-2 gap-y-1.5 text-xs" style={{ color: 'var(--txt-dim)' }}>
           {[
-            ['W A S D / ← ↑ → ↓', 'Mover drone'],
+            ['W / S', 'Frente / Trás'],
+            ['A / D', 'Girar (Yaw)'],
             ['E / Space', 'Subir altitude'],
-            ['Q', 'Descer / Pousar'],
+            ['Q', 'Descer'],
             ['F', 'Soltar pacote (guincho)'],
             ['R', 'RTH — Retornar à base'],
+            ['[ / ]', 'Gimbal câmera ↑↓'],
           ].map(([k, v]) => (
             <React.Fragment key={k}>
               <span><kbd className="px-1.5 rounded text-[10px] font-mono" style={{ background: '#1e293b', border: '1px solid #334155', color: '#94a3b8' }}>{k}</kbd></span>
@@ -843,79 +758,23 @@ export default function Drone() {
         </div>
       </div>
 
-      <button onClick={() => { setClDone({}); setScreen('preflight'); }}
+      <button onClick={startGame}
         className="px-10 py-4 rounded-2xl font-black text-white text-base transition-all active:scale-95 hover:scale-105"
         style={{ background: 'var(--accent)', boxShadow: '0 0 30px rgba(var(--accent-rgb),0.35)' }}>
-        Iniciar Pré-Voo →
+        🚀 Iniciar Voo
       </button>
     </div>
   );
 
-  // ── TELA: PRÉ-VOO ────────────────────────────────────────────
-  if (screen === 'preflight') return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10"
-      style={{ background: 'var(--space-bg)' }}>
-      <div className="w-full max-w-md">
-        <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => setScreen('menu')} style={{ color: 'var(--txt-dim)' }}>←</button>
-          <div>
-            <h2 className="font-black text-lg" style={{ color: 'var(--txt)' }}>Checklist Pré-Voo</h2>
-            <p className="text-xs" style={{ color: 'var(--txt-dim)' }}>{scen.nome} · {scen.deliveries} entrega{scen.deliveries > 1 ? 's' : ''}</p>
-          </div>
-        </div>
-
-        <div className="space-y-2 mb-6">
-          {scen.checklist.map(key => {
-            const info = CHECKLIST_INFO[key];
-            const done = !!clDone[key];
-            return (
-              <div key={key}
-                className="flex items-center gap-3 px-4 py-3 rounded-2xl cursor-pointer transition-all"
-                style={{ background: done ? 'rgba(34,197,94,0.08)' : 'var(--space-elev)', border: `1px solid ${done ? 'rgba(34,197,94,0.3)' : 'var(--hairline)'}` }}
-                onClick={() => setClDone(prev => ({ ...prev, [key]: !prev[key] }))}>
-                <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
-                  style={{ background: done ? '#22c55e' : 'var(--space-elev-2)', border: `1px solid ${done ? '#22c55e' : 'var(--hairline)'}` }}>
-                  {done && <span style={{ color: '#fff', fontSize: 13 }}>✓</span>}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-bold" style={{ color: done ? '#4ade80' : 'var(--txt)' }}>{key}</p>
-                  <p className="text-xs" style={{ color: 'var(--txt-dim)' }}>{info?.label}</p>
-                </div>
-                {done && (() => {
-                  const sim = info?.sim?.();
-                  if (!sim) return null;
-                  const val = sim.sats ? `${sim.sats} satélites` : sim.pct ? `${sim.pct}%` : sim.notams ? `${sim.notams} NOTAM(s)` : 'OK';
-                  return <span className="text-xs font-bold" style={{ color: '#4ade80' }}>{val}</span>;
-                })()}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="px-4 py-3 rounded-2xl mb-6 text-xs"
-          style={{ background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.2)', color: '#fdba74' }}>
-          <strong>Procedimento real:</strong> Operadores certificados pela ANAC devem completar o checklist de pré-voo antes de cada missão. Ignorar itens pode resultar em falha de missão ou acidente.
-        </div>
-
-        <button onClick={startGame} disabled={!allChecked}
-          className="w-full py-4 rounded-2xl font-black text-white text-base transition-all active:scale-95 disabled:opacity-40"
-          style={{ background: allChecked ? 'var(--accent)' : 'var(--space-elev-2)' }}>
-          {allChecked ? '🚀 Autorizar Decolagem' : `Complete o checklist (${scen.checklist.filter(k => clDone[k]).length}/${scen.checklist.length})`}
-        </button>
-      </div>
-    </div>
-  );
-
-  // ── TELA: RESULTADOS ─────────────────────────────────────────
+  // ── RESULTS ───────────────────────────────────────────
   if (screen === 'results') {
     const r = results;
-    const pct = r.total > 0 ? Math.round((r.deliveries / r.total) * 100) : 0;
+    const pct   = r.total > 0 ? Math.round(r.delivered / r.total * 100) : 0;
     const stars = pct === 100 && r.battery > 20 ? 3 : pct >= 66 ? 2 : pct >= 33 ? 1 : 0;
-    const mm = String(Math.floor(r.time / 60)).padStart(2,'0');
-    const ss = String(r.time % 60).padStart(2,'0');
+    const mm    = String(Math.floor(r.time / 60)).padStart(2, '0');
+    const ss    = String(r.time % 60).padStart(2, '0');
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10"
-        style={{ background: 'var(--space-bg)' }}>
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10" style={{ background: 'var(--space-bg)' }}>
         <div className="w-full max-w-md">
           <div className="text-center mb-6">
             <div style={{ fontSize: 44 }}>{r.reason === 'success' ? (stars === 3 ? '🏆' : '✅') : '🔋'}</div>
@@ -923,244 +782,201 @@ export default function Drone() {
               {r.reason === 'success' ? 'Missão concluída!' : 'Bateria zerada!'}
             </h2>
             <p className="text-xs mt-1" style={{ color: 'var(--txt-dim)' }}>{r.scen.nome}</p>
-            <div className="flex justify-center gap-1 mt-3">
+            <div className="flex justify-center gap-1 mt-2">
               {[0,1,2].map(i => <span key={i} style={{ fontSize: 26, opacity: i < stars ? 1 : 0.15 }}>⭐</span>)}
             </div>
           </div>
-
           <div className="rounded-2xl overflow-hidden mb-4" style={{ background: 'var(--space-surface)', border: '1px solid var(--hairline)' }}>
             {[
-              { label: 'Pontuação', value: r.score.toLocaleString(), color: 'var(--accent)', big: true },
-              { label: 'Entregas', value: `${r.deliveries} / ${r.total}`, color: r.deliveries === r.total ? '#22c55e' : '#f59e0b' },
-              { label: 'Bateria restante', value: `${r.battery}%`, color: r.battery > 30 ? '#22c55e' : '#ef4444' },
-              { label: 'Tempo total', value: `${mm}:${ss}`, color: 'var(--txt)' },
-              { label: 'Eficiência média', value: `${r.efficiency} pts/entrega`, color: '#60a5fa' },
-            ].map((row, i, arr) => (
-              <div key={i} className="flex items-center justify-between px-5 py-3"
-                style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--hairline)' : 'none' }}>
+              { label: 'Pontuação',         value: r.score.toLocaleString(),       color: 'var(--accent)', big: true },
+              { label: 'Entregas',          value: `${r.delivered} / ${r.total}`,  color: r.delivered === r.total ? '#22c55e' : '#f59e0b' },
+              { label: 'Bateria restante',  value: `${r.battery}%`,                color: r.battery > 30 ? '#22c55e' : '#ef4444' },
+              { label: 'Tempo de voo',      value: `${mm}:${ss}`,                  color: 'var(--txt)' },
+            ].map((row, i, a) => (
+              <div key={i} className="flex justify-between items-center px-5 py-3"
+                style={{ borderBottom: i < a.length-1 ? '1px solid var(--hairline)' : 'none' }}>
                 <span className="text-sm" style={{ color: 'var(--txt-dim)' }}>{row.label}</span>
                 <span className={`font-black ${row.big ? 'text-2xl' : ''}`} style={{ color: row.color }}>{row.value}</span>
               </div>
             ))}
           </div>
-
-          {/* Log de missão */}
           <div className="rounded-2xl p-4 mb-4" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
-            <p className="text-[10px] font-black uppercase tracking-wider mb-2" style={{ color: 'var(--txt-dim)' }}>Log de missão</p>
-            <div className="space-y-1">
-              {(r.log || []).slice(0, 6).map((l, i) => (
-                <p key={i} className="text-[10px] font-mono" style={{ color: 'var(--txt-dim)' }}>{l}</p>
-              ))}
-            </div>
+            <p className="text-[9px] font-black uppercase tracking-wider mb-2" style={{ color: 'var(--txt-dim)' }}>Log de voo</p>
+            {(r.log || []).slice(0,6).map((l,i) => <p key={i} className="text-[9px] font-mono" style={{ color: i===0?'#60a5fa':'#334155' }}>{l}</p>)}
           </div>
-
-          {r.battery < 15 && (
-            <div className="rounded-xl px-4 py-3 mb-4 text-xs" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5' }}>
-              💡 Reserve sempre 20%+ de bateria para o retorno. Use RTH (<kbd style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 4, padding: '0 4px', color: '#94a3b8' }}>R</kbd>) antes de chegar a 25%.
-            </div>
-          )}
-
           <div className="flex gap-3">
-            <button onClick={() => { setClDone({}); setScreen('preflight'); }}
-              className="flex-1 py-3 rounded-2xl font-black text-sm transition-all active:scale-95"
-              style={{ background: 'var(--accent)', color: '#fff' }}>
-              🔄 Nova missão
-            </button>
-            <button onClick={() => setScreen('menu')}
-              className="flex-1 py-3 rounded-2xl font-black text-sm transition-all active:scale-95"
-              style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }}>
-              ← Menu
-            </button>
+            <button onClick={startGame} className="flex-1 py-3 rounded-2xl font-black text-sm text-white active:scale-95" style={{ background: 'var(--accent)' }}>🔄 Novo voo</button>
+            <button onClick={() => setScreen('menu')} className="flex-1 py-3 rounded-2xl font-black text-sm active:scale-95" style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }}>← Menu</button>
           </div>
         </div>
       </div>
     );
   }
 
-  // ── TELA: JOGO ────────────────────────────────────────────────
-  const battColor = !tel.battery ? '#22c55e' : tel.battery > 40 ? '#22c55e' : tel.battery > 20 ? '#f59e0b' : '#ef4444';
-  const sigColor  = !tel.signal  ? '#22c55e' : tel.signal  > 70 ? '#22c55e' : tel.signal  > 40 ? '#f59e0b' : '#ef4444';
-  const windMs = tel.wind?.speed?.toFixed(1) || '0.0';
-  const windDeg = tel.wind ? Math.round(tel.wind.angle * 180 / Math.PI) : 0;
+  // ── JOGO ──────────────────────────────────────────────
+  const battCol = !tel ? '#22c55e' : tel.battery > 40 ? '#22c55e' : tel.battery > 20 ? '#f59e0b' : '#ef4444';
+  const sigCol  = !tel ? '#22c55e' : tel.signal  > 65 ? '#22c55e' : tel.signal  > 35 ? '#f59e0b' : '#ef4444';
+  const windMs  = tel?.wind?.speed?.toFixed(1) ?? '0.0';
+  const compass = ['N','NE','L','SE','S','SO','O','NO','N'][Math.round(((tel?.heading??0) % 360) / 45)];
 
   return (
-    <div
-      ref={wrapRef}
-      tabIndex={0}
-      onKeyDown={onKeyDown}
-      onKeyUp={onKeyUp}
-      className="outline-none"
-      style={{ background: 'var(--space-bg)', minHeight: '100vh' }}>
+    <div ref={wrapRef} tabIndex={0} onKeyDown={onKD} onKeyUp={onKU} className="outline-none select-none"
+      style={{ background: '#020810', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
 
-      {/* ── Header GCS ─────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-2"
-        style={{ background: 'rgba(0,0,0,0.6)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      {/* ── Header DJI ────────────────────────────────── */}
+      <div className="flex items-center justify-between px-4 py-1.5 shrink-0"
+        style={{ background: 'rgba(0,0,0,0.85)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        {/* Bateria + sinal */}
         <div className="flex items-center gap-3">
-          <span className="text-sm font-black" style={{ color: 'var(--accent)' }}>🚁 GCS</span>
-          <span className="text-xs font-mono" style={{ color: '#475569' }}>37 SUSHI — {scen.nome.toUpperCase()}</span>
+          <div className="flex items-center gap-1.5">
+            <div className="text-[10px] font-mono" style={{ color: battCol }}>⬛</div>
+            <span className="text-xs font-black font-mono" style={{ color: battCol }}>{Math.round(tel?.battery ?? 100)}%</span>
+          </div>
+          <div className="flex items-center gap-1">
+            {[1,2,3,4].map(b => (
+              <div key={b} className="rounded-sm" style={{ width: 4, height: 4 + b * 2, background: (tel?.signal ?? 98) > b * 22 ? sigCol : '#1e293b' }} />
+            ))}
+          </div>
+          <span className="text-[10px] font-mono" style={{ color: '#475569' }}>GPS {Math.round((tel?.signal ?? 98) / 10)} sat</span>
         </div>
-        <div className="flex items-center gap-4">
-          {tel.rth && <span className="text-xs font-bold px-2 py-0.5 rounded-full animate-pulse" style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171', border: '1px solid rgba(239,68,68,0.4)' }}>🏠 RTH ATIVO</span>}
-          <span className="text-xs font-mono" style={{ color: tel.battery_warn ? '#f87171' : '#475569' }}>
-            {tel.deliveries || 0}/{tel.total || scen.deliveries} entregas
+
+        {/* Centro: missão */}
+        <div className="text-center">
+          {tel?.rth && <span className="text-xs font-bold px-2 py-0.5 rounded-full animate-pulse" style={{ background: 'rgba(239,68,68,0.2)', color: '#f87171', border: '1px solid rgba(239,68,68,0.35)' }}>🏠 RTH</span>}
+          {!tel?.rth && <span className="text-[10px] font-mono" style={{ color: '#475569' }}>{tel?.delivered ?? 0}/{tel?.total ?? SCENARIOS[selScen].n} entregas · {tel?.spot ? tel.spot.nome : 'aguardando'}</span>}
+        </div>
+
+        {/* Tempo + sair */}
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] font-mono" style={{ color: '#475569' }}>
+            {String(Math.floor((tel?.time ?? 0) / 60)).padStart(2,'0')}:{String((tel?.time ?? 0) % 60).padStart(2,'0')}
           </span>
           <button onClick={() => { cancelAnimationFrame(rafRef.current); setScreen('menu'); }}
-            className="text-xs px-2 py-1 rounded-lg"
-            style={{ color: '#475569', border: '1px solid #1e293b' }}>
-            Sair
+            className="text-[10px] px-2 py-0.5 rounded font-mono"
+            style={{ color: '#475569', border: '1px solid #1e293b' }}>ESC</button>
+        </div>
+      </div>
+
+      {/* ── Câmera + minimap ──────────────────────────── */}
+      <div className="relative flex-1" style={{ minHeight: 0 }}>
+        <canvas ref={camRef} width={900} height={520}
+          style={{ width: '100%', height: '100%', display: 'block', objectFit: 'fill' }} />
+
+        {/* Minimap overlay */}
+        <div className="absolute bottom-3 right-3" style={{ width: 160, height: 160 }}>
+          <canvas ref={mapRef} width={160} height={160} style={{ width: '100%', height: '100%', display: 'block', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)' }} />
+        </div>
+
+        {/* Winch progress overlay */}
+        {tel?.winching && (
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+            <div className="px-4 py-2 rounded-xl" style={{ background: 'rgba(0,0,0,0.75)', border: '1px solid rgba(251,191,36,0.4)' }}>
+              <p className="text-xs font-black" style={{ color: '#fbbf24' }}>📦 GUINCHO</p>
+              <div className="mt-1 h-2 w-32 rounded-full" style={{ background: '#1e293b' }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${(tel.winch ?? 0) * 100}%`, background: '#fbbf24' }} />
+              </div>
+              <p className="text-[9px] mt-0.5 font-mono" style={{ color: '#94a3b8' }}>{Math.round((tel.winch ?? 0) * 100)}%</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Telemetria inferior (estilo DJI) ─────────── */}
+      <div className="shrink-0 flex items-center justify-between px-3 py-2 flex-wrap gap-2"
+        style={{ background: 'rgba(0,0,0,0.88)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+
+        {/* Coluna: altitude */}
+        <div className="text-center min-w-[52px]">
+          <div className="text-[9px] font-mono mb-0.5" style={{ color: '#475569' }}>ALT (m)</div>
+          <div className="text-xl font-black font-mono" style={{ color: '#60a5fa' }}>{tel?.alt ?? 0}</div>
+        </div>
+        <div className="w-px h-8" style={{ background: 'rgba(255,255,255,0.07)' }} />
+
+        {/* Vel horizontal */}
+        <div className="text-center min-w-[52px]">
+          <div className="text-[9px] font-mono mb-0.5" style={{ color: '#475569' }}>H.VEL km/h</div>
+          <div className="text-xl font-black font-mono" style={{ color: '#94a3b8' }}>{tel?.spd ?? 0}</div>
+        </div>
+        <div className="w-px h-8" style={{ background: 'rgba(255,255,255,0.07)' }} />
+
+        {/* Vel vertical */}
+        <div className="text-center min-w-[44px]">
+          <div className="text-[9px] font-mono mb-0.5" style={{ color: '#475569' }}>V.VEL m/s</div>
+          <div className="text-base font-black font-mono" style={{ color: parseFloat(tel?.vspd ?? 0) > 0 ? '#22c55e' : '#ef4444' }}>
+            {parseFloat(tel?.vspd ?? 0) > 0 ? '+' : ''}{tel?.vspd ?? '0.0'}
+          </div>
+        </div>
+        <div className="w-px h-8" style={{ background: 'rgba(255,255,255,0.07)' }} />
+
+        {/* Distância base */}
+        <div className="text-center min-w-[52px]">
+          <div className="text-[9px] font-mono mb-0.5" style={{ color: '#475569' }}>DIST (m)</div>
+          <div className="text-xl font-black font-mono" style={{ color: '#94a3b8' }}>{tel?.dist ?? 0}</div>
+        </div>
+        <div className="w-px h-8" style={{ background: 'rgba(255,255,255,0.07)' }} />
+
+        {/* Heading */}
+        <div className="text-center min-w-[44px]">
+          <div className="text-[9px] font-mono mb-0.5" style={{ color: '#475569' }}>RUMO</div>
+          <div className="text-base font-black font-mono" style={{ color: '#94a3b8' }}>{compass}</div>
+          <div className="text-[8px] font-mono" style={{ color: '#334155' }}>{tel?.heading ?? 0}°</div>
+        </div>
+        <div className="w-px h-8" style={{ background: 'rgba(255,255,255,0.07)' }} />
+
+        {/* Vento */}
+        <div className="text-center min-w-[52px]">
+          <div className="text-[9px] font-mono mb-0.5" style={{ color: '#475569' }}>VENTO m/s</div>
+          <div className="text-base font-black font-mono" style={{ color: parseFloat(windMs) > 2.5 ? '#f59e0b' : '#22c55e' }}>{windMs}</div>
+        </div>
+        <div className="w-px h-8" style={{ background: 'rgba(255,255,255,0.07)' }} />
+
+        {/* Gimbal */}
+        <div className="text-center min-w-[44px]">
+          <div className="text-[9px] font-mono mb-0.5" style={{ color: '#475569' }}>GIMBAL</div>
+          <div className="text-base font-black font-mono" style={{ color: '#94a3b8' }}>{tel?.gimbal ?? -69}°</div>
+        </div>
+        <div className="w-px h-8 hidden sm:block" style={{ background: 'rgba(255,255,255,0.07)' }} />
+
+        {/* Botões de ação */}
+        <div className="flex gap-1.5 ml-auto">
+          {tel?.spot && !tel?.winching && (
+            <button onMouseDown={() => {
+              const g = gameRef.current;
+              if (!g) return;
+              const d = g.drone, spot = g.spot;
+              if (!spot) return;
+              const dist = Math.hypot(d.x - spot.x, d.y - spot.y);
+              if (dist < spot.r + 15 && d.alt >= spot.alt_min && d.alt <= spot.alt_max) {
+                g.winching = true;
+              }
+            }}
+              className="px-3 py-1.5 rounded-xl text-[10px] font-black active:scale-95"
+              style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.3)' }}>
+              📦 F — Soltar
+            </button>
+          )}
+          <button onMouseDown={() => { const g = gameRef.current; if (g) { g.rth = !g.rth; } }}
+            className="px-3 py-1.5 rounded-xl text-[10px] font-black active:scale-95"
+            style={{ background: tel?.rth ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)' }}>
+            🏠 R — RTH
           </button>
         </div>
       </div>
 
-      {/* ── Body ───────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row">
-
-        {/* Mapa principal */}
-        <div className="relative flex-1">
-          <canvas ref={canvasRef} width={MW} height={MH}
-            style={{ width: '100%', display: 'block' }} />
-        </div>
-
-        {/* Painel de telemetria */}
-        <div className="lg:w-60 shrink-0 flex flex-col"
-          style={{ background: 'rgba(0,0,0,0.5)', borderLeft: '1px solid rgba(255,255,255,0.06)' }}>
-
-          {/* Seção: Aeronave */}
-          <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            <p className="text-[9px] font-black uppercase tracking-widest mb-2" style={{ color: '#475569' }}>Aeronave</p>
-            {/* Bateria */}
-            <div className="mb-2">
-              <div className="flex justify-between mb-1">
-                <span className="text-[9px] font-mono" style={{ color: '#475569' }}>BATERIA</span>
-                <span className="text-[9px] font-black font-mono" style={{ color: battColor }}>{Math.round(tel.battery || 100)}%</span>
-              </div>
-              <div className="h-2 rounded-full overflow-hidden" style={{ background: '#0f172a' }}>
-                <div className="h-full rounded-full transition-all" style={{ width: `${tel.battery || 100}%`, background: battColor }} />
-              </div>
-            </div>
-            {/* Sinal */}
-            <div className="mb-3">
-              <div className="flex justify-between mb-1">
-                <span className="text-[9px] font-mono" style={{ color: '#475569' }}>SINAL</span>
-                <span className="text-[9px] font-black font-mono" style={{ color: sigColor }}>{tel.signal || 98}%</span>
-              </div>
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#0f172a' }}>
-                <div className="h-full rounded-full transition-all" style={{ width: `${tel.signal || 98}%`, background: sigColor }} />
-              </div>
-            </div>
-            {/* Métricas */}
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: 'ALT', value: `${tel.alt || 0}m`, color: tel.alt > 0 ? '#60a5fa' : '#475569' },
-                { label: 'VEL', value: `${tel.speed || 0}km/h`, color: '#94a3b8' },
-                { label: 'VENTO', value: `${windMs}m/s`, color: parseFloat(windMs) > 2 ? '#f59e0b' : '#22c55e' },
-                { label: 'DIR.V', value: `${windDeg}°`, color: '#475569' },
-              ].map(m => (
-                <div key={m.label} className="rounded-lg px-2 py-1.5 text-center" style={{ background: '#060d1a' }}>
-                  <p className="text-[8px] font-mono mb-0.5" style={{ color: '#334155' }}>{m.label}</p>
-                  <p className="text-xs font-black font-mono" style={{ color: m.color }}>{m.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Seção: Missão */}
-          <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            <p className="text-[9px] font-black uppercase tracking-widest mb-2" style={{ color: '#475569' }}>Missão</p>
-            {tel.spot ? (
-              <div>
-                <div className="text-xs font-bold mb-1" style={{ color: '#fbbf24' }}>▶ {tel.spot.nome}</div>
-                <div className="text-[9px] mb-2" style={{ color: '#475569' }}>{tel.spot.rua}</div>
-                <div className="text-[9px] rounded-lg px-2 py-1.5" style={{ background: '#060d1a', color: '#94a3b8' }}>
-                  Altitude ideal: {tel.spot.alt_min}–{tel.spot.alt_max}m
-                </div>
-                {tel.winching && (
-                  <div className="mt-2">
-                    <div className="text-[9px] mb-1" style={{ color: '#60a5fa' }}>📦 Guincho: {((tel.winch || 0) / WINCH_DIST * 100).toFixed(0)}%</div>
-                    <div className="h-1.5 rounded-full" style={{ background: '#0f172a' }}>
-                      <div className="h-full rounded-full transition-all" style={{ width: `${(tel.winch || 0) / WINCH_DIST * 100}%`, background: '#60a5fa' }} />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-[10px]" style={{ color: '#334155' }}>
-                {(tel.deliveries || 0) >= scen.deliveries ? '✅ Todas entregas concluídas' : 'Aguardando pedido...'}
-              </p>
-            )}
-          </div>
-
-          {/* Log */}
-          <div className="px-4 py-3 flex-1 overflow-hidden">
-            <p className="text-[9px] font-black uppercase tracking-widest mb-2" style={{ color: '#475569' }}>Log</p>
-            <div className="space-y-1">
-              {logLines.slice(0, 6).map((l, i) => (
-                <p key={i} className="text-[9px] font-mono leading-tight" style={{ color: i === 0 ? '#60a5fa' : '#334155' }}>{l}</p>
-              ))}
-            </div>
-          </div>
-
-          {/* Controles RTH */}
-          <div className="px-3 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-            <div className="flex gap-2">
-              <button
-                onMouseDown={() => { if (gameRef.current && !gameRef.current.rth) { gameRef.current.rth = true; gameRef.current.mode = 'auto'; gameRef.current.rthTarget = { x: BASE.x, y: BASE.y }; } }}
-                className="flex-1 py-2 rounded-xl text-[10px] font-black transition-all active:scale-95"
-                style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)' }}>
-                🏠 RTH
-              </button>
-              {tel.spot && !tel.winching && (
-                <button
-                  onMouseDown={() => {
-                    if (gameRef.current) {
-                      const g = gameRef.current;
-                      const d = g.drone;
-                      const spot = g.currentSpot;
-                      if (!spot) return;
-                      const dist = Math.hypot(d.x - spot.x, d.y - spot.y);
-                      if (dist < spot.r + 10 && d.alt >= spot.alt_min && d.alt <= spot.alt_max) {
-                        g.winching = true;
-                        g.phase = 'delivering';
-                      }
-                    }
-                  }}
-                  className="flex-1 py-2 rounded-xl text-[10px] font-black transition-all active:scale-95"
-                  style={{ background: 'rgba(251,146,60,0.1)', color: '#fb923c', border: '1px solid rgba(251,146,60,0.25)' }}>
-                  📦 Soltar
-                </button>
-              )}
-            </div>
-            <p className="text-[8px] text-center mt-2" style={{ color: '#1e293b' }}>
-              R = RTH · F = Soltar pacote · E/Q = Alt
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Mobile: joystick ─────────────────────────────── */}
-      <div className="flex lg:hidden items-center justify-between px-6 py-4">
-        <div className="w-28 h-28 rounded-full flex items-center justify-center select-none touch-none cursor-pointer"
-          style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid #1e293b' }}
-          onTouchStart={onJoyStart}
-          onTouchMove={onJoyMove}
-          onTouchEnd={onJoyEnd}>
-          <p className="text-[10px] font-bold" style={{ color: '#334155' }}>MOVER</p>
+      {/* ── Mobile joystick ────────────────────────────── */}
+      <div className="flex lg:hidden items-center justify-between px-4 py-3 shrink-0"
+        style={{ background: 'rgba(0,0,0,0.9)', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+        <div className="w-24 h-24 rounded-full flex items-center justify-center touch-none"
+          style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)' }}
+          onTouchStart={onJoyS} onTouchMove={onJoyM} onTouchEnd={onJoyE}>
+          <p className="text-[8px] font-mono" style={{ color: '#334155' }}>MOVER</p>
         </div>
         <div className="flex flex-col gap-2">
-          <button className="w-16 h-12 rounded-xl font-black text-base active:scale-90"
-            style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}
-            onTouchStart={() => { touchRef.current.up = true; }}
-            onTouchEnd={() => { touchRef.current.up = false; }}>▲</button>
-          <button className="w-16 h-12 rounded-xl font-black text-base active:scale-90"
-            style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
-            onTouchStart={() => { touchRef.current.down = true; }}
-            onTouchEnd={() => { touchRef.current.down = false; }}>▼</button>
+          <button className="w-14 h-10 rounded-xl font-black text-base active:scale-90" style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}
+            onTouchStart={() => { touchRef.current.up = true; }} onTouchEnd={() => { touchRef.current.up = false; }}>▲</button>
+          <button className="w-14 h-10 rounded-xl font-black text-base active:scale-90" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
+            onTouchStart={() => { touchRef.current.down = true; }} onTouchEnd={() => { touchRef.current.down = false; }}>▼</button>
         </div>
-        <button className="w-16 h-12 rounded-xl font-black text-xs active:scale-90"
-          style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)' }}
-          onTouchStart={() => { if (gameRef.current) { gameRef.current.rth = true; } }}>
-          🏠 RTH
-        </button>
       </div>
     </div>
   );
