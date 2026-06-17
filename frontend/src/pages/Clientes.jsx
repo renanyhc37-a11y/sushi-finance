@@ -360,8 +360,8 @@ function ModalCliente({ cliente, onClose, onResgatar }) {
 
             /* ── ABA FIDELIDADE ── */
             (<>
-              {/* Cartão fidelidade */}
-              {fid && (
+              {/* Cartão fidelidade — oculto quando há promoção tipo=pedidos ativa */}
+              {fid && !promocoes.some(p => p.tipo === 'pedidos' && p.ativo !== 0) && (
                 <div className="rounded-2xl p-4" style={{ background: 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.2)' }}>
                   <div className="flex items-center justify-between mb-3">
                     <div>
