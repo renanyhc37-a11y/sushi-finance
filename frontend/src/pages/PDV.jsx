@@ -1048,12 +1048,12 @@ function ModalLetreiro({ onClose, estiloId }) {
     if (j < 0 || j >= novas.length) return;
     [novas[i], novas[j]] = [novas[j], novas[i]]; setFrases(novas); salvar('pdv_letreiro_frases', novas);
   }
-  function salvarTudo() {
-    salvar('pdv_letreiro_transicao', transicao);
-    salvar('pdv_letreiro_intervalo', intervalo);
-    salvar('pdv_letreiro_ativo', ativo);
-    onClose();
+  function toggleAtivo() {
+    const v = !ativo; setAtivo(v); salvar('pdv_letreiro_ativo', v);
   }
+  function mudarTransicao(t) { setTransicao(t); salvar('pdv_letreiro_transicao', t); }
+  function mudarIntervalo(v) { setIntervalo(v); salvar('pdv_letreiro_intervalo', v); }
+  function salvarTudo() { onClose(); }
 
   const fraseAtual = frases[previewIdx] || '';
 
@@ -1091,7 +1091,7 @@ function ModalLetreiro({ onClose, estiloId }) {
               <p className="text-sm font-bold t-strong">Letreiro ativo</p>
               <p className="text-[10px] t-dim mt-0.5">Substitui as métricas na barra do PDV</p>
             </div>
-            <button onClick={() => setAtivo(v => !v)}
+            <button onClick={toggleAtivo}
               className="w-12 h-6 rounded-full relative transition-colors shrink-0"
               style={{ background: ativo ? 'var(--accent)' : '#333' }}>
               <div className="w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all shadow" style={{ left: ativo ? '26px' : '2px' }} />
@@ -1133,7 +1133,7 @@ function ModalLetreiro({ onClose, estiloId }) {
             <p className="text-[10px] font-black t-dim tracking-widest mb-2">TRANSIÇÃO</p>
             <div className="grid grid-cols-2 gap-1.5">
               {TRANSICOES.map(t => (
-                <button key={t.id} onClick={() => setTransicao(t.id)}
+                <button key={t.id} onClick={() => mudarTransicao(t.id)}
                   className="px-3 py-2.5 rounded-xl text-left transition-all"
                   style={transicao === t.id
                     ? { background: 'rgba(var(--accent-rgb),0.15)', border: '1px solid rgba(var(--accent-rgb),0.4)' }
@@ -1148,7 +1148,7 @@ function ModalLetreiro({ onClose, estiloId }) {
           {/* Intervalo */}
           <div>
             <p className="text-[10px] font-black t-dim tracking-widest mb-2">INTERVALO ENTRE FRASES — {intervalo}s</p>
-            <input type="range" min={2} max={15} value={intervalo} onChange={e => setIntervalo(Number(e.target.value))}
+            <input type="range" min={2} max={15} value={intervalo} onChange={e => mudarIntervalo(Number(e.target.value))}
               className="w-full accent-orange-500" />
             <div className="flex justify-between text-[10px] t-faint mt-1"><span>2s</span><span>15s</span></div>
           </div>
