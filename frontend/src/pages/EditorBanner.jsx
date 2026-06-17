@@ -5,6 +5,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, Bold, Italic,
   ChevronUp, ChevronDown, RotateCcw, Layers
 } from 'lucide-react';
+import { getToken } from '../hooks/useAuth';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -304,7 +305,7 @@ export default function EditorBanner() {
 
   /* Carrega banner */
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getToken();
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     fetch(`${BASE}/ia/banners`, { headers })
       .then(r => r.ok ? r.json() : [])
@@ -356,7 +357,7 @@ export default function EditorBanner() {
           : [],
         design: { v: 1, elementos: design },
       };
-      const token = localStorage.getItem('token');
+      const token = getToken();
       const r = await fetch(`${BASE}/ia/banners/${banner.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
