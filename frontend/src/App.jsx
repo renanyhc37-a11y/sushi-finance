@@ -70,7 +70,6 @@ const NAV_GRUPOS = [
     itens: [
       { to: '/chat',           icon: MessageCircle,    label: 'Chat & WhatsApp' },
       { to: '/clientes',         icon: Users,            label: 'Clientes'          },
-      { to: '/importar-clientes',icon: Upload,           label: 'Importar Clientes' },
       { to: '/cardapio-admin', icon: UtensilsCrossed,  label: 'Cardápio'        },
       { to: '/producao',       icon: ChefHat,          label: 'Produção'        },
       { to: '/lista-compras',  icon: ShoppingCart,     label: 'Compras'         },
@@ -109,15 +108,16 @@ const NAV_GRUPOS = [
       { to: '/fichas',           icon: FileText,   label: 'Fichas Técnicas' },
       { to: '/rendimento',       icon: Fish,       label: 'Rendimento'      },
       { to: '/insumos',          icon: Boxes,      label: 'Insumos'         },
-      { to: '/importar-cardapio',icon: Upload,     label: 'Importar'        },
-      { to: '/whatsapp',         icon: Smartphone, label: 'Config WhatsApp' },
+      { to: '/importar-cardapio', icon: Upload,     label: 'Importar Cardápio'  },
+      { to: '/importar-clientes', icon: Users,     label: 'Importar Clientes'  },
+      { to: '/whatsapp',          icon: Smartphone, label: 'Config WhatsApp'   },
     ],
   },
   {
     grupo: 'Drone 🚁',
     cor: '#38bdf8',
     itens: [
-      { to: '/drone', icon: Bot, label: '🚁 Simulador de Entrega' },
+      { to: '/drone', icon: Bot, label: '🚁 Simulador de Entrega', badge: 'em construção' },
     ],
   },
 ];
@@ -263,7 +263,7 @@ function NavGroup({ onClose }) {
 
             {aberto && (
               <div className="space-y-0.5">
-                {itens.map(({ to, icon: Icon, label }) => (
+                {itens.map(({ to, icon: Icon, label, badge }) => (
                   <NavLink key={to} to={to} onClick={onClose} className="block group">
                     {({ isActive }) => (
                       <div className="flex items-center gap-3 px-2.5 py-2 rounded-xl relative transition-all duration-150"
@@ -278,10 +278,16 @@ function NavGroup({ onClose }) {
                           style={{ background: isActive ? `${cor}1a` : 'var(--space-elev)', border: `1px solid ${isActive ? cor + '33' : 'var(--hairline-soft)'}` }}>
                           <Icon size={17} strokeWidth={1.75} style={{ color: isActive ? cor : 'var(--txt-dim)' }} />
                         </span>
-                        <span className="leading-none transition-colors"
+                        <span className="leading-none transition-colors flex-1"
                           style={{ fontSize: 13, fontWeight: isActive ? 600 : 500, color: isActive ? 'var(--txt-strong)' : 'var(--txt)' }}>
                           {label}
                         </span>
+                        {badge && (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+                            style={{ background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b44' }}>
+                            {badge}
+                          </span>
+                        )}
                       </div>
                     )}
                   </NavLink>
