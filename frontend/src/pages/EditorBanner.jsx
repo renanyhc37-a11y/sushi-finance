@@ -295,6 +295,7 @@ export default function EditorBanner() {
   const navigate = useNavigate();
 
   const [banner, setBanner] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [design, setDesign] = useState(structuredClone(DEFAULTS));
   const [selected, setSelected] = useState(null);
   const [history, setHistory] = useState([]);
@@ -303,14 +304,17 @@ export default function EditorBanner() {
 
   /* Carrega banner */
   useEffect(() => {
-    fetch(`${BASE}/ia/banners`)
-      .then(r => r.json())
+    const token = localStorage.getItem('token');
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    fetch(`${BASE}/ia/banners`, { headers })
+      .then(r => r.ok ? r.json() : [])
       .then(list => {
         const b = list.find(x => String(x.id) === String(id));
-        if (!b) return;
-        setBanner(b);
-        setDesign(mergeDesign(b.design));
-      });
+        setBanner(b || false);
+        if (b) setDesign(mergeDesign(b.design));
+      })
+      .catch(() => setBanner(false))
+      .finally(() => setLoading(false));
   }, [id]);
 
   /* Empurra snapshot no histórico antes de cada mudança */
@@ -364,9 +368,16 @@ export default function EditorBanner() {
     }
   };
 
-  if (!banner) return (
+  if (loading) return (
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
       <div className="text-zinc-500">Carregando banner…</div>
+    </div>
+  );
+
+  if (!banner) return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ background: 'var(--bg)' }}>
+      <div className="text-zinc-400">Banner não encontrado (id: {id})</div>
+      <button onClick={() => navigate(-1)} className="text-sm text-amber-400 underline">Voltar</button>
     </div>
   );
 
