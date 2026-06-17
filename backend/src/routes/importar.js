@@ -163,4 +163,174 @@ router.post('/xlsx/confirmar', upload.single('arquivo'), (req, res) => {
   }
 });
 
+// ── Importação de CLIENTES via XLSX ──────────────────────────
+
+// Normaliza telefone: mantém apenas dígitos, adiciona 55 se necessário
+function normalizarTel(raw) {
+  if (!raw) return null;
+  const d = String(raw).replace(/\D/g, '');
+  if (d.length === 0) return null;
+  // Remove DDI 55 se já tiver 13 dígitos (55 + 11 dígitos)
+  if (d.length === 13 && d.startsWith('55')) return d.slice(2);
+  return d;
+}
+
+// Detecta coluna pelo nome (parcial, case-insensitive)
+function col(header, ...termos) {
+  return header.findIndex(h => termos.some(t => h.includes(t)));
+}
+
+// POST /api/importar/clientes/preview — analisa arquivo, retorna preview + mapeamento detectado
+router.post('/clientes/preview', upload.single('arquivo'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
+
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    // Detecta linha de cabeçalho (primeira linha com pelo menos 2 células preenchidas)
+    const headerIdx = rows.findIndex(r => Array.isArray(r) && r.filter(c => String(c).trim()).length >= 2);
+    if (headerIdx === -1) return res.status(400).json({ erro: 'Arquivo vazio ou sem cabeçalho detectável' });
+
+    const header = rows[headerIdx].map(h => String(h || '').toLowerCase().trim());
+    const colunas = rows[headerIdx].map(h => String(h || '').trim()); // original
+
+    // Mapeamento automático
+    const mapa = {
+      nome:        col(header, 'nome', 'name', 'cliente', 'razão', 'razao'),
+      telefone:    col(header, 'telefone', 'fone', 'phone', 'celular', 'whatsapp', 'contato', 'tel'),
+      endereco:    col(header, 'enderec', 'address', 'logradouro', 'rua', 'endereço'),
+      bairro:      col(header, 'bairro', 'neighborhood', 'distrito'),
+      email:       col(header, 'email', 'e-mail', 'mail'),
+      aniversario: col(header, 'aniversar', 'nasciment', 'birth', 'data'),
+      obs:         col(header, 'observ', 'obs', 'nota', 'note', 'anotac'),
+      pedidos:     col(header, 'pedido', 'order', 'total_pedido', 'qtd'),
+    };
+
+    const dataRows = rows.slice(headerIdx + 1).filter(r => Array.isArray(r) && r.some(c => String(c).trim()));
+
+    // Preview das primeiras 10 linhas
+    const preview = dataRows.slice(0, 10).map(r => {
+      const obj = {};
+      colunas.forEach((c, i) => { obj[c] = String(r[i] ?? '').trim(); });
+      return obj;
+    });
+
+    // Estatísticas rápidas
+    const comTelefone = dataRows.filter(r => mapa.telefone >= 0 && String(r[mapa.telefone] ?? '').replace(/\D/g, '').length >= 8).length;
+
+    res.json({
+      total_linhas: dataRows.length,
+      com_telefone: comTelefone,
+      colunas,
+      mapa,
+      preview,
+      sheets: wb.SheetNames,
+    });
+  } catch (e) {
+    console.error('[importar clientes preview]', e);
+    res.status(500).json({ erro: e.message });
+  }
+});
+
+// POST /api/importar/clientes/confirmar — importa com o mapeamento escolhido
+router.post('/clientes/confirmar', upload.single('arquivo'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo' });
+
+    const mapa    = JSON.parse(req.body.mapa || '{}');      // { nome: 0, telefone: 1, ... }
+    const modo    = req.body.modo || 'pular';               // 'pular' | 'atualizar'
+    const sheet   = req.body.sheet || null;
+
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheetName = sheet && wb.SheetNames.includes(sheet) ? sheet : wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    const headerIdx = rows.findIndex(r => Array.isArray(r) && r.filter(c => String(c).trim()).length >= 2);
+    const dataRows  = rows.slice(headerIdx + 1).filter(r => Array.isArray(r) && r.some(c => String(c).trim()));
+
+    function get(row, campo) {
+      const idx = mapa[campo];
+      return idx !== undefined && idx >= 0 ? String(row[idx] ?? '').trim() : '';
+    }
+
+    // Migração: garante colunas extras
+    try { db.exec('ALTER TABLE clientes ADD COLUMN email TEXT'); } catch {}
+    try { db.exec('ALTER TABLE clientes ADD COLUMN bairro TEXT'); } catch {}
+    try { db.exec('ALTER TABLE clientes ADD COLUMN observacao TEXT'); } catch {}
+
+    let criados = 0, atualizados = 0, ignorados = 0, erros = 0;
+    const detalhes = [];
+
+    db.transaction(() => {
+      for (const row of dataRows) {
+        try {
+          const nome = get(row, 'nome');
+          const telRaw = get(row, 'telefone');
+          const tel = normalizarTel(telRaw);
+
+          if (!nome && !tel) { ignorados++; continue; }
+          if (!tel) { erros++; detalhes.push({ nome, erro: 'Sem telefone' }); continue; }
+          if (tel.length < 8) { erros++; detalhes.push({ nome, tel, erro: 'Telefone inválido' }); continue; }
+
+          const endereco   = get(row, 'endereco');
+          const bairro     = get(row, 'bairro');
+          const email      = get(row, 'email');
+          const observacao = get(row, 'obs');
+          const pedidos    = parseInt(get(row, 'pedidos')) || 0;
+
+          // Aniversário: tenta extrair MM-DD de vários formatos
+          let aniversario = null;
+          const aniRaw = get(row, 'aniversario');
+          if (aniRaw) {
+            // Tenta DD/MM/YYYY ou DD-MM-YYYY
+            const m = aniRaw.match(/(\d{1,2})[\/\-](\d{1,2})/);
+            if (m) aniversario = `${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
+          }
+
+          const existing = db.prepare('SELECT * FROM clientes WHERE telefone = ?').get(tel);
+
+          if (existing) {
+            if (modo === 'atualizar') {
+              db.prepare(`UPDATE clientes SET
+                nome = COALESCE(NULLIF(?, ''), nome),
+                endereco = COALESCE(NULLIF(?, ''), endereco),
+                bairro = COALESCE(NULLIF(?, ''), bairro),
+                email = COALESCE(NULLIF(?, ''), email),
+                observacao = COALESCE(NULLIF(?, ''), observacao),
+                aniversario = COALESCE(NULLIF(?, ''), aniversario),
+                total_pedidos = MAX(total_pedidos, ?),
+                updated_at = CURRENT_TIMESTAMP
+                WHERE telefone = ?`
+              ).run(nome || null, endereco || null, bairro || null, email || null,
+                    observacao || null, aniversario || null, pedidos, tel);
+              atualizados++;
+              detalhes.push({ nome, tel, status: 'atualizado' });
+            } else {
+              ignorados++;
+            }
+          } else {
+            db.prepare(`INSERT INTO clientes
+              (telefone, nome, endereco, bairro, email, observacao, aniversario, total_pedidos, recompensas_ganhas, recompensas_usadas)
+              VALUES (?,?,?,?,?,?,?,?,0,0)`
+            ).run(tel, nome || 'Cliente', endereco || null, bairro || null,
+                  email || null, observacao || null, aniversario || null, pedidos);
+            criados++;
+            detalhes.push({ nome, tel, status: 'criado' });
+          }
+        } catch (err) {
+          erros++;
+        }
+      }
+    })();
+
+    res.json({ ok: true, criados, atualizados, ignorados, erros, total: dataRows.length, detalhes: detalhes.slice(0, 50) });
+  } catch (e) {
+    console.error('[importar clientes confirmar]', e);
+    res.status(500).json({ erro: e.message });
+  }
+});
+
 module.exports = router;

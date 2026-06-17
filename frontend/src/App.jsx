@@ -40,6 +40,7 @@ const WhatsAppConfig   = React.lazy(() => import('./pages/WhatsAppConfig'));
 const Clientes         = React.lazy(() => import('./pages/Clientes'));
 const CardapioAdmin    = React.lazy(() => import('./pages/CardapioAdmin'));
 const ImportarCardapio = React.lazy(() => import('./pages/ImportarCardapio'));
+const ImportarClientes = React.lazy(() => import('./pages/ImportarClientes'));
 const Promocoes        = React.lazy(() => import('./pages/Promocoes'));
 const CriativoSocial   = React.lazy(() => import('./pages/CriativoSocial'));
 const RelatorioPedidos = React.lazy(() => import('./pages/RelatorioPedidos'));
@@ -68,7 +69,8 @@ const NAV_GRUPOS = [
     fixo: true,
     itens: [
       { to: '/chat',           icon: MessageCircle,    label: 'Chat & WhatsApp' },
-      { to: '/clientes',       icon: Users,            label: 'Clientes'        },
+      { to: '/clientes',         icon: Users,            label: 'Clientes'          },
+      { to: '/importar-clientes',icon: Upload,           label: 'Importar Clientes' },
       { to: '/cardapio-admin', icon: UtensilsCrossed,  label: 'Cardápio'        },
       { to: '/producao',       icon: ChefHat,          label: 'Produção'        },
       { to: '/lista-compras',  icon: ShoppingCart,     label: 'Compras'         },
@@ -561,6 +563,7 @@ function Layout({ logout }) {
               <Route path="/promocoes" element={<Promocoes />} />
               <Route path="/criativo-social" element={<CriativoSocial />} />
               <Route path="/importar-cardapio" element={<ImportarCardapio />} />
+              <Route path="/importar-clientes" element={<ImportarClientes />} />
               <Route path="/relatorio-pedidos" element={<RelatorioPedidos />} />
               <Route path="/whatsapp" element={<WhatsAppConfig />} />
               <Route path="/chat" element={<Chat />} />
