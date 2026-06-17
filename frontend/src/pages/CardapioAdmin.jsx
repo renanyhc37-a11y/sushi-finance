@@ -1269,11 +1269,11 @@ function ModalCriarPromocao({ sugestao, onClose, onSalvo }) {
                 style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.08)' }}
                 onChange={e => {
                   setItemRecompensa(e.target.value);
-                  if (e.target.value) setForm(p => ({ ...p, recompensa: `1 ${itensCardapio.find(i => String(i.id) === e.target.value)?.nome} grátis` }));
+                  if (e.target.value) setForm(p => ({ ...p, recompensa: `1 ${e.target.value} grátis` }));
                 }}>
                 <option value="">— escolher item do cardápio —</option>
                 {itensCardapio.map(i => (
-                  <option key={i.id} value={String(i.id)}>{i._cat} › {i.nome}</option>
+                  <option key={i.id} value={i.nome}>{i._cat} › {i.nome}</option>
                 ))}
               </select>
             )}
