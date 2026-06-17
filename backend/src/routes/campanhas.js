@@ -67,23 +67,40 @@ router.get('/clientes-inativos', (req, res) => {
   const dias = parseInt(req.query.dias) || 30;
   const limite = parseInt(req.query.limite) || 100;
   try {
-    // Busca clientes do WhatsApp que não fizeram pedido há X dias
+    // Busca clientes (WhatsApp + importados) que não fizeram pedido há X dias
     const rows = db.prepare(`
       SELECT
-        c.id, c.nome, c.telefone, c.foto_url, c.ultima_em,
+        cl.id, cl.nome, cl.telefone,
+        NULL as foto_url,
+        cl.updated_at as ultima_em,
         MAX(p.created_at) as ultimo_pedido,
         COUNT(p.id) as total_pedidos,
         COALESCE(SUM(p.total), 0) as total_gasto,
-        CAST(julianday('now') - julianday(COALESCE(MAX(p.created_at), c.ultima_em)) AS INTEGER) as dias_inativo
-      FROM wa_conversas c
-      LEFT JOIN pdv_pedidos p ON REPLACE(REPLACE(p.cliente_telefone,'-',''),' ','') LIKE '%' || SUBSTR(REPLACE(c.telefone,'+',''), -8) || '%'
-      WHERE c.arquivada = 0
-        AND c.telefone NOT LIKE 'TESTE_%'
-        AND CAST(julianday('now') - julianday(COALESCE(MAX(p.created_at), c.ultima_em)) AS INTEGER) >= ?
-      GROUP BY c.id
+        CAST(julianday('now') - julianday(COALESCE(MAX(p.created_at), cl.created_at)) AS INTEGER) as dias_inativo
+      FROM clientes cl
+      LEFT JOIN pdv_pedidos p ON REPLACE(REPLACE(p.cliente_telefone,'-',''),' ','') LIKE '%' || SUBSTR(REPLACE(cl.telefone,'+',''), -8) || '%'
+      WHERE cl.telefone IS NOT NULL
+        AND cl.telefone NOT LIKE 'TESTE_%'
+        AND CAST(julianday('now') - julianday(COALESCE(MAX(p.created_at), cl.created_at)) AS INTEGER) >= ?
+      GROUP BY cl.id
+      UNION
+      SELECT
+        wc.id, wc.nome, wc.telefone, wc.foto_url, wc.ultima_em,
+        MAX(p.created_at) as ultimo_pedido,
+        COUNT(p.id) as total_pedidos,
+        COALESCE(SUM(p.total), 0) as total_gasto,
+        CAST(julianday('now') - julianday(COALESCE(MAX(p.created_at), wc.ultima_em)) AS INTEGER) as dias_inativo
+      FROM wa_conversas wc
+      LEFT JOIN pdv_pedidos p ON REPLACE(REPLACE(p.cliente_telefone,'-',''),' ','') LIKE '%' || SUBSTR(REPLACE(wc.telefone,'+',''), -8) || '%'
+      LEFT JOIN clientes cl2 ON cl2.telefone = REPLACE(REPLACE(wc.telefone,'+',''),' ','')
+      WHERE wc.arquivada = 0
+        AND wc.telefone NOT LIKE 'TESTE_%'
+        AND cl2.id IS NULL
+        AND CAST(julianday('now') - julianday(COALESCE(MAX(p.created_at), wc.ultima_em)) AS INTEGER) >= ?
+      GROUP BY wc.id
       ORDER BY dias_inativo ASC
       LIMIT ?
-    `).all(dias, limite);
+    `).all(dias, dias, limite);
     res.json(rows);
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
