@@ -55,6 +55,36 @@ router.get('/aniversarios', (req, res) => {
   res.json(lista);
 });
 
+// PATCH /api/clientes/:id — atualiza campos editáveis do cliente
+router.patch('/:id', (req, res) => {
+  const { nome, endereco, bairro, email, observacao, aniversario } = req.body;
+  // aniversario esperado em formato 'MM-DD' ou 'DD/MM' → normaliza para 'MM-DD'
+  let aniv = null;
+  if (aniversario) {
+    const m1 = /^(\d{2})[\/\-](\d{2})$/.exec(aniversario.trim());
+    if (m1) {
+      // detecta se veio DD/MM (dia <= 31, mês <= 12) — armazena MM-DD
+      const a = Number(m1[1]), b = Number(m1[2]);
+      if (a <= 12 && b <= 31) aniv = `${String(a).padStart(2,'0')}-${String(b).padStart(2,'0')}`;
+      else if (b <= 12)       aniv = `${String(b).padStart(2,'0')}-${String(a).padStart(2,'0')}`;
+    }
+  }
+  const c = db.prepare('SELECT id FROM clientes WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ erro: 'Cliente não encontrado' });
+  db.prepare(`UPDATE clientes SET
+    nome = COALESCE(NULLIF(?, ''), nome),
+    endereco = COALESCE(NULLIF(?, ''), endereco),
+    bairro = COALESCE(NULLIF(?, ''), bairro),
+    email = COALESCE(NULLIF(?, ''), email),
+    observacao = COALESCE(NULLIF(?, ''), observacao),
+    aniversario = ?,
+    updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?`
+  ).run(nome || '', endereco || '', bairro || '', email || '', observacao || '', aniv, req.params.id);
+  const atualizado = db.prepare('SELECT * FROM clientes WHERE id = ?').get(req.params.id);
+  res.json(atualizado);
+});
+
 // GET /api/clientes/:id/perfil — análise comportamental completa do cliente
 router.get('/:id/perfil', (req, res) => {
   const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(req.params.id);

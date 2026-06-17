@@ -5,6 +5,7 @@ import {
   Users, Fish, Gift, Search, RefreshCw, Star, Sparkles, Repeat, Crown, MoonStar,
   Smartphone, MapPin, X, Target, CheckCircle2, Cake, TrendingUp, TrendingDown,
   Minus, Clock, Calendar, CreditCard, ShoppingBag, Bike, BarChart2, Award,
+  Edit3, Save, MessageCircle, Send, ChevronRight, PartyPopper,
 } from 'lucide-react';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
@@ -57,12 +58,14 @@ function MiniBar({ valor, max, cor }) {
   );
 }
 
-function ModalCliente({ cliente, onClose, onResgatar }) {
+function ModalCliente({ cliente, onClose, onResgatar, onAtualizado }) {
   const [dados, setDados] = useState(null);
   const [promocoes, setPromocoes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [resgatando, setResgatando] = useState(null);
-  const [aba, setAba] = useState('perfil'); // 'perfil' | 'historico' | 'fidelidade'
+  const [aba, setAba] = useState('perfil'); // 'perfil' | 'historico' | 'fidelidade' | 'dados'
+  const [editDados, setEditDados] = useState({ nome: cliente.nome || '', endereco: cliente.endereco || '', bairro: cliente.bairro || '', email: cliente.email || '', observacao: cliente.observacao || '', aniversario: cliente.aniversario ? cliente.aniversario.split('-').reverse().join('/') : '' });
+  const [salvandoDados, setSalvandoDados] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -82,6 +85,21 @@ function ModalCliente({ cliente, onClose, onResgatar }) {
       setPromocoes(prev => prev.map(p => p.id === cp.id ? { ...p, recompensa_resgatada: 1, progresso: 0, completado: 0 } : p));
     } catch (e) { toast.error(e.message); }
     setResgatando(null);
+  }
+
+  async function salvarDados() {
+    setSalvandoDados(true);
+    try {
+      const r = await fetch(`${BASE}/clientes/${cliente.id}`, {
+        method: 'PATCH', headers: authH(),
+        body: JSON.stringify(editDados),
+      });
+      if (!r.ok) throw new Error('Erro ao salvar');
+      const atualizado = await r.json();
+      toast.success('Dados salvos!');
+      onAtualizado?.(atualizado);
+    } catch { toast.error('Erro ao salvar dados'); }
+    setSalvandoDados(false);
   }
 
   async function handleResgatar() {
@@ -111,6 +129,7 @@ function ModalCliente({ cliente, onClose, onResgatar }) {
     { id: 'perfil',    label: 'Perfil' },
     { id: 'historico', label: 'Pedidos' },
     { id: 'fidelidade',label: 'Fidelidade' },
+    { id: 'dados',     label: 'Dados' },
   ];
 
   return (
@@ -164,11 +183,78 @@ function ModalCliente({ cliente, onClose, onResgatar }) {
 
         {/* Corpo */}
         <div className="overflow-y-auto flex-1 px-4 py-4 space-y-4">
-          {loading ? (
+
+          {/* ── ABA DADOS (editável, independente de perfil) ── */}
+          {aba === 'dados' && (
+            <div className="space-y-3">
+              <p className="text-[10px] font-black tracking-widest t-dim flex items-center gap-1.5"><Edit3 size={11}/> INFORMAÇÕES DO CLIENTE</p>
+
+              {[
+                { label: 'Nome', key: 'nome', placeholder: 'Nome completo' },
+                { label: 'Telefone', key: 'telefone', placeholder: '', disabled: true, val: cliente.telefone },
+                { label: 'Endereço', key: 'endereco', placeholder: 'Rua, número, complemento' },
+                { label: 'Bairro', key: 'bairro', placeholder: 'Bairro' },
+                { label: 'E-mail', key: 'email', placeholder: 'email@exemplo.com' },
+              ].map(({ label, key, placeholder, disabled, val }) => (
+                <div key={key}>
+                  <label className="text-[10px] t-dim font-bold mb-1 block">{label}</label>
+                  <input
+                    value={disabled ? (val || '') : (editDados[key] || '')}
+                    onChange={e => !disabled && setEditDados(p => ({ ...p, [key]: e.target.value }))}
+                    disabled={disabled}
+                    placeholder={placeholder}
+                    className="w-full px-3 py-2 rounded-xl text-sm t-strong outline-none disabled:opacity-40"
+                    style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}
+                    onFocus={e => !disabled && (e.target.style.borderColor = 'var(--accent)')}
+                    onBlur={e => (e.target.style.borderColor = 'var(--hairline)')}
+                  />
+                </div>
+              ))}
+
+              {/* Aniversário */}
+              <div>
+                <label className="text-[10px] t-dim font-bold mb-1 flex items-center gap-1.5"><Cake size={11} style={{ color: '#ec4899' }}/> Aniversário</label>
+                <input
+                  value={editDados.aniversario}
+                  onChange={e => setEditDados(p => ({ ...p, aniversario: e.target.value }))}
+                  placeholder="DD/MM  (ex: 15/03)"
+                  maxLength={5}
+                  className="w-full px-3 py-2 rounded-xl text-sm t-strong outline-none"
+                  style={{ background: 'var(--space-elev)', border: '1px solid rgba(236,72,153,0.3)' }}
+                  onFocus={e => (e.target.style.borderColor = '#ec4899')}
+                  onBlur={e => (e.target.style.borderColor = 'rgba(236,72,153,0.3)')}
+                />
+                <p className="text-[10px] t-faint mt-1">Digite no formato DD/MM. Aparecerá na lista de próximos aniversários.</p>
+              </div>
+
+              {/* Observação */}
+              <div>
+                <label className="text-[10px] t-dim font-bold mb-1 block">Observação interna</label>
+                <textarea
+                  value={editDados.observacao}
+                  onChange={e => setEditDados(p => ({ ...p, observacao: e.target.value }))}
+                  placeholder="Preferências, alergias, observações..."
+                  rows={3}
+                  className="w-full px-3 py-2 rounded-xl text-sm t-strong outline-none resize-none"
+                  style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}
+                  onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                  onBlur={e => (e.target.style.borderColor = 'var(--hairline)')}
+                />
+              </div>
+
+              <button onClick={salvarDados} disabled={salvandoDados}
+                className="w-full py-3 rounded-xl text-sm font-black flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:scale-[0.98]"
+                style={{ background: 'var(--accent)', color: '#fff' }}>
+                <Save size={15}/> {salvandoDados ? 'Salvando…' : 'Salvar dados'}
+              </button>
+            </div>
+          )}
+
+          {aba !== 'dados' && loading ? (
             <div className="py-16 text-center t-dim text-sm animate-pulse">Carregando perfil…</div>
-          ) : !perfil ? (
+          ) : aba !== 'dados' && !perfil ? (
             <div className="py-16 text-center t-dim text-sm">Nenhum pedido registrado ainda.</div>
-          ) : (
+          ) : aba !== 'dados' && (
 
             /* ── ABA PERFIL ── */
             aba === 'perfil' ? (<>
@@ -452,6 +538,156 @@ function ModalCliente({ cliente, onClose, onResgatar }) {
   );
 }
 
+/* ── Modal de aniversários completo ── */
+const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+function ModalAniversarios({ onClose, onAbrirCliente }) {
+  const [todos, setTodos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [mesFiltro, setMesFiltro] = useState(new Date().getMonth() + 1); // mês atual
+
+  useEffect(() => {
+    fetch(`${BASE}/clientes/aniversarios?dias=366`, { headers: authH() })
+      .then(r => r.ok ? r.json() : [])
+      .then(setTodos)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const porMes = todos.filter(a => a.mes === mesFiltro)
+    .sort((a, b) => a.dia - b.dia);
+
+  const hoje = new Date();
+  const mesAtual = hoje.getMonth() + 1;
+
+  function msgWhatsApp(a) {
+    const tel = a.telefone.replace(/\D/g, '');
+    const numero = tel.startsWith('55') ? tel : `55${tel}`;
+    const msg = encodeURIComponent(`🎂 Feliz Aniversário, ${a.nome.split(' ')[0]}! 🎉\n\nA equipe 37 Sushi deseja um dia incrível para você! Como presente, preparamos uma surpresa especial — venha nos visitar hoje! 🍣`);
+    window.open(`https://wa.me/${numero}?text=${msg}`, '_blank');
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(6px)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden"
+        style={{ background: 'var(--space-surface)', border: '1px solid var(--hairline)', maxHeight: '90vh' }}>
+
+        {/* Header */}
+        <div className="shrink-0 px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--hairline)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(236,72,153,0.15)' }}>
+              <Cake size={20} strokeWidth={1.75} style={{ color: '#ec4899' }} />
+            </div>
+            <div>
+              <h2 className="font-black t-strong text-base">Aniversários</h2>
+              <p className="text-[11px] t-dim">{todos.length} clientes com data cadastrada</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl t-dim"
+            style={{ background: 'var(--space-elev-2)' }}><X size={16}/></button>
+        </div>
+
+        {/* Filtro por mês */}
+        <div className="shrink-0 px-4 py-3 flex gap-1.5 overflow-x-auto" style={{ borderBottom: '1px solid var(--hairline)' }}>
+          {MESES.map((m, i) => {
+            const n = i + 1;
+            const qtd = todos.filter(a => a.mes === n).length;
+            const ativo = mesFiltro === n;
+            const eHoje = n === mesAtual;
+            return (
+              <button key={n} onClick={() => setMesFiltro(n)}
+                className="shrink-0 flex flex-col items-center px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
+                style={{
+                  background: ativo ? 'rgba(236,72,153,0.15)' : eHoje ? 'rgba(236,72,153,0.06)' : 'var(--space-elev)',
+                  color: ativo ? '#f472b6' : eHoje ? '#ec4899' : 'var(--txt-dim)',
+                  border: `1px solid ${ativo ? 'rgba(236,72,153,0.4)' : eHoje ? 'rgba(236,72,153,0.2)' : 'transparent'}`,
+                  minWidth: 48,
+                }}>
+                {m}
+                {qtd > 0 && <span className="text-[9px] mt-0.5 font-black" style={{ color: ativo ? '#f472b6' : '#666' }}>{qtd}</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Lista */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+          {loading ? (
+            <div className="py-16 text-center t-dim text-sm animate-pulse">Carregando…</div>
+          ) : porMes.length === 0 ? (
+            <div className="py-16 text-center">
+              <Cake size={32} className="mx-auto mb-3 opacity-20" strokeWidth={1.5} />
+              <p className="t-dim text-sm">Nenhum aniversariante em {MESES[mesFiltro - 1]}</p>
+              <p className="text-[11px] t-faint mt-1">Cadastre a data de aniversário nos dados do cliente</p>
+            </div>
+          ) : (
+            porMes.map(a => {
+              const isHoje = a.hoje;
+              const isProximo = a.dias_para <= 7 && !isHoje;
+              return (
+                <div key={a.id}
+                  className="flex items-center gap-3 p-3 rounded-2xl transition-all"
+                  style={{
+                    background: isHoje ? 'rgba(236,72,153,0.1)' : 'var(--space-elev)',
+                    border: `1px solid ${isHoje ? 'rgba(236,72,153,0.35)' : isProximo ? 'rgba(236,72,153,0.15)' : 'var(--hairline)'}`,
+                  }}>
+                  {/* Dia */}
+                  <div className="w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0"
+                    style={{ background: isHoje ? 'rgba(236,72,153,0.2)' : 'var(--space-elev-2)', border: `1px solid ${isHoje ? 'rgba(236,72,153,0.4)' : 'var(--hairline)'}` }}>
+                    <span className="text-lg font-black leading-none" style={{ color: isHoje ? '#f472b6' : 'var(--txt)' }}>{String(a.dia).padStart(2,'0')}</span>
+                    <span className="text-[9px] font-bold" style={{ color: isHoje ? '#f472b6' : 'var(--txt-dim)' }}>{MESES[a.mes - 1]}</span>
+                  </div>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-black t-strong text-sm truncate">{a.nome}</p>
+                      {isHoje && <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'rgba(236,72,153,0.2)', color: '#f472b6' }}>🎉 HOJE</span>}
+                      {isProximo && !isHoje && <span className="text-[10px] font-bold shrink-0" style={{ color: '#f97316' }}>em {a.dias_para}d</span>}
+                    </div>
+                    <p className="text-[11px] t-dim flex items-center gap-1 mt-0.5">
+                      <Smartphone size={10}/> {a.telefone}
+                      {a.total_pedidos > 0 && <span className="ml-1">· {a.total_pedidos} pedido{a.total_pedidos !== 1 ? 's' : ''}</span>}
+                    </p>
+                  </div>
+
+                  {/* Ações */}
+                  <div className="flex gap-1.5 shrink-0">
+                    <button onClick={() => msgWhatsApp(a)} title="Enviar mensagem de aniversário"
+                      className="w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-95"
+                      style={{ background: 'rgba(37,211,102,0.12)', color: '#25d366', border: '1px solid rgba(37,211,102,0.25)' }}>
+                      <MessageCircle size={15} strokeWidth={1.75}/>
+                    </button>
+                    <button onClick={() => onAbrirCliente(a.id)} title="Ver cadastro"
+                      className="w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-95"
+                      style={{ background: 'var(--space-elev-2)', color: 'var(--txt-dim)', border: '1px solid var(--hairline)' }}>
+                      <ChevronRight size={15} strokeWidth={1.75}/>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Footer — total no mês */}
+        {porMes.length > 0 && (
+          <div className="shrink-0 px-5 py-3 flex items-center justify-between" style={{ borderTop: '1px solid var(--hairline)' }}>
+            <p className="text-xs t-dim">{porMes.length} aniversariante{porMes.length !== 1 ? 's' : ''} em {MESES[mesFiltro - 1]}</p>
+            {porMes.filter(a => a.hoje).length > 0 && (
+              <p className="text-xs font-black flex items-center gap-1" style={{ color: '#f472b6' }}>
+                <PartyPopper size={13}/> {porMes.filter(a => a.hoje).length} hoje!
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Clientes() {
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -460,6 +696,7 @@ export default function Clientes() {
   const [ordenar, setOrdenar] = useState('recente'); // 'recente' | 'pedidos' | 'nome'
   const [seg, setSeg] = useState('todos'); // segmento ativo
   const [aniversarios, setAniversarios] = useState([]);
+  const [modalAniversarios, setModalAniversarios] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -553,6 +790,11 @@ export default function Clientes() {
             <span className="w-7 h-7 flex items-center justify-center rounded-lg" style={{ background: 'rgba(236,72,153,0.15)' }}><Cake size={15} strokeWidth={1.75} style={{ color: '#ec4899' }} /></span>
             <h3 className="text-sm font-black" style={{ color: 'var(--cor-texto, #fff)' }}>Próximos aniversários</h3>
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(236,72,153,0.15)', color: '#f472b6' }}>{aniversarios.length}</span>
+            <button onClick={() => setModalAniversarios(true)}
+              className="ml-auto flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all"
+              style={{ background: 'rgba(236,72,153,0.12)', color: '#f472b6', border: '1px solid rgba(236,72,153,0.25)' }}>
+              Ver todos <ChevronRight size={12}/>
+            </button>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
             {aniversarios.map(a => {
@@ -681,6 +923,21 @@ export default function Clientes() {
           cliente={clienteSelecionado}
           onClose={() => setClienteSelecionado(null)}
           onResgatar={handleResgatar}
+          onAtualizado={c => {
+            setClientes(cs => cs.map(x => x.id === c.id ? { ...x, ...c } : x));
+            setClienteSelecionado(p => p ? { ...p, ...c } : p);
+          }}
+        />
+      )}
+
+      {/* Modal aniversários */}
+      {modalAniversarios && (
+        <ModalAniversarios
+          onClose={() => setModalAniversarios(false)}
+          onAbrirCliente={id => {
+            const c = clientes.find(x => x.id === id);
+            if (c) { setClienteSelecionado(c); setModalAniversarios(false); }
+          }}
         />
       )}
     </div>
