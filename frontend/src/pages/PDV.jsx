@@ -939,79 +939,173 @@ const BARRA_ANIM_CSS = `
 `;
 
 const TRANSICOES = [
-  { id: 'fade',       nome: 'Fade',        desc: 'Dissolve suave' },
-  { id: 'slide-up',   nome: 'Slide Up',    desc: 'Sobe de baixo' },
-  { id: 'slide-left', nome: 'Slide Left',  desc: 'Entra pela direita' },
-  { id: 'typewriter', nome: 'Typewriter',  desc: 'Digita letra a letra' },
-  { id: 'marquee',    nome: 'Letreiro',    desc: 'Rola continuamente' },
-  { id: 'flip',       nome: 'Flip',        desc: 'Vira como placar' },
-  { id: 'glitch',     nome: 'Glitch',      desc: 'Falha digital' },
-  { id: 'zoom',       nome: 'Zoom',        desc: 'Aparece do centro' },
+  { id: 'fade',        nome: 'Fade',         desc: 'Dissolve suave',        cat: 'clássico' },
+  { id: 'slide-up',    nome: 'Slide Up',     desc: 'Sobe de baixo',         cat: 'clássico' },
+  { id: 'slide-left',  nome: 'Slide Left',   desc: 'Entra pela direita',    cat: 'clássico' },
+  { id: 'zoom',        nome: 'Zoom',         desc: 'Aparece do centro',     cat: 'clássico' },
+  { id: 'flip',        nome: 'Flip',         desc: 'Vira como placar',      cat: 'clássico' },
+  { id: 'bounce',      nome: 'Bounce',       desc: 'Quica ao entrar',       cat: 'clássico' },
+  { id: 'typewriter',  nome: 'Typewriter',   desc: 'Digita letra a letra',  cat: 'texto' },
+  { id: 'scramble',    nome: 'Scramble',     desc: 'Embaralha antes de revelar', cat: 'texto' },
+  { id: 'marquee',     nome: 'Letreiro',     desc: 'Rola continuamente',    cat: 'texto' },
+  { id: 'wave',        nome: 'Wave',         desc: 'Ondula letra a letra',  cat: 'texto' },
+  { id: 'glitch',      nome: 'Glitch',       desc: 'Falha digital intensa', cat: 'cyber' },
+  { id: 'neon-pulse',  nome: 'Neon Pulse',   desc: 'Pulsa como néon',       cat: 'cyber' },
+  { id: 'scan',        nome: 'Scanner',      desc: 'Linha de leitura',      cat: 'cyber' },
+  { id: 'shake',       nome: 'Shake',        desc: 'Vibra e estabiliza',    cat: 'cyber' },
+  { id: 'reveal',      nome: 'Reveal',       desc: 'Cortina da esquerda',   cat: 'cinema' },
+  { id: 'blur-in',     nome: 'Blur In',      desc: 'Foca do desfoque',      cat: 'cinema' },
+  { id: 'elastic',     nome: 'Elastic',      desc: 'Mola elástica',         cat: 'cinema' },
+  { id: 'rotate3d',    nome: 'Rotate 3D',    desc: 'Gira em perspectiva',   cat: 'cinema' },
 ];
 
 const EXTRA_ANIM_CSS = `
-@keyframes tw-blink { 0%,100%{opacity:1} 50%{opacity:0} }
-@keyframes letreiro-scroll { 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
-@keyframes flip-in { 0%{transform:rotateX(-90deg);opacity:0} 100%{transform:rotateX(0);opacity:1} }
-@keyframes flip-out { 0%{transform:rotateX(0);opacity:1} 100%{transform:rotateX(90deg);opacity:0} }
-@keyframes zoom-in { 0%{transform:scale(0.5);opacity:0} 100%{transform:scale(1);opacity:1} }
-@keyframes zoom-out { 0%{transform:scale(1);opacity:1} 100%{transform:scale(1.5);opacity:0} }
-@keyframes slide-up-in  { 0%{transform:translateY(20px);opacity:0} 100%{transform:translateY(0);opacity:1} }
-@keyframes slide-up-out { 0%{transform:translateY(0);opacity:1} 100%{transform:translateY(-20px);opacity:0} }
-@keyframes slide-left-in  { 0%{transform:translateX(40px);opacity:0} 100%{transform:translateX(0);opacity:1} }
-@keyframes slide-left-out { 0%{transform:translateX(0);opacity:1} 100%{transform:translateX(-40px);opacity:0} }
-@keyframes glitch-in { 0%{clip-path:inset(50% 0 50% 0);transform:translateX(-4px)} 25%{clip-path:inset(10% 0 80% 0);transform:translateX(4px)} 50%{clip-path:inset(60% 0 20% 0);transform:translateX(-2px)} 75%{clip-path:inset(0);transform:translateX(0)} 100%{clip-path:none;transform:none;opacity:1} }
+@keyframes tw-blink      { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes letreiro-scroll { 0%{transform:translateX(110%)} 100%{transform:translateX(-110%)} }
+@keyframes flip-in       { 0%{transform:rotateX(-90deg);opacity:0} 100%{transform:rotateX(0);opacity:1} }
+@keyframes zoom-in       { 0%{transform:scale(0.4);opacity:0} 100%{transform:scale(1);opacity:1} }
+@keyframes slide-up-in   { 0%{transform:translateY(var(--dist,24px));opacity:0} 100%{transform:translateY(0);opacity:1} }
+@keyframes slide-left-in { 0%{transform:translateX(var(--dist,50px));opacity:0} 100%{transform:translateX(0);opacity:1} }
+@keyframes bounce-in     { 0%{transform:translateY(-40px);opacity:0} 60%{transform:translateY(6px)} 80%{transform:translateY(-3px)} 100%{transform:translateY(0);opacity:1} }
+@keyframes glitch-in     { 0%{clip-path:inset(50% 0 50% 0);transform:translateX(-6px);color:#ff00aa} 20%{clip-path:inset(10% 0 80% 0);transform:translateX(6px)} 40%{clip-path:inset(70% 0 10% 0);transform:translateX(-3px);color:#00ffcc} 60%{clip-path:inset(20% 0 60% 0);transform:translateX(3px)} 80%{clip-path:inset(0);transform:translateX(0)} 100%{clip-path:none;transform:none} }
+@keyframes reveal-in     { 0%{clip-path:inset(0 100% 0 0)} 100%{clip-path:inset(0 0% 0 0)} }
+@keyframes blur-in       { 0%{filter:blur(var(--blur,12px));opacity:0} 100%{filter:blur(0);opacity:1} }
+@keyframes elastic-in    { 0%{transform:scaleX(0);opacity:0;transform-origin:left} 50%{transform:scaleX(1.1)} 70%{transform:scaleX(0.95)} 100%{transform:scaleX(1);opacity:1} }
+@keyframes rotate3d-in   { 0%{transform:perspective(400px) rotateY(-90deg);opacity:0} 100%{transform:perspective(400px) rotateY(0);opacity:1} }
+@keyframes shake-in      { 0%{transform:translateX(-8px)} 15%{transform:translateX(8px)} 30%{transform:translateX(-6px)} 45%{transform:translateX(6px)} 60%{transform:translateX(-3px)} 75%{transform:translateX(3px)} 90%{transform:translateX(-1px)} 100%{transform:translateX(0);opacity:1} }
+@keyframes neon-pulse-kf { 0%,100%{opacity:1;text-shadow:var(--glow)} 50%{opacity:0.6;text-shadow:none} }
+@keyframes scan-line     { 0%{background-position:0 -100%} 100%{background-position:0 200%} }
+@keyframes wave-char     { 0%,100%{transform:translateY(0)} 50%{transform:translateY(var(--wave-h,-8px))} }
 `;
 
+// Hook: scramble de texto
+function useScramble(text, active, speed = 40) {
+  const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%&*';
+  const [out, setOut] = useState(text);
+  useEffect(() => {
+    if (!active) { setOut(text); return; }
+    let iter = 0;
+    const max = text.length * 3;
+    const t = setInterval(() => {
+      setOut(text.split('').map((c, i) => {
+        if (c === ' ') return ' ';
+        if (i < iter / 3) return c;
+        return CHARS[Math.floor(Math.random() * CHARS.length)];
+      }).join(''));
+      iter++;
+      if (iter > max) { setOut(text); clearInterval(t); }
+    }, speed);
+    return () => clearInterval(t);
+  }, [text, active]);
+  return out;
+}
+
+// Hook: typewriter
 function useTypewriter(text, active, speed = 50) {
   const [displayed, setDisplayed] = useState('');
   useEffect(() => {
     if (!active) { setDisplayed(text); return; }
     setDisplayed('');
     let i = 0;
-    const t = setInterval(() => {
-      i++;
-      setDisplayed(text.slice(0, i));
-      if (i >= text.length) clearInterval(t);
-    }, speed);
+    const t = setInterval(() => { i++; setDisplayed(text.slice(0, i)); if (i >= text.length) clearInterval(t); }, speed);
     return () => clearInterval(t);
   }, [text, active]);
   return displayed;
 }
 
-function FraseDisplay({ frase, transicaoId, estiloTexto, estiloWrap }) {
-  const [fase, setFase] = useState('in'); // 'in' | 'show' | 'out'
-  const twText = useTypewriter(frase, transicaoId === 'typewriter' && fase === 'in');
+function FraseDisplay({ frase, transicaoId, estiloTexto, estiloWrap, velocidade = 5, intensidade = 5 }) {
+  const [fase, setFase] = useState('in');
+  const dur = `${0.15 + (11 - velocidade) * 0.1}s`;
+  const dist = `${8 + intensidade * 4}px`;
+  const blur = `${intensidade * 2}px`;
+  const waveH = `-${4 + intensidade}px`;
+  const glowStr = estiloTexto?.textShadow || `0 0 ${intensidade * 3}px currentColor`;
 
-  useEffect(() => { setFase('in'); const t = setTimeout(() => setFase('show'), 600); return () => clearTimeout(t); }, [frase, transicaoId]);
+  const isTypewriter = transicaoId === 'typewriter';
+  const isScramble   = transicaoId === 'scramble';
+  const twText  = useTypewriter(frase, isTypewriter && fase === 'in', Math.max(20, 120 - velocidade * 10));
+  const scText  = useScramble(frase, isScramble && fase === 'in', Math.max(15, 80 - velocidade * 7));
 
-  const animIn = {
-    fade:        { animation: 'barra-neon-pulse 0.4s ease forwards', opacity: fase === 'in' ? 0 : 1, transition: 'opacity 0.4s' },
-    'slide-up':  { animation: fase === 'in' ? 'slide-up-in 0.4s ease forwards' : 'none' },
-    'slide-left':{ animation: fase === 'in' ? 'slide-left-in 0.4s ease forwards' : 'none' },
-    typewriter:  {},
-    marquee:     {},
-    flip:        { animation: fase === 'in' ? 'flip-in 0.5s ease forwards' : 'none', transformOrigin: 'center', perspective: 400 },
-    glitch:      { animation: fase === 'in' ? 'glitch-in 0.5s steps(1) forwards' : 'none' },
-    zoom:        { animation: fase === 'in' ? 'zoom-in 0.4s ease forwards' : 'none' },
-  }[transicaoId] || {};
+  useEffect(() => {
+    setFase('in');
+    const t = setTimeout(() => setFase('show'), parseFloat(dur) * 1000 + 100);
+    return () => clearTimeout(t);
+  }, [frase, transicaoId]);
 
+  // Letreiro contínuo
   if (transicaoId === 'marquee') {
+    const scrollDur = `${Math.max(3, 16 - velocidade * 1.2)}s`;
     return (
-      <div style={{ ...estiloWrap, overflow: 'hidden', minWidth: 160, maxWidth: 320 }}>
-        <div style={{ ...estiloTexto, display: 'inline-block', whiteSpace: 'nowrap', animation: 'letreiro-scroll 8s linear infinite' }}>
+      <div style={{ ...estiloWrap, overflow: 'hidden', minWidth: 160, maxWidth: 340 }}>
+        <div style={{ ...estiloTexto, display: 'inline-block', whiteSpace: 'nowrap', animation: `letreiro-scroll ${scrollDur} linear infinite` }}>
           {frase}&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;{frase}
         </div>
       </div>
     );
   }
 
-  const texto = transicaoId === 'typewriter' ? twText : frase;
+  // Wave: letra a letra
+  if (transicaoId === 'wave') {
+    return (
+      <div style={{ ...estiloWrap }}>
+        <span style={{ ...estiloTexto, display: 'inline-flex', gap: 0 }}>
+          {frase.split('').map((c, i) => (
+            <span key={i} style={{ display: 'inline-block', animationName: 'wave-char', animationDuration: dur, animationDelay: `${i * 0.05}s`, animationIterationCount: 'infinite', animationTimingFunction: 'ease-in-out', '--wave-h': waveH }}>
+              {c === ' ' ? ' ' : c}
+            </span>
+          ))}
+        </span>
+      </div>
+    );
+  }
+
+  // Neon Pulse contínuo
+  if (transicaoId === 'neon-pulse') {
+    const pulseDur = `${Math.max(0.3, 2.5 - velocidade * 0.2)}s`;
+    return (
+      <div style={{ ...estiloWrap }}>
+        <span style={{ ...estiloTexto, animation: `neon-pulse-kf ${pulseDur} ease-in-out infinite`, '--glow': glowStr }}>{frase}</span>
+      </div>
+    );
+  }
+
+  // Scanner
+  if (transicaoId === 'scan') {
+    const scanDur = `${Math.max(0.5, 3 - velocidade * 0.2)}s`;
+    return (
+      <div style={{ ...estiloWrap, position: 'relative', overflow: 'hidden' }}>
+        <span style={estiloTexto}>{frase}</span>
+        <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(to bottom, transparent 0%, rgba(0,255,150,${0.05 + intensidade * 0.03}) 50%, transparent 100%)`, backgroundSize: '100% 40%', animation: `scan-line ${scanDur} linear infinite`, pointerEvents: 'none' }} />
+      </div>
+    );
+  }
+
+  // Inline animation map
+  const anims = {
+    fade:       { opacity: fase === 'in' ? 0 : 1, transition: `opacity ${dur}` },
+    'slide-up': { animation: fase === 'in' ? `slide-up-in ${dur} ease forwards` : 'none', '--dist': dist },
+    'slide-left':{ animation: fase === 'in' ? `slide-left-in ${dur} ease forwards` : 'none', '--dist': dist },
+    zoom:       { animation: fase === 'in' ? `zoom-in ${dur} ease forwards` : 'none' },
+    flip:       { animation: fase === 'in' ? `flip-in ${dur} ease forwards` : 'none', transformOrigin: 'center' },
+    bounce:     { animation: fase === 'in' ? `bounce-in ${dur} cubic-bezier(.36,.07,.19,.97) forwards` : 'none' },
+    glitch:     { animation: fase === 'in' ? `glitch-in ${dur} steps(${Math.max(2, intensidade)}) forwards` : 'none' },
+    reveal:     { animation: fase === 'in' ? `reveal-in ${dur} ease forwards` : 'none' },
+    'blur-in':  { animation: fase === 'in' ? `blur-in ${dur} ease forwards` : 'none', '--blur': blur },
+    elastic:    { animation: fase === 'in' ? `elastic-in ${dur} ease forwards` : 'none' },
+    rotate3d:   { animation: fase === 'in' ? `rotate3d-in ${dur} ease forwards` : 'none' },
+    shake:      { animation: fase === 'in' ? `shake-in ${dur} ease forwards` : 'none', opacity: fase === 'in' ? 0 : 1 },
+    typewriter: {},
+    scramble:   {},
+  };
+
+  const texto = isTypewriter ? twText : isScramble ? scText : frase;
+  const animStyle = anims[transicaoId] || anims.fade;
+
   return (
     <div style={{ ...estiloWrap, overflow: 'hidden' }}>
-      <span style={{ ...estiloTexto, display: 'inline-block', ...animIn }}>
+      <span style={{ ...estiloTexto, display: 'inline-block', ...animStyle }}>
         {texto}
-        {transicaoId === 'typewriter' && texto.length < frase.length && (
+        {isTypewriter && texto.length < frase.length && (
           <span style={{ animation: 'tw-blink 0.7s infinite', marginLeft: 1 }}>▌</span>
         )}
       </span>
@@ -1026,9 +1120,12 @@ function ModalLetreiro({ onClose, estiloId }) {
   const [frases,      setFrases]      = useState(() => ler('pdv_letreiro_frases', ['🍣 Bem-vindo ao 37 Sushi!', '🔥 Pedidos no WhatsApp', '⭐ Qualidade premium']));
   const [transicao,   setTransicao]   = useState(() => ler('pdv_letreiro_transicao', 'fade'));
   const [intervalo,   setIntervalo]   = useState(() => ler('pdv_letreiro_intervalo', 4));
+  const [velocidade,  setVelocidade]  = useState(() => ler('pdv_letreiro_velocidade', 5));
+  const [intensidade, setIntensidade] = useState(() => ler('pdv_letreiro_intensidade', 5));
   const [ativo,       setAtivo]       = useState(() => ler('pdv_letreiro_ativo', false));
   const [novaFrase,   setNovaFrase]   = useState('');
   const [previewIdx,  setPreviewIdx]  = useState(0);
+  const [catFiltro,   setCatFiltro]   = useState('todos');
   const estilo = ESTILOS_BARRA.find(e => e.id === estiloId) || ESTILOS_BARRA[0];
 
   useEffect(() => {
@@ -1053,7 +1150,11 @@ function ModalLetreiro({ onClose, estiloId }) {
   }
   function mudarTransicao(t) { setTransicao(t); salvar('pdv_letreiro_transicao', t); }
   function mudarIntervalo(v) { setIntervalo(v); salvar('pdv_letreiro_intervalo', v); }
+  function mudarVelocidade(v) { setVelocidade(v); salvar('pdv_letreiro_velocidade', v); }
+  function mudarIntensidade(v) { setIntensidade(v); salvar('pdv_letreiro_intensidade', v); }
   function salvarTudo() { onClose(); }
+  const CATS = ['todos', ...new Set(TRANSICOES.map(t => t.cat))];
+  const transicoesFiltradas = catFiltro === 'todos' ? TRANSICOES : TRANSICOES.filter(t => t.cat === catFiltro);
 
   const fraseAtual = frases[previewIdx] || '';
 
@@ -1080,7 +1181,7 @@ function ModalLetreiro({ onClose, estiloId }) {
             <p className="text-[10px] font-black t-dim tracking-widest mb-2">PREVIEW AO VIVO</p>
             <div className="rounded-xl p-4 flex items-center justify-center" style={{ background: '#0a0a0a', minHeight: 56, border: '1px solid rgba(255,255,255,0.06)' }}>
               {frases.length > 0
-                ? <FraseDisplay frase={fraseAtual} transicaoId={transicao} estiloTexto={estilo.valor} estiloWrap={{}} />
+                ? <FraseDisplay frase={fraseAtual} transicaoId={transicao} estiloTexto={estilo.valor} estiloWrap={{}} velocidade={velocidade} intensidade={intensidade} />
                 : <span className="text-xs t-faint">Adicione frases abaixo</span>}
             </div>
           </div>
@@ -1131,8 +1232,20 @@ function ModalLetreiro({ onClose, estiloId }) {
           {/* Transição */}
           <div>
             <p className="text-[10px] font-black t-dim tracking-widest mb-2">TRANSIÇÃO</p>
+            {/* Filtro por categoria */}
+            <div className="flex gap-1.5 mb-2 flex-wrap">
+              {CATS.map(c => (
+                <button key={c} onClick={() => setCatFiltro(c)}
+                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold capitalize transition-all"
+                  style={catFiltro === c
+                    ? { background: 'rgba(var(--accent-rgb),0.2)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.4)' }
+                    : { background: 'var(--space-elev-2)', color: 'var(--t-dim)', border: '1px solid transparent' }}>
+                  {c}
+                </button>
+              ))}
+            </div>
             <div className="grid grid-cols-2 gap-1.5">
-              {TRANSICOES.map(t => (
+              {transicoesFiltradas.map(t => (
                 <button key={t.id} onClick={() => mudarTransicao(t.id)}
                   className="px-3 py-2.5 rounded-xl text-left transition-all"
                   style={transicao === t.id
@@ -1145,12 +1258,32 @@ function ModalLetreiro({ onClose, estiloId }) {
             </div>
           </div>
 
-          {/* Intervalo */}
-          <div>
-            <p className="text-[10px] font-black t-dim tracking-widest mb-2">INTERVALO ENTRE FRASES — {intervalo}s</p>
-            <input type="range" min={2} max={15} value={intervalo} onChange={e => mudarIntervalo(Number(e.target.value))}
-              className="w-full accent-orange-500" />
-            <div className="flex justify-between text-[10px] t-faint mt-1"><span>2s</span><span>15s</span></div>
+          {/* Sliders de controle */}
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between mb-1.5">
+                <p className="text-[10px] font-black t-dim tracking-widest">VELOCIDADE</p>
+                <span className="text-[10px] t-dim">{velocidade <= 3 ? '🐢 Lento' : velocidade <= 7 ? '⚡ Médio' : '🚀 Rápido'}</span>
+              </div>
+              <input type="range" min={1} max={10} value={velocidade} onChange={e => mudarVelocidade(Number(e.target.value))}
+                className="w-full accent-orange-500" />
+              <div className="flex justify-between text-[10px] t-faint mt-0.5"><span>Lento</span><span>Rápido</span></div>
+            </div>
+            <div>
+              <div className="flex justify-between mb-1.5">
+                <p className="text-[10px] font-black t-dim tracking-widest">INTENSIDADE</p>
+                <span className="text-[10px] t-dim">{intensidade <= 3 ? '🔅 Suave' : intensidade <= 7 ? '✨ Médio' : '💥 Intenso'}</span>
+              </div>
+              <input type="range" min={1} max={10} value={intensidade} onChange={e => mudarIntensidade(Number(e.target.value))}
+                className="w-full accent-orange-500" />
+              <div className="flex justify-between text-[10px] t-faint mt-0.5"><span>Suave</span><span>Intenso</span></div>
+            </div>
+            <div>
+              <p className="text-[10px] font-black t-dim tracking-widest mb-1.5">INTERVALO ENTRE FRASES — {intervalo}s</p>
+              <input type="range" min={2} max={15} value={intervalo} onChange={e => mudarIntervalo(Number(e.target.value))}
+                className="w-full accent-orange-500" />
+              <div className="flex justify-between text-[10px] t-faint mt-0.5"><span>2s</span><span>15s</span></div>
+            </div>
           </div>
         </div>
 
@@ -1173,19 +1306,22 @@ function BarraMetricas({ metricasHoje, faturamentoHoje }) {
   const [abrirConfig, setAbrirConfig] = useState(false);
   const [abrirLetreiro, setAbrirLetreiro] = useState(false);
   const [fraseIdx,  setFraseIdx]  = useState(0);
-  const [letrAtivo, setLetrAtivo] = useState(() => ler('pdv_letreiro_ativo', false));
-  const [frases,    setFrases]    = useState(() => ler('pdv_letreiro_frases', []));
-  const [transicao, setTransicao] = useState(() => ler('pdv_letreiro_transicao', 'fade'));
-  const [intervalo, setIntervalo] = useState(() => ler('pdv_letreiro_intervalo', 4));
+  const [letrAtivo,   setLetrAtivo]   = useState(() => ler('pdv_letreiro_ativo', false));
+  const [frases,      setFrases]      = useState(() => ler('pdv_letreiro_frases', []));
+  const [transicao,   setTransicao]   = useState(() => ler('pdv_letreiro_transicao', 'fade'));
+  const [intervalo,   setIntervalo]   = useState(() => ler('pdv_letreiro_intervalo', 4));
+  const [velocidade,  setVelocidade]  = useState(() => ler('pdv_letreiro_velocidade', 5));
+  const [intensidade, setIntensidade] = useState(() => ler('pdv_letreiro_intensidade', 5));
   const refConfig = useRef(null);
   const estilo = ESTILOS_BARRA.find(e => e.id === estiloId) || ESTILOS_BARRA[0];
 
-  // Recarrega config do localStorage ao fechar o modal
   function recarregarConfig() {
     setLetrAtivo(ler('pdv_letreiro_ativo', false));
     setFrases(ler('pdv_letreiro_frases', []));
     setTransicao(ler('pdv_letreiro_transicao', 'fade'));
     setIntervalo(ler('pdv_letreiro_intervalo', 4));
+    setVelocidade(ler('pdv_letreiro_velocidade', 5));
+    setIntensidade(ler('pdv_letreiro_intensidade', 5));
   }
 
   useEffect(() => {
@@ -1210,7 +1346,7 @@ function BarraMetricas({ metricasHoje, faturamentoHoje }) {
     <div className={`flex items-center gap-2 relative ${estilo.anim}`}>
       {/* Conteúdo: letreiro OU métricas */}
       {letrAtivo && frases.length > 0
-        ? <FraseDisplay frase={frases[fraseIdx] || ''} transicaoId={transicao} estiloTexto={estilo.valor} estiloWrap={estilo.wrap} />
+        ? <FraseDisplay frase={frases[fraseIdx] || ''} transicaoId={transicao} estiloTexto={estilo.valor} estiloWrap={estilo.wrap} velocidade={velocidade} intensidade={intensidade} />
         : (
           <div className="barra-wrap flex items-center gap-2 flex-wrap" style={estilo.wrap}>
             <span className="barra-valor" style={estilo.valor}>{brl(total)}</span>
