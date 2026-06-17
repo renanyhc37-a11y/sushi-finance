@@ -1221,13 +1221,18 @@ function ModalCriarPromocao({ sugestao, onClose, onSalvo }) {
   });
   const [salvando, setSalvando] = useState(false);
   const [itensCardapio, setItensCardapio] = useState([]);
-  const [itemRecompensa, setItemRecompensa] = useState('');
+  const [recompensas, setRecompensas] = useState(['']);
   useEffect(() => {
     fetch(`${BASE}/cardapio`)
       .then(r => r.json())
       .then(cats => setItensCardapio(cats.flatMap(c => (c.itens || []).map(i => ({ ...i, _cat: c.nome })))))
       .catch(() => {});
   }, []);
+
+  function atualizarRecompensa(lista) {
+    setRecompensas(lista);
+    setForm(p => ({ ...p, recompensa: lista.filter(Boolean).join(' + ') }));
+  }
 
   async function salvar() {
     if (!form.nome.trim()) return toast.error('Nome é obrigatório');
@@ -1304,30 +1309,47 @@ function ModalCriarPromocao({ sugestao, onClose, onSalvo }) {
             </div>
           </div>
 
-          {/* Recompensa */}
+          {/* Recompensa multi-item */}
           <div>
             <label className="text-[10px] t-dim font-bold tracking-widest mb-1.5 block">RECOMPENSA / PRÊMIO</label>
-            {itensCardapio.length > 0 && (
-              <div className="mb-2">
-                <SelectCardapio itens={itensCardapio} value={itemRecompensa}
-                  placeholder="— escolher item do cardápio —"
-                  onChange={item => {
-                    const nome = item ? item.nome : '';
-                    setItemRecompensa(nome);
-                    if (nome) setForm(p => ({ ...p, recompensa: `1 ${nome} grátis` }));
-                  }} />
-              </div>
-            )}
-            <input value={form.recompensa} onChange={e => setForm(p => ({ ...p, recompensa: e.target.value }))}
-              placeholder="Ex: 1 Temaki Philadelphia grátis, 1 Hot grátis…"
-              className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none"
-              style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(16,185,129,0.4)' }}
-              onFocus={e => e.target.style.borderColor = '#10b981'}
-              onBlur={e => e.target.style.borderColor = 'rgba(16,185,129,0.4)'} />
+            <div className="space-y-2">
+              {recompensas.map((rec, idx) => (
+                <div key={idx} className="flex gap-2 items-center">
+                  <div className="flex-1">
+                    {itensCardapio.length > 0 && (
+                      <SelectCardapio itens={itensCardapio} value={rec}
+                        placeholder="— escolher do cardápio —"
+                        onChange={item => {
+                          const lista = [...recompensas];
+                          lista[idx] = item ? `1 ${item.nome} grátis` : '';
+                          atualizarRecompensa(lista);
+                        }} />
+                    )}
+                    <input value={rec}
+                      onChange={e => { const l = [...recompensas]; l[idx] = e.target.value; atualizarRecompensa(l); }}
+                      placeholder="Ou digite: 1 Temaki grátis…"
+                      className="w-full px-3 py-2 rounded-xl text-sm t-strong outline-none mt-1"
+                      style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(16,185,129,0.3)' }} />
+                  </div>
+                  {recompensas.length > 1 && (
+                    <button type="button" onClick={() => atualizarRecompensa(recompensas.filter((_, i) => i !== idx))}
+                      className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg"
+                      style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171' }}>
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => atualizarRecompensa([...recompensas, ''])}
+              className="mt-2 w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+              style={{ background: 'rgba(16,185,129,0.08)', border: '1px dashed rgba(16,185,129,0.3)', color: '#10b981' }}>
+              <Plus size={13} /> Adicionar outro prêmio
+            </button>
             {sugestao?.descricao && (
               <p className="text-xs t-faint mt-1.5 flex items-start gap-1">
                 <span className="shrink-0">💡</span>
-                <span>Sugestão da IA: <em>"{sugestao.descricao}"</em> — edite acima para personalizar o prêmio.</span>
+                <span>Sugestão: <em>"{sugestao.descricao}"</em></span>
               </p>
             )}
           </div>
