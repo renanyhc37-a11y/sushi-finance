@@ -938,11 +938,261 @@ const BARRA_ANIM_CSS = `
 .barra-holo-shift .barra-wrap { background-size: 200% 200%; animation: barra-holo-shift 4s ease infinite; }
 `;
 
+const TRANSICOES = [
+  { id: 'fade',       nome: 'Fade',        desc: 'Dissolve suave' },
+  { id: 'slide-up',   nome: 'Slide Up',    desc: 'Sobe de baixo' },
+  { id: 'slide-left', nome: 'Slide Left',  desc: 'Entra pela direita' },
+  { id: 'typewriter', nome: 'Typewriter',  desc: 'Digita letra a letra' },
+  { id: 'marquee',    nome: 'Letreiro',    desc: 'Rola continuamente' },
+  { id: 'flip',       nome: 'Flip',        desc: 'Vira como placar' },
+  { id: 'glitch',     nome: 'Glitch',      desc: 'Falha digital' },
+  { id: 'zoom',       nome: 'Zoom',        desc: 'Aparece do centro' },
+];
+
+const EXTRA_ANIM_CSS = `
+@keyframes tw-blink { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes letreiro-scroll { 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
+@keyframes flip-in { 0%{transform:rotateX(-90deg);opacity:0} 100%{transform:rotateX(0);opacity:1} }
+@keyframes flip-out { 0%{transform:rotateX(0);opacity:1} 100%{transform:rotateX(90deg);opacity:0} }
+@keyframes zoom-in { 0%{transform:scale(0.5);opacity:0} 100%{transform:scale(1);opacity:1} }
+@keyframes zoom-out { 0%{transform:scale(1);opacity:1} 100%{transform:scale(1.5);opacity:0} }
+@keyframes slide-up-in  { 0%{transform:translateY(20px);opacity:0} 100%{transform:translateY(0);opacity:1} }
+@keyframes slide-up-out { 0%{transform:translateY(0);opacity:1} 100%{transform:translateY(-20px);opacity:0} }
+@keyframes slide-left-in  { 0%{transform:translateX(40px);opacity:0} 100%{transform:translateX(0);opacity:1} }
+@keyframes slide-left-out { 0%{transform:translateX(0);opacity:1} 100%{transform:translateX(-40px);opacity:0} }
+@keyframes glitch-in { 0%{clip-path:inset(50% 0 50% 0);transform:translateX(-4px)} 25%{clip-path:inset(10% 0 80% 0);transform:translateX(4px)} 50%{clip-path:inset(60% 0 20% 0);transform:translateX(-2px)} 75%{clip-path:inset(0);transform:translateX(0)} 100%{clip-path:none;transform:none;opacity:1} }
+`;
+
+function useTypewriter(text, active, speed = 50) {
+  const [displayed, setDisplayed] = useState('');
+  useEffect(() => {
+    if (!active) { setDisplayed(text); return; }
+    setDisplayed('');
+    let i = 0;
+    const t = setInterval(() => {
+      i++;
+      setDisplayed(text.slice(0, i));
+      if (i >= text.length) clearInterval(t);
+    }, speed);
+    return () => clearInterval(t);
+  }, [text, active]);
+  return displayed;
+}
+
+function FraseDisplay({ frase, transicaoId, estiloTexto, estiloWrap }) {
+  const [fase, setFase] = useState('in'); // 'in' | 'show' | 'out'
+  const twText = useTypewriter(frase, transicaoId === 'typewriter' && fase === 'in');
+
+  useEffect(() => { setFase('in'); const t = setTimeout(() => setFase('show'), 600); return () => clearTimeout(t); }, [frase, transicaoId]);
+
+  const animIn = {
+    fade:        { animation: 'barra-neon-pulse 0.4s ease forwards', opacity: fase === 'in' ? 0 : 1, transition: 'opacity 0.4s' },
+    'slide-up':  { animation: fase === 'in' ? 'slide-up-in 0.4s ease forwards' : 'none' },
+    'slide-left':{ animation: fase === 'in' ? 'slide-left-in 0.4s ease forwards' : 'none' },
+    typewriter:  {},
+    marquee:     {},
+    flip:        { animation: fase === 'in' ? 'flip-in 0.5s ease forwards' : 'none', transformOrigin: 'center', perspective: 400 },
+    glitch:      { animation: fase === 'in' ? 'glitch-in 0.5s steps(1) forwards' : 'none' },
+    zoom:        { animation: fase === 'in' ? 'zoom-in 0.4s ease forwards' : 'none' },
+  }[transicaoId] || {};
+
+  if (transicaoId === 'marquee') {
+    return (
+      <div style={{ ...estiloWrap, overflow: 'hidden', minWidth: 160, maxWidth: 320 }}>
+        <div style={{ ...estiloTexto, display: 'inline-block', whiteSpace: 'nowrap', animation: 'letreiro-scroll 8s linear infinite' }}>
+          {frase}&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;{frase}
+        </div>
+      </div>
+    );
+  }
+
+  const texto = transicaoId === 'typewriter' ? twText : frase;
+  return (
+    <div style={{ ...estiloWrap, overflow: 'hidden' }}>
+      <span style={{ ...estiloTexto, display: 'inline-block', ...animIn }}>
+        {texto}
+        {transicaoId === 'typewriter' && texto.length < frase.length && (
+          <span style={{ animation: 'tw-blink 0.7s infinite', marginLeft: 1 }}>▌</span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function ModalLetreiro({ onClose, estiloId }) {
+  const salvar = (k, v) => { localStorage.setItem(k, typeof v === 'object' ? JSON.stringify(v) : v); };
+  const ler    = (k, def) => { try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : def; } catch { return def; } };
+
+  const [frases,      setFrases]      = useState(() => ler('pdv_letreiro_frases', ['🍣 Bem-vindo ao 37 Sushi!', '🔥 Pedidos no WhatsApp', '⭐ Qualidade premium']));
+  const [transicao,   setTransicao]   = useState(() => ler('pdv_letreiro_transicao', 'fade'));
+  const [intervalo,   setIntervalo]   = useState(() => ler('pdv_letreiro_intervalo', 4));
+  const [ativo,       setAtivo]       = useState(() => ler('pdv_letreiro_ativo', false));
+  const [novaFrase,   setNovaFrase]   = useState('');
+  const [previewIdx,  setPreviewIdx]  = useState(0);
+  const estilo = ESTILOS_BARRA.find(e => e.id === estiloId) || ESTILOS_BARRA[0];
+
+  useEffect(() => {
+    if (!frases.length) return;
+    const t = setInterval(() => setPreviewIdx(i => (i + 1) % frases.length), intervalo * 1000);
+    return () => clearInterval(t);
+  }, [frases, intervalo]);
+
+  function adicionarFrase() {
+    if (!novaFrase.trim()) return;
+    const novas = [...frases, novaFrase.trim()];
+    setFrases(novas); salvar('pdv_letreiro_frases', novas); setNovaFrase('');
+  }
+  function removerFrase(i) { const novas = frases.filter((_, j) => j !== i); setFrases(novas); salvar('pdv_letreiro_frases', novas); }
+  function moverFrase(i, dir) {
+    const novas = [...frases]; const j = i + dir;
+    if (j < 0 || j >= novas.length) return;
+    [novas[i], novas[j]] = [novas[j], novas[i]]; setFrases(novas); salvar('pdv_letreiro_frases', novas);
+  }
+  function salvarTudo() {
+    salvar('pdv_letreiro_transicao', transicao);
+    salvar('pdv_letreiro_intervalo', intervalo);
+    salvar('pdv_letreiro_ativo', ativo);
+    onClose();
+  }
+
+  const fraseAtual = frases[previewIdx] || '';
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}>
+      <div className="w-full max-w-lg rounded-2xl flex flex-col overflow-hidden" style={{ background: 'var(--space-elev)', border: '1px solid rgba(255,255,255,0.08)', maxHeight: '92vh', boxShadow: '0 24px 80px rgba(0,0,0,0.7)' }}>
+
+        {/* Header */}
+        <div className="px-5 py-4 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div>
+            <p className="font-black t-strong text-sm flex items-center gap-2">
+              <span>📺</span> Letreiro Personalizado
+            </p>
+            <p className="text-[10px] t-faint mt-0.5">Frases exibidas na barra do PDV com transições</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg t-dim" style={{ background: 'var(--space-elev-2)' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
+          {/* Preview ao vivo */}
+          <div>
+            <p className="text-[10px] font-black t-dim tracking-widest mb-2">PREVIEW AO VIVO</p>
+            <div className="rounded-xl p-4 flex items-center justify-center" style={{ background: '#0a0a0a', minHeight: 56, border: '1px solid rgba(255,255,255,0.06)' }}>
+              {frases.length > 0
+                ? <FraseDisplay frase={fraseAtual} transicaoId={transicao} estiloTexto={estilo.valor} estiloWrap={{}} />
+                : <span className="text-xs t-faint">Adicione frases abaixo</span>}
+            </div>
+          </div>
+
+          {/* On/Off */}
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl" style={{ background: 'var(--space-elev-2)' }}>
+            <div>
+              <p className="text-sm font-bold t-strong">Letreiro ativo</p>
+              <p className="text-[10px] t-dim mt-0.5">Substitui as métricas na barra do PDV</p>
+            </div>
+            <button onClick={() => setAtivo(v => !v)}
+              className="w-12 h-6 rounded-full relative transition-colors shrink-0"
+              style={{ background: ativo ? 'var(--accent)' : '#333' }}>
+              <div className="w-5 h-5 bg-white rounded-full absolute top-0.5 transition-all shadow" style={{ left: ativo ? '26px' : '2px' }} />
+            </button>
+          </div>
+
+          {/* Frases */}
+          <div>
+            <p className="text-[10px] font-black t-dim tracking-widest mb-2">FRASES ({frases.length})</p>
+            <div className="space-y-1.5 mb-2">
+              {frases.map((f, i) => (
+                <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'var(--space-elev-2)', border: previewIdx === i ? '1px solid rgba(var(--accent-rgb),0.3)' : '1px solid transparent' }}>
+                  <span className="text-[10px] t-faint w-4 shrink-0 text-center">{i + 1}</span>
+                  <span className="flex-1 text-sm t-strong truncate">{f}</span>
+                  <button onClick={() => moverFrase(i, -1)} disabled={i === 0} className="text-[10px] t-faint px-1 disabled:opacity-20">▲</button>
+                  <button onClick={() => moverFrase(i, 1)} disabled={i === frases.length - 1} className="text-[10px] t-faint px-1 disabled:opacity-20">▼</button>
+                  <button onClick={() => removerFrase(i)} className="w-6 h-6 flex items-center justify-center rounded-lg" style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171' }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input value={novaFrase} onChange={e => setNovaFrase(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && adicionarFrase()}
+                placeholder="Nova frase… (Enter para adicionar)"
+                className="flex-1 px-3 py-2 rounded-xl text-sm t-strong outline-none"
+                style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.06)' }} />
+              <button onClick={adicionarFrase}
+                className="px-3 py-2 rounded-xl text-xs font-bold shrink-0"
+                style={{ background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.3)' }}>
+                + Adicionar
+              </button>
+            </div>
+          </div>
+
+          {/* Transição */}
+          <div>
+            <p className="text-[10px] font-black t-dim tracking-widest mb-2">TRANSIÇÃO</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {TRANSICOES.map(t => (
+                <button key={t.id} onClick={() => setTransicao(t.id)}
+                  className="px-3 py-2.5 rounded-xl text-left transition-all"
+                  style={transicao === t.id
+                    ? { background: 'rgba(var(--accent-rgb),0.15)', border: '1px solid rgba(var(--accent-rgb),0.4)' }
+                    : { background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                  <p className="text-xs font-bold t-strong">{t.nome}</p>
+                  <p className="text-[10px] t-dim">{t.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Intervalo */}
+          <div>
+            <p className="text-[10px] font-black t-dim tracking-widest mb-2">INTERVALO ENTRE FRASES — {intervalo}s</p>
+            <input type="range" min={2} max={15} value={intervalo} onChange={e => setIntervalo(Number(e.target.value))}
+              className="w-full accent-orange-500" />
+            <div className="flex justify-between text-[10px] t-faint mt-1"><span>2s</span><span>15s</span></div>
+          </div>
+        </div>
+
+        <div className="px-5 pb-5 pt-3 flex gap-2 shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm font-bold t-dim" style={{ background: 'var(--space-elev-2)' }}>Cancelar</button>
+          <button onClick={salvarTudo}
+            className="flex-1 py-2.5 rounded-xl text-sm font-black t-strong"
+            style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent-2))' }}>
+            Salvar configurações
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BarraMetricas({ metricasHoje, faturamentoHoje }) {
-  const [estiloId, setEstiloId] = useState(() => localStorage.getItem('pdv_barra_estilo') || 'default');
+  const ler = (k, def) => { try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : def; } catch { return def; } };
+  const [estiloId,  setEstiloId]  = useState(() => localStorage.getItem('pdv_barra_estilo') || 'default');
   const [abrirConfig, setAbrirConfig] = useState(false);
+  const [abrirLetreiro, setAbrirLetreiro] = useState(false);
+  const [fraseIdx,  setFraseIdx]  = useState(0);
+  const [letrAtivo, setLetrAtivo] = useState(() => ler('pdv_letreiro_ativo', false));
+  const [frases,    setFrases]    = useState(() => ler('pdv_letreiro_frases', []));
+  const [transicao, setTransicao] = useState(() => ler('pdv_letreiro_transicao', 'fade'));
+  const [intervalo, setIntervalo] = useState(() => ler('pdv_letreiro_intervalo', 4));
   const refConfig = useRef(null);
   const estilo = ESTILOS_BARRA.find(e => e.id === estiloId) || ESTILOS_BARRA[0];
+
+  // Recarrega config do localStorage ao fechar o modal
+  function recarregarConfig() {
+    setLetrAtivo(ler('pdv_letreiro_ativo', false));
+    setFrases(ler('pdv_letreiro_frases', []));
+    setTransicao(ler('pdv_letreiro_transicao', 'fade'));
+    setIntervalo(ler('pdv_letreiro_intervalo', 4));
+  }
+
+  useEffect(() => {
+    if (!letrAtivo || !frases.length) return;
+    const t = setInterval(() => setFraseIdx(i => (i + 1) % frases.length), intervalo * 1000);
+    return () => clearInterval(t);
+  }, [letrAtivo, frases, intervalo]);
 
   useEffect(() => {
     function fechar(e) { if (refConfig.current && !refConfig.current.contains(e.target)) setAbrirConfig(false); }
@@ -954,20 +1204,28 @@ function BarraMetricas({ metricasHoje, faturamentoHoje }) {
   const total = m?.total || faturamentoHoje || 0;
 
   return (<>
-    <style>{BARRA_ANIM_CSS}</style>
+    <style>{BARRA_ANIM_CSS + EXTRA_ANIM_CSS}</style>
+    {abrirLetreiro && <ModalLetreiro estiloId={estiloId} onClose={() => { setAbrirLetreiro(false); recarregarConfig(); }} />}
+
     <div className={`flex items-center gap-2 relative ${estilo.anim}`}>
-      <div className="barra-wrap flex items-center gap-2 flex-wrap" style={estilo.wrap}>
-        <span className="barra-valor" style={estilo.valor}>{brl(total)}</span>
-        <span style={estilo.label}>hoje</span>
-        {m?.pix > 0 && <span style={estilo.chip('rgba(99,102,241,0.15)', '#818cf8')}>PIX {brl(m.pix)}</span>}
-        {m?.dinheiro > 0 && <span style={estilo.chip('rgba(16,185,129,0.12)', '#34d399')}>$ {brl(m.dinheiro)}</span>}
-        {m?.cartao > 0 && <span style={estilo.chip('rgba(245,158,11,0.12)', '#fbbf24')}>Cartão {brl(m.cartao)}</span>}
-      </div>
+      {/* Conteúdo: letreiro OU métricas */}
+      {letrAtivo && frases.length > 0
+        ? <FraseDisplay frase={frases[fraseIdx] || ''} transicaoId={transicao} estiloTexto={estilo.valor} estiloWrap={estilo.wrap} />
+        : (
+          <div className="barra-wrap flex items-center gap-2 flex-wrap" style={estilo.wrap}>
+            <span className="barra-valor" style={estilo.valor}>{brl(total)}</span>
+            <span style={estilo.label}>hoje</span>
+            {m?.pix > 0      && <span style={estilo.chip('rgba(99,102,241,0.15)','#818cf8')}>PIX {brl(m.pix)}</span>}
+            {m?.dinheiro > 0 && <span style={estilo.chip('rgba(16,185,129,0.12)','#34d399')}>$ {brl(m.dinheiro)}</span>}
+            {m?.cartao > 0   && <span style={estilo.chip('rgba(245,158,11,0.12)','#fbbf24')}>Cartão {brl(m.cartao)}</span>}
+          </div>
+        )
+      }
 
       {/* Botão de configuração */}
       <div ref={refConfig} className="relative">
         <button onClick={() => setAbrirConfig(v => !v)}
-          className="w-6 h-6 flex items-center justify-center rounded-lg transition-colors"
+          className="w-6 h-6 flex items-center justify-center rounded-lg"
           style={{ color: 'var(--t-faint)', opacity: abrirConfig ? 1 : 0.4 }}
           title="Personalizar barra">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -977,29 +1235,47 @@ function BarraMetricas({ metricasHoje, faturamentoHoje }) {
 
         {abrirConfig && (
           <div className="absolute top-full mt-2 right-0 z-50 rounded-2xl overflow-hidden"
-            style={{ background: 'var(--space-elev)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 16px 48px rgba(0,0,0,0.7)', width: 260 }}>
+            style={{ background: 'var(--space-elev)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 16px 48px rgba(0,0,0,0.7)', width: 270 }}>
             <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-              <p className="text-xs font-black t-strong">Estilo da barra de métricas</p>
-              <p className="text-[10px] t-faint mt-0.5">Escolha o visual das métricas do dia</p>
+              <p className="text-xs font-black t-strong">Personalizar barra</p>
             </div>
-            <div className="p-3 space-y-1.5">
-              {ESTILOS_BARRA.map(e => (
-                <button key={e.id} onClick={() => { setEstiloId(e.id); localStorage.setItem('pdv_barra_estilo', e.id); setAbrirConfig(false); }}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all"
-                  style={estiloId === e.id
-                    ? { background: 'rgba(var(--accent-rgb),0.12)', border: '1px solid rgba(var(--accent-rgb),0.3)' }
-                    : { background: 'var(--space-elev-2)', border: '1px solid transparent' }}>
-                  <div className="text-left">
-                    <p className="text-xs font-bold t-strong">{e.nome}</p>
-                    <p className="text-[10px]" style={e.valor}>{e.preview}</p>
-                  </div>
-                  {estiloId === e.id && (
-                    <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{ background: 'var(--accent)' }}>
-                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+
+            {/* Letreiro */}
+            <div className="px-3 pt-3 pb-2">
+              <p className="text-[10px] font-black t-faint tracking-widest mb-1.5">LETREIRO</p>
+              <button onClick={() => { setAbrirConfig(false); setAbrirLetreiro(true); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left"
+                style={{ background: letrAtivo ? 'rgba(var(--accent-rgb),0.12)' : 'var(--space-elev-2)', border: letrAtivo ? '1px solid rgba(var(--accent-rgb),0.3)' : '1px solid transparent' }}>
+                <span className="text-lg">📺</span>
+                <div>
+                  <p className="text-xs font-bold t-strong">Frases personalizadas</p>
+                  <p className="text-[10px] t-dim">{letrAtivo ? `${frases.length} frase(s) · ${transicao}` : 'Desativado'}</p>
+                </div>
+              </button>
+            </div>
+
+            {/* Estilos */}
+            <div className="px-3 pb-3">
+              <p className="text-[10px] font-black t-faint tracking-widest mb-1.5 mt-2">ESTILO VISUAL</p>
+              <div className="space-y-1">
+                {ESTILOS_BARRA.map(e => (
+                  <button key={e.id} onClick={() => { setEstiloId(e.id); localStorage.setItem('pdv_barra_estilo', e.id); setAbrirConfig(false); }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all"
+                    style={estiloId === e.id
+                      ? { background: 'rgba(var(--accent-rgb),0.12)', border: '1px solid rgba(var(--accent-rgb),0.3)' }
+                      : { background: 'transparent', border: '1px solid transparent' }}>
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[10px] font-mono" style={e.valor}>{e.preview}</span>
+                      <span className="text-xs t-strong">{e.nome}</span>
                     </div>
-                  )}
-                </button>
-              ))}
+                    {estiloId === e.id && (
+                      <div className="w-4 h-4 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--accent)' }}>
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
