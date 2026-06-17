@@ -821,6 +821,193 @@ function ModalNovoPedido({ onClose, onCriado }) {
   );
 }
 
+// ── Barra de métricas customizável ───────────────────────────
+const ESTILOS_BARRA = [
+  {
+    id: 'default',
+    nome: 'Padrão',
+    preview: 'R$ 0,00',
+    wrap:   { background: 'rgba(var(--accent-rgb),0.08)', border: '1px solid rgba(var(--accent-rgb),0.2)', borderRadius: 12, padding: '6px 12px' },
+    valor:  { color: 'var(--accent)', fontWeight: 900, fontSize: 13 },
+    label:  { color: 'var(--t-dim)', fontSize: 10 },
+    chip:   (bg, cor) => ({ background: bg, color: cor, padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700 }),
+    anim:   '',
+  },
+  {
+    id: 'cyberpunk',
+    nome: 'Cyberpunk',
+    preview: '▸ R$ 0,00',
+    wrap:   { background: 'rgba(0,0,0,0.85)', border: '1px solid #ff00aa', borderRadius: 4, padding: '6px 14px', boxShadow: '0 0 12px rgba(255,0,170,0.3), inset 0 0 20px rgba(0,0,0,0.5)', position: 'relative', overflow: 'hidden' },
+    valor:  { color: '#ffee00', fontWeight: 900, fontSize: 13, fontFamily: 'monospace', letterSpacing: 2, textShadow: '0 0 8px #ffee00, 0 0 20px rgba(255,238,0,0.5)' },
+    label:  { color: '#ff00aa', fontSize: 10, fontFamily: 'monospace', textTransform: 'uppercase', letterSpacing: 3 },
+    chip:   (bg, cor) => ({ background: 'transparent', color: '#00ffcc', border: '1px solid #00ffcc', padding: '1px 8px', borderRadius: 2, fontSize: 10, fontWeight: 700, fontFamily: 'monospace', letterSpacing: 1, textShadow: '0 0 6px #00ffcc' }),
+    anim:   'barra-glitch',
+  },
+  {
+    id: 'neon',
+    nome: 'Neon',
+    preview: 'R$ 0,00',
+    wrap:   { background: 'rgba(0,0,0,0.7)', border: '1px solid #00f5ff', borderRadius: 8, padding: '6px 14px', boxShadow: '0 0 16px rgba(0,245,255,0.25), inset 0 0 16px rgba(0,245,255,0.05)' },
+    valor:  { color: '#00f5ff', fontWeight: 900, fontSize: 13, textShadow: '0 0 10px #00f5ff, 0 0 30px rgba(0,245,255,0.4)' },
+    label:  { color: 'rgba(0,245,255,0.6)', fontSize: 10 },
+    chip:   (bg, cor) => ({ background: 'rgba(0,245,255,0.1)', color: '#00f5ff', border: '1px solid rgba(0,245,255,0.4)', padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, textShadow: '0 0 6px #00f5ff' }),
+    anim:   'barra-pulse-neon',
+  },
+  {
+    id: 'matrix',
+    nome: 'Matrix',
+    preview: '>> R$ 0,00',
+    wrap:   { background: 'rgba(0,20,0,0.9)', border: '1px solid #00ff41', borderRadius: 4, padding: '6px 14px', boxShadow: '0 0 10px rgba(0,255,65,0.2)' },
+    valor:  { color: '#00ff41', fontWeight: 700, fontSize: 13, fontFamily: '"Courier New", monospace', textShadow: '0 0 8px #00ff41' },
+    label:  { color: '#00aa2a', fontSize: 10, fontFamily: '"Courier New", monospace' },
+    chip:   (bg, cor) => ({ background: 'rgba(0,255,65,0.08)', color: '#00ff41', border: '1px solid rgba(0,255,65,0.3)', padding: '2px 8px', borderRadius: 2, fontSize: 10, fontWeight: 700, fontFamily: 'monospace' }),
+    anim:   'barra-scan',
+  },
+  {
+    id: 'retro',
+    nome: 'Retrô',
+    preview: 'R$ 0,00',
+    wrap:   { background: 'rgba(30,15,0,0.95)', border: '2px solid #ff8800', borderRadius: 6, padding: '6px 14px', boxShadow: '0 0 0 1px rgba(255,136,0,0.2), 0 0 20px rgba(255,136,0,0.1)', position: 'relative' },
+    valor:  { color: '#ffaa33', fontWeight: 700, fontSize: 13, fontFamily: '"Courier New", monospace', textShadow: '0 0 6px rgba(255,170,51,0.6)' },
+    label:  { color: '#804400', fontSize: 10, fontFamily: '"Courier New", monospace' },
+    chip:   (bg, cor) => ({ background: 'rgba(255,136,0,0.1)', color: '#ff8800', border: '1px solid rgba(255,136,0,0.4)', padding: '2px 8px', borderRadius: 3, fontSize: 10, fontWeight: 700, fontFamily: 'monospace' }),
+    anim:   'barra-flicker',
+  },
+  {
+    id: 'minimal',
+    nome: 'Minimal',
+    preview: 'R$ 0,00',
+    wrap:   { padding: '4px 0' },
+    valor:  { color: 'var(--t-strong)', fontWeight: 900, fontSize: 14 },
+    label:  { color: 'var(--t-faint)', fontSize: 10 },
+    chip:   (bg, cor) => ({ color: 'var(--t-dim)', fontSize: 11, fontWeight: 600, padding: '0 4px' }),
+    anim:   '',
+  },
+  {
+    id: 'holo',
+    nome: 'Holográfico',
+    preview: 'R$ 0,00',
+    wrap:   { background: 'linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(168,85,247,0.12) 50%, rgba(236,72,153,0.12) 100%)', border: '1px solid rgba(168,85,247,0.35)', borderRadius: 12, padding: '6px 14px', boxShadow: '0 2px 20px rgba(99,102,241,0.15)' },
+    valor:  { background: 'linear-gradient(90deg,#6366f1,#a855f7,#ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontWeight: 900, fontSize: 13 },
+    label:  { color: 'rgba(168,85,247,0.7)', fontSize: 10 },
+    chip:   (bg, cor) => ({ background: 'rgba(168,85,247,0.15)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.3)', padding: '2px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700 }),
+    anim:   'barra-holo-shift',
+  },
+];
+
+const BARRA_ANIM_CSS = `
+@keyframes barra-glitch-shift {
+  0%,100% { text-shadow: 0 0 8px #ffee00, 2px 0 #ff00aa, -2px 0 #00ffcc; }
+  25%      { text-shadow: -2px 0 #ff00aa, 2px 0 #00ffcc; clip-path: inset(10% 0 80% 0); }
+  50%      { text-shadow: 2px 0 #00ffcc, -2px 0 #ffee00; clip-path: inset(60% 0 20% 0); }
+  75%      { text-shadow: 1px 0 #ffee00, -1px 0 #ff00aa; }
+}
+.barra-glitch .barra-valor { animation: barra-glitch-shift 4s infinite steps(1); }
+
+@keyframes barra-neon-pulse {
+  0%,100% { opacity: 1; }
+  50%     { opacity: 0.75; }
+}
+.barra-pulse-neon .barra-wrap { animation: barra-neon-pulse 2s ease-in-out infinite; }
+
+@keyframes barra-scanline {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(400%); }
+}
+.barra-scan .barra-wrap::after {
+  content: ''; position: absolute; left: 0; top: 0; right: 0; height: 25%;
+  background: linear-gradient(to bottom, transparent, rgba(0,255,65,0.08), transparent);
+  animation: barra-scanline 2.5s linear infinite; pointer-events: none;
+}
+
+@keyframes barra-flicker-anim {
+  0%,100% { opacity: 1; }
+  92%     { opacity: 1; }
+  93%     { opacity: 0.4; }
+  94%     { opacity: 1; }
+  97%     { opacity: 0.7; }
+  98%     { opacity: 1; }
+}
+.barra-flicker .barra-wrap { animation: barra-flicker-anim 5s infinite; }
+
+@keyframes barra-holo-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.barra-holo-shift .barra-wrap { background-size: 200% 200%; animation: barra-holo-shift 4s ease infinite; }
+`;
+
+function BarraMetricas({ metricasHoje, faturamentoHoje }) {
+  const [estiloId, setEstiloId] = useState(() => localStorage.getItem('pdv_barra_estilo') || 'default');
+  const [abrirConfig, setAbrirConfig] = useState(false);
+  const refConfig = useRef(null);
+  const estilo = ESTILOS_BARRA.find(e => e.id === estiloId) || ESTILOS_BARRA[0];
+
+  useEffect(() => {
+    function fechar(e) { if (refConfig.current && !refConfig.current.contains(e.target)) setAbrirConfig(false); }
+    document.addEventListener('mousedown', fechar);
+    return () => document.removeEventListener('mousedown', fechar);
+  }, []);
+
+  const m = metricasHoje;
+  const total = m?.total || faturamentoHoje || 0;
+
+  return (<>
+    <style>{BARRA_ANIM_CSS}</style>
+    <div className={`flex items-center gap-2 relative ${estilo.anim}`}>
+      <div className="barra-wrap flex items-center gap-2 flex-wrap" style={estilo.wrap}>
+        <span className="barra-valor" style={estilo.valor}>{brl(total)}</span>
+        <span style={estilo.label}>hoje</span>
+        {m?.pix > 0 && <span style={estilo.chip('rgba(99,102,241,0.15)', '#818cf8')}>PIX {brl(m.pix)}</span>}
+        {m?.dinheiro > 0 && <span style={estilo.chip('rgba(16,185,129,0.12)', '#34d399')}>$ {brl(m.dinheiro)}</span>}
+        {m?.cartao > 0 && <span style={estilo.chip('rgba(245,158,11,0.12)', '#fbbf24')}>Cartão {brl(m.cartao)}</span>}
+      </div>
+
+      {/* Botão de configuração */}
+      <div ref={refConfig} className="relative">
+        <button onClick={() => setAbrirConfig(v => !v)}
+          className="w-6 h-6 flex items-center justify-center rounded-lg transition-colors"
+          style={{ color: 'var(--t-faint)', opacity: abrirConfig ? 1 : 0.4 }}
+          title="Personalizar barra">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+          </svg>
+        </button>
+
+        {abrirConfig && (
+          <div className="absolute top-full mt-2 right-0 z-50 rounded-2xl overflow-hidden"
+            style={{ background: 'var(--space-elev)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 16px 48px rgba(0,0,0,0.7)', width: 260 }}>
+            <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <p className="text-xs font-black t-strong">Estilo da barra de métricas</p>
+              <p className="text-[10px] t-faint mt-0.5">Escolha o visual das métricas do dia</p>
+            </div>
+            <div className="p-3 space-y-1.5">
+              {ESTILOS_BARRA.map(e => (
+                <button key={e.id} onClick={() => { setEstiloId(e.id); localStorage.setItem('pdv_barra_estilo', e.id); setAbrirConfig(false); }}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all"
+                  style={estiloId === e.id
+                    ? { background: 'rgba(var(--accent-rgb),0.12)', border: '1px solid rgba(var(--accent-rgb),0.3)' }
+                    : { background: 'var(--space-elev-2)', border: '1px solid transparent' }}>
+                  <div className="text-left">
+                    <p className="text-xs font-bold t-strong">{e.nome}</p>
+                    <p className="text-[10px]" style={e.valor}>{e.preview}</p>
+                  </div>
+                  {estiloId === e.id && (
+                    <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{ background: 'var(--accent)' }}>
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  </>);
+}
+
 // ── Componente principal ──────────────────────────────────────
 const hoje = () => new Date().toISOString().slice(0, 10);
 
@@ -1632,24 +1819,8 @@ export default function PDV() {
             <p className="text-[10px] t-faint mt-0.5">Ponto de Venda · tempo real</p>
           </div>
 
-          {/* Métricas do dia */}
-          <div className="flex items-center gap-2">
-            {metricasHoje ? (
-              <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl"
-                style={{ background: 'rgba(var(--accent-rgb),0.08)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
-                <span className="text-xs font-black text-orange-400">{brl(metricasHoje.total || 0)}</span>
-                <span className="text-[10px] t-dim hidden sm:block mx-1">hoje</span>
-                {metricasHoje.pix > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md hidden md:inline" style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>PIX {brl(metricasHoje.pix)}</span>}
-                {metricasHoje.dinheiro > 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md hidden md:inline" style={{ background: 'rgba(16,185,129,0.12)', color: '#34d399' }}>$ {brl(metricasHoje.dinheiro)}</span>}
-              </div>
-            ) : faturamentoHoje > 0 && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl"
-                style={{ background: 'rgba(var(--accent-rgb),0.08)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
-                <span className="text-xs font-black text-orange-400">{brl(faturamentoHoje)}</span>
-                <span className="text-[10px] t-dim hidden sm:block">hoje</span>
-              </div>
-            )}
-          </div>
+          {/* Métricas do dia — customizável */}
+          <BarraMetricas metricasHoje={metricasHoje} faturamentoHoje={faturamentoHoje} />
 
           {/* Busca rápida */}
           <div className="relative flex-1 max-w-[200px]">
