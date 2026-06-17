@@ -1020,7 +1020,7 @@ function FraseDisplay({ frase, transicaoId, estiloTexto, estiloWrap }) {
 }
 
 function ModalLetreiro({ onClose, estiloId }) {
-  const salvar = (k, v) => { localStorage.setItem(k, typeof v === 'object' ? JSON.stringify(v) : v); };
+  const salvar = (k, v) => { localStorage.setItem(k, JSON.stringify(v)); };
   const ler    = (k, def) => { try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : def; } catch { return def; } };
 
   const [frases,      setFrases]      = useState(() => ler('pdv_letreiro_frases', ['🍣 Bem-vindo ao 37 Sushi!', '🔥 Pedidos no WhatsApp', '⭐ Qualidade premium']));
