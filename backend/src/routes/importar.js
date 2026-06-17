@@ -243,10 +243,6 @@ router.post('/clientes/confirmar', upload.single('arquivo'), (req, res) => {
     const modo    = req.body.modo || 'pular';               // 'pular' | 'atualizar'
     const sheet   = req.body.sheet || null;
     console.log('[importar clientes] mapa recebido:', JSON.stringify(mapa), '| modo:', modo);
-    console.log('[importar clientes] headerIdx:', rows.findIndex(r => Array.isArray(r) && r.filter(c => String(c).trim()).length >= 2));
-    const _hi = rows.findIndex(r => Array.isArray(r) && r.filter(c => String(c).trim()).length >= 2);
-    console.log('[importar clientes] header row:', JSON.stringify(rows[_hi]?.slice(0,5)));
-    console.log('[importar clientes] primeira linha de dados:', JSON.stringify(rows[_hi+1]?.slice(0,5)));
 
     const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
     const sheetName = sheet && wb.SheetNames.includes(sheet) ? sheet : wb.SheetNames[0];
@@ -255,6 +251,10 @@ router.post('/clientes/confirmar', upload.single('arquivo'), (req, res) => {
 
     const headerIdx = rows.findIndex(r => Array.isArray(r) && r.filter(c => String(c).trim()).length >= 2);
     const dataRows  = rows.slice(headerIdx + 1).filter(r => Array.isArray(r) && r.some(c => String(c).trim()));
+
+    console.log('[importar clientes] headerIdx:', headerIdx, '| dataRows:', dataRows.length);
+    console.log('[importar clientes] header row:', JSON.stringify(rows[headerIdx]?.slice(0,5)));
+    console.log('[importar clientes] primeira linha:', JSON.stringify(dataRows[0]?.slice(0,5)));
 
     function get(row, campo) {
       const idx = mapa[campo];
