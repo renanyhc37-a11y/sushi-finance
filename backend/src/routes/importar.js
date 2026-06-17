@@ -270,11 +270,13 @@ router.post('/clientes/confirmar', upload.single('arquivo'), (req, res) => {
     const detalhes = [];
 
     db.transaction(() => {
+      let _first = true;
       for (const row of dataRows) {
         try {
           const nome = get(row, 'nome');
           const telRaw = get(row, 'telefone');
           const tel = normalizarTel(telRaw);
+          if (_first) { console.log('[debug row0] nome:', nome, '| telRaw:', telRaw, '| tel:', tel); _first = false; }
 
           if (!nome && !tel) { ignorados++; continue; }
           if (!tel) { erros++; detalhes.push({ nome, erro: 'Sem telefone' }); continue; }
