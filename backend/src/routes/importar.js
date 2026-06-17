@@ -262,21 +262,25 @@ router.post('/clientes/confirmar', upload.single('arquivo'), (req, res) => {
     }
 
     // Migração: garante colunas extras
-    try { db.exec('ALTER TABLE clientes ADD COLUMN email TEXT'); } catch {}
-    try { db.exec('ALTER TABLE clientes ADD COLUMN bairro TEXT'); } catch {}
-    try { db.exec('ALTER TABLE clientes ADD COLUMN observacao TEXT'); } catch {}
+    const colsMigrar = ['email TEXT', 'bairro TEXT', 'observacao TEXT', 'recompensas_ganhas INTEGER DEFAULT 0', 'recompensas_usadas INTEGER DEFAULT 0', 'aniversario TEXT', 'updated_at TEXT'];
+    for (const col of colsMigrar) {
+      try { db.exec(`ALTER TABLE clientes ADD COLUMN ${col}`); } catch {}
+    }
+
+    // Prepara statements fora da transação para evitar SQL logic error
+    const stmtBuscar  = db.prepare('SELECT id FROM clientes WHERE telefone = ?');
+    const stmtInserir = db.prepare(`INSERT INTO clientes (telefone, nome, endereco, bairro, email, observacao, aniversario, total_pedidos, recompensas_ganhas, recompensas_usadas) VALUES (?,?,?,?,?,?,?,?,0,0)`);
+    const stmtAtualizar = db.prepare(`UPDATE clientes SET nome = COALESCE(NULLIF(?, ''), nome), endereco = COALESCE(NULLIF(?, ''), endereco), bairro = COALESCE(NULLIF(?, ''), bairro), email = COALESCE(NULLIF(?, ''), email), observacao = COALESCE(NULLIF(?, ''), observacao), aniversario = COALESCE(NULLIF(?, ''), aniversario), total_pedidos = MAX(total_pedidos, ?), updated_at = CURRENT_TIMESTAMP WHERE telefone = ?`);
 
     let criados = 0, atualizados = 0, ignorados = 0, erros = 0;
     const detalhes = [];
 
     db.transaction(() => {
-      let _first = true;
       for (const row of dataRows) {
         try {
-          const nome = get(row, 'nome');
+          const nome   = get(row, 'nome');
           const telRaw = get(row, 'telefone');
-          const tel = normalizarTel(telRaw);
-          if (_first) { console.log('[debug row0] nome:', nome, '| telRaw:', telRaw, '| tel:', tel); _first = false; }
+          const tel    = normalizarTel(telRaw);
 
           if (!nome && !tel) { ignorados++; continue; }
           if (!tel) { erros++; detalhes.push({ nome, erro: 'Sem telefone' }); continue; }
@@ -288,46 +292,30 @@ router.post('/clientes/confirmar', upload.single('arquivo'), (req, res) => {
           const observacao = get(row, 'obs');
           const pedidos    = parseInt(get(row, 'pedidos')) || 0;
 
-          // Aniversário: tenta extrair MM-DD de vários formatos
           let aniversario = null;
           const aniRaw = get(row, 'aniversario');
           if (aniRaw) {
-            // Tenta DD/MM/YYYY ou DD-MM-YYYY
             const m = aniRaw.match(/(\d{1,2})[\/\-](\d{1,2})/);
             if (m) aniversario = `${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
           }
 
-          const existing = db.prepare('SELECT * FROM clientes WHERE telefone = ?').get(tel);
+          const existing = stmtBuscar.get(tel);
 
           if (existing) {
             if (modo === 'atualizar') {
-              db.prepare(`UPDATE clientes SET
-                nome = COALESCE(NULLIF(?, ''), nome),
-                endereco = COALESCE(NULLIF(?, ''), endereco),
-                bairro = COALESCE(NULLIF(?, ''), bairro),
-                email = COALESCE(NULLIF(?, ''), email),
-                observacao = COALESCE(NULLIF(?, ''), observacao),
-                aniversario = COALESCE(NULLIF(?, ''), aniversario),
-                total_pedidos = MAX(total_pedidos, ?),
-                updated_at = CURRENT_TIMESTAMP
-                WHERE telefone = ?`
-              ).run(nome || null, endereco || null, bairro || null, email || null,
-                    observacao || null, aniversario || null, pedidos, tel);
+              stmtAtualizar.run(nome || null, endereco || null, bairro || null, email || null, observacao || null, aniversario || null, pedidos, tel);
               atualizados++;
               detalhes.push({ nome, tel, status: 'atualizado' });
             } else {
               ignorados++;
             }
           } else {
-            db.prepare(`INSERT INTO clientes
-              (telefone, nome, endereco, bairro, email, observacao, aniversario, total_pedidos, recompensas_ganhas, recompensas_usadas)
-              VALUES (?,?,?,?,?,?,?,?,0,0)`
-            ).run(tel, nome || 'Cliente', endereco || null, bairro || null,
-                  email || null, observacao || null, aniversario || null, pedidos);
+            stmtInserir.run(tel, nome || 'Cliente', endereco || null, bairro || null, email || null, observacao || null, aniversario || null, pedidos);
             criados++;
             detalhes.push({ nome, tel, status: 'criado' });
           }
         } catch (err) {
+          console.error('[importar clientes row error]', err.message);
           erros++;
         }
       }
