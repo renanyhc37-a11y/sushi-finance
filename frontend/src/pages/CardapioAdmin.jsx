@@ -506,9 +506,29 @@ function ModalCupom({ onClose, onSalvo }) {
   );
 }
 
-// ── Modal de Banner ───────────────────────────────────────────
+// ── Modal de Banner (redesign) ────────────────────────────────
+const PALETAS = [
+  { nome: 'Chama',    cor1: '#7c2d12', cor2: '#ea580c' },
+  { nome: 'Sushi',    cor1: '#14532d', cor2: '#16a34a' },
+  { nome: 'Oceano',   cor1: '#0c2a4a', cor2: '#0284c7' },
+  { nome: 'Âmbar',    cor1: '#78350f', cor2: '#d97706' },
+  { nome: 'Uva',      cor1: '#3b0764', cor2: '#7c3aed' },
+  { nome: 'Rubi',     cor1: '#4c0519', cor2: '#e11d48' },
+  { nome: 'Ardósia',  cor1: '#0f172a', cor2: '#334155' },
+  { nome: 'Aurora',   cor1: '#1e1b4b', cor2: '#db2777' },
+];
+const TAGS_BANNER = [
+  { label: '🔥 Promoção', cor: '#ea580c' },
+  { label: '⭐ Destaque',  cor: '#ca8a04' },
+  { label: '🚚 Frete Grátis', cor: '#0284c7' },
+  { label: '✨ Novidade',  cor: '#7c3aed' },
+  { label: '💚 Fidelidade', cor: '#16a34a' },
+  { label: '🎉 Especial',  cor: '#db2777' },
+];
+
 function ModalBanner({ banner, onClose, onSalvo }) {
   const isNovo = !banner?.id;
+  const [abaAtiva, setAbaAtiva] = useState('conteudo'); // conteudo | destaque | aparencia
   const [form, setForm] = useState({
     tag: banner?.tag || '🔥 Promoção',
     titulo: banner?.titulo || '',
@@ -516,27 +536,39 @@ function ModalBanner({ banner, onClose, onSalvo }) {
     destaque: banner?.destaque || '',
     emoji: banner?.emoji || '🍣',
     cor1: banner?.cor1 || '#7c2d12',
-    cor2: banner?.cor2 || '#9a3412',
+    cor2: banner?.cor2 || '#ea580c',
     img: banner?.img || '',
     ordem: banner?.ordem || 0,
     item_id: banner?.item_id ?? null,
     usar_gradiente: banner?.usar_gradiente ? 1 : 0,
+    opcoes_escolha: banner?.opcoes_escolha
+      ? (typeof banner.opcoes_escolha === 'string' ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha)
+      : [],
   });
+  const [modoDestaque, setModoDestaque] = useState(
+    (banner?.opcoes_escolha && (typeof banner.opcoes_escolha === 'string'
+      ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha)?.length > 0)
+      ? 'multiplo' : 'simples'
+  );
   const [fotoFile, setFotoFile] = useState(null);
-  const [fotoPreview, setFotoPreview] = useState(banner?.img ? banner.img : null);
+  const [fotoPreview, setFotoPreview] = useState(banner?.img || null);
+  const [usarGradiente, setUsarGradiente] = useState(banner?.usar_gradiente ? true : !banner?.img);
   const [salvando, setSalvando] = useState(false);
   const inputFotoRef = useRef(null);
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-
-  const TAGS = ['🔥 Promoção', '⭐ Destaque', '🚚 Frete Grátis', '✨ Novidade', '💚 Fidelidade', '🎉 Especial'];
-  const EMJS = ['🍣','🔥','🎉','⭐','🚚','🦐','🐟','🥑','🍱','💚','✨','🎋'];
   const [itensCardapio, setItensCardapio] = useState([]);
+  const [categoriasCardapio, setCategoriasCardapio] = useState([]);
+
   useEffect(() => {
     fetch(`${BASE}/cardapio`)
       .then(r => r.json())
-      .then(cats => setItensCardapio(cats.flatMap(c => (c.itens || []).map(i => ({ ...i, _cat: c.nome })))))
+      .then(cats => {
+        setCategoriasCardapio(cats);
+        setItensCardapio(cats.flatMap(c => (c.itens || []).map(i => ({ ...i, _cat: c.nome }))));
+      })
       .catch(() => {});
   }, []);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   function onFotoChange(e) {
     const file = e.target.files[0];
@@ -546,23 +578,42 @@ function ModalBanner({ banner, onClose, onSalvo }) {
     setFotoPreview(URL.createObjectURL(file));
   }
 
+  async function removerFoto() {
+    if (!banner?.id) { setFotoFile(null); setFotoPreview(null); set('img', ''); return; }
+    try {
+      await fetch(`${BASE}/ia/banners/${banner.id}/foto`, { method: 'DELETE', headers: authH() });
+      setFotoPreview(null); setFotoFile(null); set('img', '');
+      toast.success('Imagem removida');
+    } catch { toast.error('Erro ao remover imagem'); }
+  }
+
+  function adicionarOpcao() {
+    set('opcoes_escolha', [...(form.opcoes_escolha || []), '']);
+  }
+  function removerOpcao(idx) {
+    set('opcoes_escolha', (form.opcoes_escolha || []).filter((_, i) => i !== idx));
+  }
+  function setOpcao(idx, val) {
+    const arr = [...(form.opcoes_escolha || [])];
+    arr[idx] = val;
+    set('opcoes_escolha', arr);
+  }
+
   async function salvar() {
     if (!form.titulo.trim()) return toast.error('Título obrigatório');
     setSalvando(true);
     try {
-      // 1. Salva dados do banner
+      const payload = {
+        ...form,
+        opcoes_escolha: modoDestaque === 'multiplo'
+          ? (form.opcoes_escolha || []).filter(Boolean)
+          : [],
+      };
       const url = isNovo ? `${BASE}/ia/banners` : `${BASE}/ia/banners/${banner.id}`;
-      const method = isNovo ? 'POST' : 'PUT';
-      const r = await fetch(url, { method, headers: authJ(), body: JSON.stringify(form) });
-      if (!r.ok) {
-        let msg = `HTTP ${r.status}`;
-        try { const d = await r.json(); msg = d.erro || msg; } catch {}
-        throw new Error(msg);
-      }
+      const r = await fetch(url, { method: isNovo ? 'POST' : 'PUT', headers: authJ(), body: JSON.stringify(payload) });
+      if (!r.ok) { const d = await r.json(); throw new Error(d.erro || `HTTP ${r.status}`); }
       const salvo = await r.json();
       const bannerId = salvo.id || banner?.id;
-
-      // 2. Upload de foto (se tiver nova)
       if (fotoFile && bannerId) {
         const fd = new FormData();
         fd.append('foto', fotoFile);
@@ -571,189 +622,338 @@ function ModalBanner({ banner, onClose, onSalvo }) {
         });
         if (!fRes.ok) toast.error('Banner salvo mas falha no upload da imagem');
       }
-
       toast.success(isNovo ? 'Banner criado!' : 'Banner salvo!');
       onSalvo();
     } catch (e) { toast.error(e.message); }
     setSalvando(false);
   }
 
-  async function removerFoto() {
-    if (!banner?.id) { setFotoFile(null); setFotoPreview(null); return; }
-    try {
-      await fetch(`${BASE}/ia/banners/${banner.id}/foto`, { method: 'DELETE', headers: authH() });
-      setFotoPreview(null); setFotoFile(null);
-      set('img', '');
-      toast.success('Imagem removida');
-    } catch { toast.error('Erro ao remover imagem'); }
-  }
-
-  const [usarGradiente, setUsarGradiente] = useState(banner?.usar_gradiente ? true : !fotoPreview);
-
-  // Preview: imagem pura OU gradiente (opcional quando há imagem)
-  const bgStyle = fotoPreview
+  // Preview fiel ao layout real do carrossel
+  const bgPreview = fotoPreview
     ? { backgroundImage: `url(${fotoPreview})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-    : { background: `linear-gradient(110deg,${form.cor1}ee,${form.cor2}99)` };
-  // Overlay gradiente opcional sobre a imagem
-  const overlayGrad = fotoPreview && usarGradiente
-    ? `linear-gradient(110deg,${form.cor1}bb,${form.cor2}77)`
-    : null;
+    : { background: `linear-gradient(110deg,${form.cor1}ff 0%,${form.cor2}cc 60%,${form.cor2}88 100%)` };
+
+  const opcoesAtivas = (form.opcoes_escolha || []).filter(Boolean);
+  const destaqueTexto = modoDestaque === 'multiplo'
+    ? (opcoesAtivas.length ? opcoesAtivas[0] : '')
+    : form.destaque;
+
+  const ABAS = [
+    { k: 'conteudo', label: 'Conteúdo' },
+    { k: 'destaque', label: 'Prêmio' },
+    { k: 'aparencia', label: 'Visual' },
+  ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)' }}>
-      <div className="w-full max-w-md rounded-2xl overflow-hidden flex flex-col max-h-[92vh]" style={{ background: 'var(--space-elev)', border: '1px solid var(--space-elev-2)' }}>
-        <div className="px-5 py-4 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid var(--space-elev-2)' }}>
-          <h3 className="font-black t-strong flex items-center gap-2">{isNovo ? <><ImageIcon size={17} strokeWidth={1.75} /> Novo Banner</> : <><Pencil size={16} strokeWidth={1.75} /> Editar Banner</>}</h3>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl t-dim" style={{ background: 'var(--space-elev-2)' }}><X size={18} strokeWidth={1.75} /></button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}>
+      <div className="w-full max-w-lg rounded-2xl flex flex-col overflow-hidden" style={{ background: 'var(--space-elev)', border: '1px solid rgba(255,255,255,0.08)', maxHeight: '95vh', boxShadow: '0 24px 80px rgba(0,0,0,0.7)' }}>
+
+        {/* Header */}
+        <div className="px-5 py-3.5 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(var(--accent-rgb),0.15)' }}>
+              {isNovo ? <ImagePlus size={14} strokeWidth={2} style={{ color: 'var(--accent)' }} /> : <Pencil size={14} strokeWidth={2} style={{ color: 'var(--accent)' }} />}
+            </div>
+            <div>
+              <p className="font-black t-strong text-sm">{isNovo ? 'Novo Banner' : 'Editar Banner'}</p>
+              <p className="text-[10px] t-faint">Carrossel da página do cliente</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg t-dim transition-colors hover:bg-white/5">
+            <X size={16} strokeWidth={2} />
+          </button>
         </div>
 
-        {/* Preview do banner */}
-        <div className="mx-4 mt-4 rounded-xl overflow-hidden relative shrink-0" style={{ ...bgStyle, minHeight: 80 }}>
-          {/* Overlay gradiente opcional sobre imagem */}
-          {overlayGrad && <div className="absolute inset-0" style={{ background: overlayGrad }} />}
-          <div className="relative px-4 py-3 flex items-center gap-3">
-            <span className="text-3xl">{form.emoji}</span>
-            <div>
-              <p className="text-[10px] font-bold text-orange-300">{form.tag}</p>
-              <p className="t-strong font-black text-sm" style={{ textShadow: fotoPreview ? '0 1px 4px rgba(0,0,0,0.8)' : 'none' }}>{form.titulo || 'Título do banner'}</p>
-              {form.subtitulo && <p className="text-xs" style={{ color: 'rgba(255,255,255,0.8)', textShadow: fotoPreview ? '0 1px 3px rgba(0,0,0,0.7)' : 'none' }}>{form.subtitulo}</p>}
-              {form.destaque && <span className="font-black text-xs" style={{ color: '#fde047', textShadow: fotoPreview ? '0 1px 3px rgba(0,0,0,0.7)' : 'none' }}>{form.destaque}</span>}
-            </div>
+        {/* Preview em tempo real */}
+        <div className="mx-4 mt-4 rounded-xl overflow-hidden relative shrink-0" style={{ height: 130, ...bgPreview }}>
+          {/* Sombra escura de baixo */}
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.15) 55%, transparent 100%)' }} />
+          {/* Gradiente sobre imagem (opcional) */}
+          {fotoPreview && usarGradiente && (
+            <div className="absolute inset-0" style={{ background: `linear-gradient(110deg,${form.cor1}cc 0%,${form.cor2}88 60%,transparent 100%)` }} />
+          )}
+          {/* Topo: tag + badge */}
+          <div className="absolute top-0 left-0 right-0 flex items-start justify-between p-3.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full"
+              style={{ background: 'rgba(0,0,0,0.5)', color: '#fff', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.15)' }}>
+              {form.tag}
+            </span>
+            {destaqueTexto && (
+              <span className="inline-flex items-center px-2.5 py-1 rounded-xl text-[11px] font-black text-white"
+                style={{ background: 'rgba(var(--accent-rgb),0.92)', boxShadow: '0 2px 12px rgba(var(--accent-rgb),0.5)' }}>
+                {destaqueTexto}
+              </span>
+            )}
           </div>
-        </div>
-
-        <div className="overflow-y-auto flex-1 p-5 space-y-4">
-          {/* IMAGEM DE FUNDO */}
-          <div>
-            <label className="text-xs font-bold t-dim mb-2 block">IMAGEM DE FUNDO</label>
-            <div className="flex gap-3 items-center">
-              <div className="w-20 h-14 rounded-xl overflow-hidden shrink-0 flex items-center justify-center"
-                style={{ background: 'var(--space-elev-2)', border: '2px dashed var(--hairline)' }}>
-                {fotoPreview
-                  ? <img src={fotoPreview} alt="" className="w-full h-full object-cover" />
-                  : <span className="text-2xl">{form.emoji}</span>}
-              </div>
-              <div className="flex-1 space-y-2">
-                <button onClick={() => inputFotoRef.current?.click()}
-                  className="w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2"
-                  style={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.3)' }}>
-                  <ImageIcon size={14} strokeWidth={1.75} /> {fotoPreview ? 'Trocar imagem' : 'Adicionar imagem'}
-                </button>
-                {fotoPreview && (
-                  <button onClick={removerFoto}
-                    className="w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2"
-                    style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
-                    <Trash2 size={14} strokeWidth={1.75} /> Remover imagem
-                  </button>
-                )}
-                <p className="text-[10px] t-faint">JPG, PNG ou WebP · máx 5MB</p>
-                <input ref={inputFotoRef} type="file" accept="image/*" className="hidden" onChange={onFotoChange} />
-              </div>
-            </div>
-          </div>
-
-          {/* Tag */}
-          <div>
-            <label className="text-xs font-bold t-dim mb-2 block">TAG</label>
-            <div className="flex flex-wrap gap-1.5">
-              {TAGS.map(t => (
-                <button key={t} onClick={() => set('tag', t)}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
-                  style={form.tag === t
-                    ? { background: 'rgba(var(--accent-rgb),0.2)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.4)' }
-                    : { background: 'var(--space-elev-2)', color: '#555', border: '1px solid var(--hairline)' }}>
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-          {/* Título */}
-          <div>
-            <label className="text-xs font-bold t-dim mb-1 block">TÍTULO *</label>
-            <input value={form.titulo} onChange={e => set('titulo', e.target.value)}
-              placeholder="Ex: Combo Família" className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none"
-              style={{ background: 'var(--hairline)', border: '1px solid var(--hairline)' }} />
-          </div>
-          {/* Subtítulo */}
-          <div>
-            <label className="text-xs font-bold t-dim mb-1 block">SUBTÍTULO</label>
-            <input value={form.subtitulo} onChange={e => set('subtitulo', e.target.value)}
-              placeholder="Descrição da promoção" className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none"
-              style={{ background: 'var(--hairline)', border: '1px solid var(--hairline)' }} />
-          </div>
-          {/* Destaque + Emoji */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-bold t-dim mb-1 block">DESTAQUE (prêmio/recompensa)</label>
-              <div className="mb-1">
-                <SelectCardapio itens={itensCardapio} value={form.destaque}
-                  onChange={item => { set('item_id', item ? item.id : null); set('destaque', item ? item.nome : ''); }} />
-              </div>
-              <input value={form.destaque} onChange={e => { set('destaque', e.target.value); set('item_id', null); }}
-                placeholder="Ex: Temaki Philadelphia" className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none"
-                style={{ background: 'var(--hairline)', border: '1px solid var(--hairline)' }} />
-            </div>
-            <div>
-              <label className="text-xs font-bold t-dim mb-2 block">EMOJI</label>
-              <div className="flex flex-wrap gap-1">
-                {EMJS.map(e => (
-                  <button key={e} onClick={() => set('emoji', e)}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg text-base transition-all"
-                    style={{ background: form.emoji === e ? 'rgba(var(--accent-rgb),0.2)' : 'var(--space-elev-2)', border: form.emoji === e ? '1px solid rgba(var(--accent-rgb),0.4)' : '1px solid var(--hairline)' }}>
-                    {e}
-                  </button>
+          {/* Base: título + subtítulo */}
+          <div className="absolute bottom-0 left-0 right-0 p-3.5">
+            <p className="text-white font-black text-base leading-tight" style={{ textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>
+              {form.titulo || <span style={{ opacity: 0.4 }}>Título do banner</span>}
+            </p>
+            {form.subtitulo && (
+              <p className="text-white/75 text-xs mt-0.5 leading-snug" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.8)' }}>{form.subtitulo}</p>
+            )}
+            {modoDestaque === 'multiplo' && opcoesAtivas.length > 1 && (
+              <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                {opcoesAtivas.map((op, i) => (
+                  <span key={i} className="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                    style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', backdropFilter: 'blur(8px)' }}>{op}</span>
                 ))}
-              </div>
-            </div>
-          </div>
-          {/* Cores — quando não há imagem OU gradiente habilitado */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-bold t-dim">
-                {fotoPreview ? 'GRADIENTE SOBRE A IMAGEM (opcional)' : 'COR DE FUNDO'}
-              </label>
-              {fotoPreview && (
-                <button onClick={() => { setUsarGradiente(v => { set('usar_gradiente', v ? 0 : 1); return !v; }); }}
-                  className="flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
-                  style={usarGradiente
-                    ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.35)' }
-                    : { background: 'var(--space-elev-2)', color: '#555', border: '1px solid var(--hairline)' }}>
-                  <div className="w-7 h-4 rounded-full relative" style={{ background: usarGradiente ? 'var(--accent)' : '#333' }}>
-                    <div className="w-3 h-3 bg-white rounded-full absolute top-0.5 transition-all" style={{ left: usarGradiente ? '14px' : '2px' }} />
-                  </div>
-                  {usarGradiente ? 'Ativo' : 'Desativado'}
-                </button>
-              )}
-            </div>
-            {(!fotoPreview || usarGradiente) && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs t-dim mb-1 block">COR ESQUERDA</label>
-                  <div className="flex items-center gap-2">
-                    <input type="color" value={form.cor1} onChange={e => set('cor1', e.target.value)}
-                      className="w-10 h-9 rounded-lg cursor-pointer border-0 p-0.5" style={{ background: 'var(--hairline)' }} />
-                    <span className="text-xs t-dim">{form.cor1}</span>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs t-dim mb-1 block">COR DIREITA</label>
-                  <div className="flex items-center gap-2">
-                    <input type="color" value={form.cor2} onChange={e => set('cor2', e.target.value)}
-                      className="w-10 h-9 rounded-lg cursor-pointer border-0 p-0.5" style={{ background: 'var(--hairline)' }} />
-                    <span className="text-xs t-dim">{form.cor2}</span>
-                  </div>
-                </div>
               </div>
             )}
           </div>
         </div>
 
-        <div className="px-5 pb-5 pt-3 flex gap-3 shrink-0" style={{ borderTop: '1px solid var(--space-elev-2)' }}>
-          <button onClick={onClose} className="flex-1 py-3 rounded-xl text-sm font-bold t-dim" style={{ background: 'var(--space-elev-2)' }}>Cancelar</button>
+        {/* Abas */}
+        <div className="flex mx-4 mt-3 gap-1 shrink-0 rounded-xl p-1" style={{ background: 'var(--space-elev-2)' }}>
+          {ABAS.map(a => (
+            <button key={a.k} onClick={() => setAbaAtiva(a.k)}
+              className="flex-1 py-1.5 rounded-lg text-xs font-bold transition-all"
+              style={abaAtiva === a.k
+                ? { background: 'rgba(var(--accent-rgb),0.18)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.3)' }
+                : { color: 'var(--t-dim)', border: '1px solid transparent' }}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Conteúdo scrollável */}
+        <div className="overflow-y-auto flex-1 px-4 py-4 space-y-4">
+
+          {/* ── ABA CONTEÚDO ── */}
+          {abaAtiva === 'conteudo' && (<>
+            {/* Tag */}
+            <div>
+              <p className="text-[10px] font-black t-dim tracking-widest mb-2">CATEGORIA / TAG</p>
+              <div className="flex flex-wrap gap-1.5">
+                {TAGS_BANNER.map(t => (
+                  <button key={t.label} onClick={() => set('tag', t.label)}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all"
+                    style={form.tag === t.label
+                      ? { background: `${t.cor}22`, color: t.cor, border: `1px solid ${t.cor}55` }
+                      : { background: 'var(--space-elev-2)', color: 'var(--t-dim)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Título */}
+            <div>
+              <p className="text-[10px] font-black t-dim tracking-widest mb-1.5">TÍTULO *</p>
+              <input value={form.titulo} onChange={e => set('titulo', e.target.value)}
+                placeholder="Ex: Clube Sushi Lover Rumo ao Hexa"
+                className="w-full px-3 py-2.5 rounded-xl text-sm font-bold t-strong outline-none"
+                style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.06)' }}
+                onFocus={e => e.target.style.borderColor = 'rgba(var(--accent-rgb),0.5)'}
+                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.06)'} />
+            </div>
+
+            {/* Subtítulo */}
+            <div>
+              <p className="text-[10px] font-black t-dim tracking-widest mb-1.5">SUBTÍTULO</p>
+              <textarea value={form.subtitulo} onChange={e => set('subtitulo', e.target.value)}
+                placeholder="Descrição curta da promoção (aparece abaixo do título)"
+                rows={2}
+                className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none resize-none"
+                style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.06)' }}
+                onFocus={e => e.target.style.borderColor = 'rgba(var(--accent-rgb),0.5)'}
+                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.06)'} />
+            </div>
+          </>)}
+
+          {/* ── ABA DESTAQUE / PRÊMIO ── */}
+          {abaAtiva === 'destaque' && (<>
+            {/* Modo: simples vs múltiplos */}
+            <div className="rounded-xl p-1 flex gap-1" style={{ background: 'var(--space-elev-2)' }}>
+              <button onClick={() => setModoDestaque('simples')}
+                className="flex-1 py-2 rounded-lg text-xs font-bold transition-all"
+                style={modoDestaque === 'simples'
+                  ? { background: 'rgba(var(--accent-rgb),0.18)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.3)' }
+                  : { color: 'var(--t-dim)', border: '1px solid transparent' }}>
+                Destaque único
+              </button>
+              <button onClick={() => setModoDestaque('multiplo')}
+                className="flex-1 py-2 rounded-lg text-xs font-bold transition-all"
+                style={modoDestaque === 'multiplo'
+                  ? { background: 'rgba(var(--accent-rgb),0.18)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.3)' }
+                  : { color: 'var(--t-dim)', border: '1px solid transparent' }}>
+                Cliente escolhe
+              </button>
+            </div>
+
+            {modoDestaque === 'simples' && (
+              <div className="space-y-2">
+                <p className="text-[10px] font-black t-dim tracking-widest">ITEM DO CARDÁPIO</p>
+                <SelectCardapio itens={itensCardapio} value={form.destaque}
+                  placeholder="— selecionar item do cardápio —"
+                  onChange={item => { set('item_id', item?.id ?? null); set('destaque', item?.nome ?? ''); }} />
+                <p className="text-[10px] t-faint text-center">ou</p>
+                <input value={form.destaque}
+                  onChange={e => { set('destaque', e.target.value); set('item_id', null); }}
+                  placeholder="Texto livre: ex. Combo Hot 20 peças"
+                  className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none"
+                  style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.06)' }}
+                  onFocus={e => e.target.style.borderColor = 'rgba(var(--accent-rgb),0.5)'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.06)'} />
+              </div>
+            )}
+
+            {modoDestaque === 'multiplo' && (<>
+              <div className="rounded-xl p-3 text-xs" style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px solid rgba(var(--accent-rgb),0.15)' }}>
+                <p className="font-bold" style={{ color: 'var(--accent)' }}>Como funciona</p>
+                <p className="t-dim mt-0.5">O cliente verá as opções no banner e pode escolher ao resgatar. Aparecem como pílulas abaixo do título.</p>
+              </div>
+
+              {/* Organizado por categoria */}
+              <div className="space-y-2">
+                {(form.opcoes_escolha || []).map((op, idx) => (
+                  <div key={idx} className="flex gap-2 items-start">
+                    <div className="flex-1 space-y-1">
+                      <SelectCardapio itens={itensCardapio} value={op}
+                        placeholder={`Opção ${idx + 1} — selecionar item`}
+                        onChange={item => setOpcao(idx, item?.nome ?? '')} />
+                      <input value={op} onChange={e => setOpcao(idx, e.target.value)}
+                        placeholder="Ou digitar manualmente..."
+                        className="w-full px-3 py-2 rounded-xl text-xs t-strong outline-none"
+                        style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.05)' }} />
+                    </div>
+                    <button onClick={() => removerOpcao(idx)}
+                      className="mt-1 w-8 h-8 flex items-center justify-center rounded-lg shrink-0"
+                      style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171' }}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={adicionarOpcao}
+                className="w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+                style={{ background: 'rgba(var(--accent-rgb),0.06)', border: '1px dashed rgba(var(--accent-rgb),0.3)', color: 'var(--accent)' }}>
+                <Plus size={13} /> Adicionar opção
+              </button>
+            </>)}
+          </>)}
+
+          {/* ── ABA APARÊNCIA ── */}
+          {abaAtiva === 'aparencia' && (<>
+            {/* Imagem */}
+            <div>
+              <p className="text-[10px] font-black t-dim tracking-widest mb-2">IMAGEM DE FUNDO</p>
+              {fotoPreview ? (
+                <div className="rounded-xl overflow-hidden relative" style={{ height: 80 }}>
+                  <img src={fotoPreview} alt="" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 flex items-center justify-center gap-2"
+                    style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
+                    <button onClick={() => inputFotoRef.current?.click()}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5"
+                      style={{ background: 'rgba(255,255,255,0.15)', color: '#fff' }}>
+                      <Upload size={12} /> Trocar
+                    </button>
+                    <button onClick={removerFoto}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5"
+                      style={{ background: 'rgba(239,68,68,0.3)', color: '#fca5a5' }}>
+                      <Trash2 size={12} /> Remover
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => inputFotoRef.current?.click()}
+                  className="w-full py-4 rounded-xl flex flex-col items-center gap-2 transition-colors"
+                  style={{ background: 'var(--space-elev-2)', border: '2px dashed rgba(255,255,255,0.08)', color: 'var(--t-dim)' }}>
+                  <ImagePlus size={22} strokeWidth={1.5} />
+                  <span className="text-xs font-bold">Adicionar imagem de fundo</span>
+                  <span className="text-[10px] t-faint">JPG, PNG ou WebP · máx 5MB</span>
+                </button>
+              )}
+              <input ref={inputFotoRef} type="file" accept="image/*" className="hidden" onChange={onFotoChange} />
+            </div>
+
+            {/* Paletas de cor */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-black t-dim tracking-widest">
+                  {fotoPreview ? 'GRADIENTE SOBRE IMAGEM' : 'PALETA DE CORES'}
+                </p>
+                {fotoPreview && (
+                  <button onClick={() => { const v = !usarGradiente; setUsarGradiente(v); set('usar_gradiente', v ? 1 : 0); }}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold transition-all"
+                    style={usarGradiente
+                      ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }
+                      : { background: 'var(--space-elev-2)', color: 'var(--t-dim)' }}>
+                    <div className="w-6 h-3.5 rounded-full relative" style={{ background: usarGradiente ? 'var(--accent)' : '#444' }}>
+                      <div className="w-2.5 h-2.5 bg-white rounded-full absolute top-0.5 transition-all" style={{ left: usarGradiente ? '11px' : '1px' }} />
+                    </div>
+                    {usarGradiente ? 'Ativo' : 'Off'}
+                  </button>
+                )}
+              </div>
+
+              {(!fotoPreview || usarGradiente) && (<>
+                {/* Paletas pré-definidas */}
+                <div className="grid grid-cols-4 gap-2 mb-3">
+                  {PALETAS.map(p => (
+                    <button key={p.nome} onClick={() => { set('cor1', p.cor1); set('cor2', p.cor2); }}
+                      className="rounded-xl overflow-hidden transition-all flex flex-col"
+                      style={{
+                        height: 44,
+                        background: `linear-gradient(135deg, ${p.cor1}, ${p.cor2})`,
+                        border: form.cor1 === p.cor1 ? '2px solid #fff' : '2px solid transparent',
+                        boxShadow: form.cor1 === p.cor1 ? '0 0 0 1px rgba(255,255,255,0.2)' : 'none',
+                      }}>
+                      <span className="text-[9px] font-bold text-white/80 mt-auto mb-1 mx-auto">{p.nome}</span>
+                    </button>
+                  ))}
+                </div>
+                {/* Ajuste fino */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'var(--space-elev-2)' }}>
+                    <input type="color" value={form.cor1} onChange={e => set('cor1', e.target.value)}
+                      className="w-8 h-7 rounded-lg cursor-pointer border-0 p-0.5 shrink-0" style={{ background: 'transparent' }} />
+                    <div>
+                      <p className="text-[9px] t-faint">ESQUERDA</p>
+                      <p className="text-[10px] t-dim font-mono">{form.cor1}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ background: 'var(--space-elev-2)' }}>
+                    <input type="color" value={form.cor2} onChange={e => set('cor2', e.target.value)}
+                      className="w-8 h-7 rounded-lg cursor-pointer border-0 p-0.5 shrink-0" style={{ background: 'transparent' }} />
+                    <div>
+                      <p className="text-[9px] t-faint">DIREITA</p>
+                      <p className="text-[10px] t-dim font-mono">{form.cor2}</p>
+                    </div>
+                  </div>
+                </div>
+              </>)}
+            </div>
+
+            {/* Emoji */}
+            <div>
+              <p className="text-[10px] font-black t-dim tracking-widest mb-2">EMOJI DO BANNER</p>
+              <div className="flex flex-wrap gap-1.5">
+                {['🍣','🔥','🎉','⭐','🚚','🦐','🐟','🥑','🍱','💚','✨','🎋','🏆','🎯','🌊','🎊','🎁','🤩'].map(e => (
+                  <button key={e} onClick={() => set('emoji', e)}
+                    className="w-9 h-9 flex items-center justify-center rounded-xl text-lg transition-all"
+                    style={form.emoji === e
+                      ? { background: 'rgba(var(--accent-rgb),0.2)', border: '1.5px solid rgba(var(--accent-rgb),0.5)' }
+                      : { background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                    {e}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>)}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 pb-4 pt-3 flex gap-2 shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm font-bold t-dim transition-colors hover:bg-white/5"
+            style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.05)' }}>
+            Cancelar
+          </button>
           <button onClick={salvar} disabled={salvando}
-            className="flex-1 py-3 rounded-xl text-sm font-black t-strong disabled:opacity-50"
+            className="flex-1 py-2.5 rounded-xl text-sm font-black t-strong disabled:opacity-50 flex items-center justify-center gap-2"
             style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent-2))' }}>
-            {salvando ? 'Salvando...' : <span className="flex items-center justify-center gap-1.5"><Save size={15} strokeWidth={2} /> Salvar</span>}
+            {salvando ? <><Loader2 size={15} className="animate-spin" /> Salvando…</> : <><Save size={15} strokeWidth={2} /> Salvar Banner</>}
           </button>
         </div>
       </div>

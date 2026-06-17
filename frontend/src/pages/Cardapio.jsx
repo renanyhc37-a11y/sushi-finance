@@ -316,7 +316,7 @@ function Carrossel({ onBannerClick }) {
               )}
             </div>
 
-            {/* Base: título + subtítulo */}
+            {/* Base: título + subtítulo + opções de escolha */}
             <div className="flex-1 flex flex-col justify-end">
               <h2 className="text-2xl font-black text-white leading-tight"
                 style={{ textShadow: '0 2px 12px rgba(0,0,0,0.7)' }}>
@@ -328,6 +328,22 @@ function Carrossel({ onBannerClick }) {
                   {banner.subtitulo}
                 </p>
               )}
+              {(() => {
+                const ops = banner.opcoes_escolha
+                  ? (typeof banner.opcoes_escolha === 'string' ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha)
+                  : [];
+                return ops.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    <span className="text-[10px] text-white/60 self-center">Escolha:</span>
+                    {ops.map((op, i) => (
+                      <span key={i} className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                        style={{ background: 'rgba(255,255,255,0.18)', color: '#fff', backdropFilter: 'blur(8px)' }}>
+                        {op}
+                      </span>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
             </div>
           </div>
         </div>
