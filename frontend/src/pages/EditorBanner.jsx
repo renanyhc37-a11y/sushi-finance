@@ -6,7 +6,7 @@ import {
   ChevronUp, ChevronDown, RotateCcw, Layers
 } from 'lucide-react';
 
-const BASE = import.meta.env.VITE_API_URL ?? '';
+const BASE = import.meta.env.VITE_API_URL || '/api';
 
 /* ── Defaults de posição/estilo para cada elemento ── */
 const DEFAULTS = {
