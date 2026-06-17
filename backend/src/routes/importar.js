@@ -275,51 +275,49 @@ router.post('/clientes/confirmar', upload.single('arquivo'), (req, res) => {
     let criados = 0, atualizados = 0, ignorados = 0, erros = 0;
     const detalhes = [];
 
-    db.transaction(() => {
-      for (const row of dataRows) {
-        try {
-          const nome   = get(row, 'nome');
-          const telRaw = get(row, 'telefone');
-          const tel    = normalizarTel(telRaw);
+    for (const row of dataRows) {
+      try {
+        const nome   = get(row, 'nome');
+        const telRaw = get(row, 'telefone');
+        const tel    = normalizarTel(telRaw);
 
-          if (!nome && !tel) { ignorados++; continue; }
-          if (!tel) { erros++; detalhes.push({ nome, erro: 'Sem telefone' }); continue; }
-          if (tel.length < 8) { erros++; detalhes.push({ nome, tel, erro: 'Telefone inválido' }); continue; }
+        if (!nome && !tel) { ignorados++; continue; }
+        if (!tel) { erros++; detalhes.push({ nome, erro: 'Sem telefone' }); continue; }
+        if (tel.length < 8) { erros++; detalhes.push({ nome, tel, erro: 'Telefone inválido' }); continue; }
 
-          const endereco   = get(row, 'endereco');
-          const bairro     = get(row, 'bairro');
-          const email      = get(row, 'email');
-          const observacao = get(row, 'obs');
-          const pedidos    = parseInt(get(row, 'pedidos')) || 0;
+        const endereco   = get(row, 'endereco');
+        const bairro     = get(row, 'bairro');
+        const email      = get(row, 'email');
+        const observacao = get(row, 'obs');
+        const pedidos    = parseInt(get(row, 'pedidos')) || 0;
 
-          let aniversario = null;
-          const aniRaw = get(row, 'aniversario');
-          if (aniRaw) {
-            const m = aniRaw.match(/(\d{1,2})[\/\-](\d{1,2})/);
-            if (m) aniversario = `${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
-          }
-
-          const existing = stmtBuscar.get(tel);
-
-          if (existing) {
-            if (modo === 'atualizar') {
-              stmtAtualizar.run(nome || null, endereco || null, bairro || null, email || null, observacao || null, aniversario || null, pedidos, tel);
-              atualizados++;
-              detalhes.push({ nome, tel, status: 'atualizado' });
-            } else {
-              ignorados++;
-            }
-          } else {
-            stmtInserir.run(tel, nome || 'Cliente', endereco || null, bairro || null, email || null, observacao || null, aniversario || null, pedidos);
-            criados++;
-            detalhes.push({ nome, tel, status: 'criado' });
-          }
-        } catch (err) {
-          console.error('[importar clientes row error]', err.message);
-          erros++;
+        let aniversario = null;
+        const aniRaw = get(row, 'aniversario');
+        if (aniRaw) {
+          const m = aniRaw.match(/(\d{1,2})[\/\-](\d{1,2})/);
+          if (m) aniversario = `${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
         }
+
+        const existing = stmtBuscar.get(tel);
+
+        if (existing) {
+          if (modo === 'atualizar') {
+            stmtAtualizar.run(nome || null, endereco || null, bairro || null, email || null, observacao || null, aniversario || null, pedidos, tel);
+            atualizados++;
+            detalhes.push({ nome, tel, status: 'atualizado' });
+          } else {
+            ignorados++;
+          }
+        } else {
+          stmtInserir.run(tel, nome || 'Cliente', endereco || null, bairro || null, email || null, observacao || null, aniversario || null, pedidos);
+          criados++;
+          detalhes.push({ nome, tel, status: 'criado' });
+        }
+      } catch (err) {
+        console.error('[importar clientes row error]', err.message);
+        erros++;
       }
-    })();
+    }
 
     res.json({ ok: true, criados, atualizados, ignorados, erros, total: dataRows.length, detalhes: detalhes.slice(0, 50) });
   } catch (e) {
