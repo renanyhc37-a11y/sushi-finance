@@ -67,23 +67,28 @@ router.get('/clientes-inativos', (req, res) => {
   const dias = parseInt(req.query.dias) || 30;
   const limite = parseInt(req.query.limite) || 100;
   try {
-    // Busca clientes (WhatsApp + importados) que não fizeram pedido há X dias
-    const rows = db.prepare(`
-      SELECT
-        cl.id, cl.nome, cl.telefone,
+    // Clientes importados sem pedido recente (usa '2000-01-01' como fallback = sempre inativos)
+    const rowsClientes = db.prepare(`
+      SELECT cl.id, cl.nome, cl.telefone,
         NULL as foto_url,
         cl.updated_at as ultima_em,
-        MAX(p.created_at) as ultimo_pedido,
-        COUNT(p.id) as total_pedidos,
-        COALESCE(SUM(p.total), 0) as total_gasto,
-        CAST(julianday('now') - julianday(COALESCE(MAX(p.created_at), cl.created_at)) AS INTEGER) as dias_inativo
+        (SELECT MAX(p.created_at) FROM pdv_pedidos p
+         WHERE REPLACE(REPLACE(p.cliente_telefone,'-',''),' ','') LIKE '%' || SUBSTR(REPLACE(cl.telefone,'+',''), -8) || '%') as ultimo_pedido,
+        0 as total_pedidos,
+        0 as total_gasto,
+        CAST(julianday('now') - julianday(
+          COALESCE(
+            (SELECT MAX(p.created_at) FROM pdv_pedidos p
+             WHERE REPLACE(REPLACE(p.cliente_telefone,'-',''),' ','') LIKE '%' || SUBSTR(REPLACE(cl.telefone,'+',''), -8) || '%'),
+            '2000-01-01'
+          )
+        ) AS INTEGER) as dias_inativo
       FROM clientes cl
-      LEFT JOIN pdv_pedidos p ON REPLACE(REPLACE(p.cliente_telefone,'-',''),' ','') LIKE '%' || SUBSTR(REPLACE(cl.telefone,'+',''), -8) || '%'
-      WHERE cl.telefone IS NOT NULL
-        AND cl.telefone NOT LIKE 'TESTE_%'
-        AND CAST(julianday('now') - julianday(COALESCE(MAX(p.created_at), cl.created_at)) AS INTEGER) >= ?
-      GROUP BY cl.id
-      UNION
+      WHERE cl.telefone IS NOT NULL AND cl.telefone NOT LIKE 'TESTE_%'
+    `).all();
+
+    // Clientes do WhatsApp sem pedido recente (e sem cadastro em clientes)
+    const rowsWA = db.prepare(`
       SELECT
         wc.id, wc.nome, wc.telefone, wc.foto_url, wc.ultima_em,
         MAX(p.created_at) as ultimo_pedido,
@@ -93,14 +98,21 @@ router.get('/clientes-inativos', (req, res) => {
       FROM wa_conversas wc
       LEFT JOIN pdv_pedidos p ON REPLACE(REPLACE(p.cliente_telefone,'-',''),' ','') LIKE '%' || SUBSTR(REPLACE(wc.telefone,'+',''), -8) || '%'
       LEFT JOIN clientes cl2 ON cl2.telefone = REPLACE(REPLACE(wc.telefone,'+',''),' ','')
-      WHERE wc.arquivada = 0
-        AND wc.telefone NOT LIKE 'TESTE_%'
-        AND cl2.id IS NULL
-        AND CAST(julianday('now') - julianday(COALESCE(MAX(p.created_at), wc.ultima_em)) AS INTEGER) >= ?
+      WHERE wc.arquivada = 0 AND wc.telefone NOT LIKE 'TESTE_%' AND cl2.id IS NULL
       GROUP BY wc.id
-      ORDER BY dias_inativo ASC
-      LIMIT ?
-    `).all(dias, dias, limite);
+      HAVING CAST(julianday('now') - julianday(COALESCE(MAX(p.created_at), wc.ultima_em)) AS INTEGER) >= ?
+    `).all(dias);
+
+    const seen = new Set();
+    const rows = [...rowsClientes, ...rowsWA]
+      .filter(r => {
+        if (r.dias_inativo < dias) return false;
+        if (seen.has(r.telefone)) return false;
+        seen.add(r.telefone);
+        return true;
+      })
+      .sort((a, b) => b.dias_inativo - a.dias_inativo)
+      .slice(0, limite);
     res.json(rows);
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
