@@ -242,6 +242,7 @@ router.post('/clientes/confirmar', upload.single('arquivo'), (req, res) => {
     const mapa    = JSON.parse(req.body.mapa || '{}');      // { nome: 0, telefone: 1, ... }
     const modo    = req.body.modo || 'pular';               // 'pular' | 'atualizar'
     const sheet   = req.body.sheet || null;
+    console.log('[importar clientes] mapa recebido:', JSON.stringify(mapa), '| modo:', modo);
 
     const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
     const sheetName = sheet && wb.SheetNames.includes(sheet) ? sheet : wb.SheetNames[0];
