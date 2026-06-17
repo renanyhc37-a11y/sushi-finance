@@ -45,6 +45,62 @@ const authJ = () => ({ Authorization: `Bearer ${getToken()}`, 'Content-Type': 'a
 const EMOJIS_CAT  = ['🍱','🍣','🔥','🥤','🍜','🍛','🥢','🎋','🌊','⭐','🎯','🍡','🍘','🫙'];
 const EMOJIS_ITEM = ['🍱','🍣','🔥','🥤','🍜','🍛','🥢','🦐','🐟','🦑','🥑','🧃','💧','🍵','🍙','🍤','🦞','🫙','🧆','🥗'];
 
+// ── Dropdown customizado para itens do cardápio ───────────────
+function SelectCardapio({ itens, value, onChange, placeholder = '— texto livre —' }) {
+  const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function fechar(e) { if (ref.current && !ref.current.contains(e.target)) setAberto(false); }
+    document.addEventListener('mousedown', fechar);
+    return () => document.removeEventListener('mousedown', fechar);
+  }, []);
+
+  const filtrados = itens.filter(i =>
+    !busca || `${i._cat} ${i.nome}`.toLowerCase().includes(busca.toLowerCase())
+  );
+  const selecionado = itens.find(i => i.nome === value);
+  const label = selecionado ? `${selecionado._cat} › ${selecionado.nome}` : placeholder;
+
+  return (
+    <div ref={ref} className="relative w-full">
+      <button type="button" onClick={() => { setAberto(v => !v); setBusca(''); }}
+        className="w-full px-3 py-2.5 rounded-xl text-sm text-left outline-none flex items-center justify-between gap-2"
+        style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.08)', color: selecionado ? 'var(--t-strong)' : 'var(--t-dim)' }}>
+        <span className="truncate">{label}</span>
+        <span style={{ color: 'var(--t-dim)', fontSize: 10 }}>{aberto ? '▲' : '▼'}</span>
+      </button>
+      {aberto && (
+        <div className="absolute z-50 w-full mt-1 rounded-xl overflow-hidden"
+          style={{ background: 'var(--space-elev)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)', maxHeight: 260 }}>
+          <div className="p-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <input autoFocus value={busca} onChange={e => setBusca(e.target.value)}
+              placeholder="Buscar item..." className="w-full px-3 py-1.5 rounded-lg text-sm outline-none"
+              style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--t-strong)', border: '1px solid rgba(255,255,255,0.08)' }} />
+          </div>
+          <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
+            <button type="button" onClick={() => { onChange(null); setAberto(false); }}
+              className="w-full px-3 py-2 text-sm text-left hover:bg-white/5 transition-colors"
+              style={{ color: 'var(--t-dim)' }}>{placeholder}</button>
+            {filtrados.map(i => (
+              <button key={i.id} type="button"
+                onClick={() => { onChange(i); setAberto(false); setBusca(''); }}
+                className="w-full px-3 py-2 text-sm text-left hover:bg-white/5 transition-colors flex items-center gap-2"
+                style={{ background: value === i.nome ? 'rgba(var(--accent-rgb),0.12)' : 'transparent', color: 'var(--t-strong)' }}>
+                <span style={{ color: 'var(--t-dim)', fontSize: 11 }}>{i._cat}</span>
+                <span>›</span>
+                <span>{i.nome}</span>
+              </button>
+            ))}
+            {filtrados.length === 0 && <p className="px-3 py-3 text-xs text-center" style={{ color: 'var(--t-dim)' }}>Nenhum item encontrado</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Modal de categoria ────────────────────────────────────────
 function ModalCategoria({ cat, onClose, onSalvo }) {
   const isNova = !cat?.id;
@@ -629,21 +685,10 @@ function ModalBanner({ banner, onClose, onSalvo }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-bold t-dim mb-1 block">DESTAQUE (prêmio/recompensa)</label>
-              <select
-                value={form.item_id ?? ''}
-                onChange={e => {
-                  const id = e.target.value ? Number(e.target.value) : null;
-                  const item = itensCardapio.find(i => i.id === id);
-                  set('item_id', id);
-                  if (item) set('destaque', item.nome);
-                }}
-                className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none mb-1"
-                style={{ background: 'var(--hairline)', border: '1px solid var(--hairline)' }}>
-                <option value="">— texto livre —</option>
-                {itensCardapio.map(i => (
-                  <option key={i.id} value={i.id}>{i._cat} › {i.nome}</option>
-                ))}
-              </select>
+              <div className="mb-1">
+                <SelectCardapio itens={itensCardapio} value={form.destaque}
+                  onChange={item => { set('item_id', item ? item.id : null); set('destaque', item ? item.nome : ''); }} />
+              </div>
               <input value={form.destaque} onChange={e => { set('destaque', e.target.value); set('item_id', null); }}
                 placeholder="Ex: Temaki Philadelphia" className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none"
                 style={{ background: 'var(--hairline)', border: '1px solid var(--hairline)' }} />
@@ -1263,19 +1308,15 @@ function ModalCriarPromocao({ sugestao, onClose, onSalvo }) {
           <div>
             <label className="text-[10px] t-dim font-bold tracking-widest mb-1.5 block">RECOMPENSA / PRÊMIO</label>
             {itensCardapio.length > 0 && (
-              <select
-                value={itemRecompensa}
-                className="w-full px-3 py-2.5 rounded-xl text-sm t-strong outline-none mb-2"
-                style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(255,255,255,0.08)' }}
-                onChange={e => {
-                  setItemRecompensa(e.target.value);
-                  if (e.target.value) setForm(p => ({ ...p, recompensa: `1 ${e.target.value} grátis` }));
-                }}>
-                <option value="">— escolher item do cardápio —</option>
-                {itensCardapio.map(i => (
-                  <option key={i.id} value={i.nome}>{i._cat} › {i.nome}</option>
-                ))}
-              </select>
+              <div className="mb-2">
+                <SelectCardapio itens={itensCardapio} value={itemRecompensa}
+                  placeholder="— escolher item do cardápio —"
+                  onChange={item => {
+                    const nome = item ? item.nome : '';
+                    setItemRecompensa(nome);
+                    if (nome) setForm(p => ({ ...p, recompensa: `1 ${nome} grátis` }));
+                  }} />
+              </div>
             )}
             <input value={form.recompensa} onChange={e => setForm(p => ({ ...p, recompensa: e.target.value }))}
               placeholder="Ex: 1 Temaki Philadelphia grátis, 1 Hot grátis…"
