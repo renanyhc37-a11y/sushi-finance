@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Save, Eye, EyeOff, Move, Type, Palette,
   AlignLeft, AlignCenter, AlignRight, Bold, Italic,
-  ChevronUp, ChevronDown, RotateCcw, Layers
+  ChevronUp, ChevronDown, RotateCcw, Layers, Monitor, Smartphone
 } from 'lucide-react';
 import { getToken } from '../hooks/useAuth';
 
@@ -297,6 +297,7 @@ export default function EditorBanner() {
 
   const [banner, setBanner] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [viewport, setViewport] = useState('desktop'); // 'desktop' | 'mobile'
   const [design, setDesign] = useState(structuredClone(DEFAULTS));
   const [selected, setSelected] = useState(null);
   const [history, setHistory] = useState([]);
@@ -397,6 +398,18 @@ export default function EditorBanner() {
           <p className="text-xs text-zinc-500 truncate">Editor de Banner</p>
           <p className="text-sm font-bold text-white truncate">{banner.titulo}</p>
         </div>
+        {/* Toggle viewport */}
+        <div className="flex rounded-lg overflow-hidden border border-zinc-700">
+          <button onClick={() => setViewport('desktop')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold transition-colors ${viewport === 'desktop' ? 'bg-zinc-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300'}`}>
+            <Monitor size={13}/> Desktop
+          </button>
+          <button onClick={() => setViewport('mobile')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold transition-colors ${viewport === 'mobile' ? 'bg-zinc-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300'}`}>
+            <Smartphone size={13}/> Mobile
+          </button>
+        </div>
+
         <button onClick={undo} disabled={history.length === 0}
           title="Desfazer (Ctrl+Z)"
           className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-700 disabled:opacity-30 transition-colors">
@@ -445,15 +458,41 @@ export default function EditorBanner() {
 
         {/* Centro: canvas */}
         <main className="flex-1 flex flex-col items-center justify-center p-6 overflow-auto gap-4">
-          <div className="w-full max-w-2xl">
-            <BannerCanvas
-              banner={banner}
-              design={design}
-              selected={selected}
-              onSelect={setSelected}
-              onMove={moveEl}
-            />
-          </div>
+          {/* Moldura mobile */}
+          {viewport === 'mobile' ? (
+            <div className="flex flex-col items-center gap-2">
+              <div className="rounded-[2rem] border-4 border-zinc-600 p-2 bg-zinc-900 shadow-2xl"
+                style={{ width: 340 }}>
+                {/* Notch */}
+                <div className="flex justify-center mb-1">
+                  <div className="w-16 h-1.5 rounded-full bg-zinc-700" />
+                </div>
+                <div style={{ width: '100%' }}>
+                  <BannerCanvas
+                    banner={banner}
+                    design={design}
+                    selected={selected}
+                    onSelect={setSelected}
+                    onMove={moveEl}
+                  />
+                </div>
+                <div className="flex justify-center mt-1">
+                  <div className="w-8 h-1.5 rounded-full bg-zinc-700" />
+                </div>
+              </div>
+              <p className="text-[10px] text-zinc-600">Visualização mobile (375px)</p>
+            </div>
+          ) : (
+            <div className="w-full max-w-2xl">
+              <BannerCanvas
+                banner={banner}
+                design={design}
+                selected={selected}
+                onSelect={setSelected}
+                onMove={moveEl}
+              />
+            </div>
+          )}
           <p className="text-xs text-zinc-600 text-center">
             Arraste os elementos para reposicioná-los • Clique para selecionar e editar propriedades
           </p>
