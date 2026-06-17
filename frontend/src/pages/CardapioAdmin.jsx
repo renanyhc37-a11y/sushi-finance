@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { getToken } from '../hooks/useAuth';
 import {
@@ -1764,6 +1765,7 @@ function SortableListRow({ item, onToggle, onFicha, onEdit, onDelete }) {
 
 // ── Componente principal ──────────────────────────────────────
 export default function CardapioAdmin() {
+  const navigate = useNavigate();
   const [categorias, setCategorias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [catAtiva, setCatAtiva] = useState(null);
@@ -3192,6 +3194,12 @@ export default function CardapioAdmin() {
                         className="px-2 py-1 rounded-lg text-[11px] font-bold"
                         style={b.ativo ? { background: 'rgba(239,68,68,0.1)', color: '#f87171' } : { background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>
                         {b.ativo ? 'Ocultar' : 'Mostrar'}
+                      </button>
+                      <button onClick={() => navigate(`/editor-banner/${b.id}`)}
+                        className="px-2 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1"
+                        style={{ background: 'rgba(139,92,246,0.12)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.25)' }}
+                        title="Editor visual (Canva)">
+                        🎨 Design
                       </button>
                       <button onClick={() => setModalBanner(b)}
                         className="w-7 h-7 flex items-center justify-center rounded-lg t-dim"

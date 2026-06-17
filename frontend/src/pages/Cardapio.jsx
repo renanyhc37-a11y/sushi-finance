@@ -300,52 +300,103 @@ function Carrossel({ onBannerClick }) {
           <div className="absolute inset-0"
             style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.2) 55%, transparent 100%)' }} />
 
-          {/* Conteúdo */}
-          <div className="absolute inset-0 flex flex-col justify-between p-5">
-            {/* Topo: tag esquerda + badge destaque direita */}
-            <div className="flex items-start justify-between gap-3">
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-black tracking-wider px-3 py-1.5 rounded-full"
-                style={{ background: 'rgba(0,0,0,0.45)', color: '#fff', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.15)', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>
-                {banner.tag}
-              </span>
-              {banner.destaque && (
-                <div className="shrink-0 px-3 py-2 rounded-xl text-center"
-                  style={{ background: 'rgba(var(--accent-rgb),0.9)', backdropFilter: 'blur(8px)', boxShadow: '0 4px 16px rgba(var(--accent-rgb),0.4)' }}>
-                  <span className="font-black text-white text-sm leading-none whitespace-nowrap">{banner.destaque}</span>
-                </div>
-              )}
-            </div>
+          {/* Conteúdo — layout livre se design salvo, senão layout padrão */}
+          {(() => {
+            const d = banner.design ? (typeof banner.design === 'string' ? JSON.parse(banner.design) : banner.design) : null;
+            const els = d?.elementos;
+            const ops = banner.opcoes_escolha
+              ? (typeof banner.opcoes_escolha === 'string' ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha)
+              : [];
 
-            {/* Base: título + subtítulo + opções de escolha */}
-            <div className="flex-1 flex flex-col justify-end">
-              <h2 className="text-2xl font-black text-white leading-tight"
-                style={{ textShadow: '0 2px 12px rgba(0,0,0,0.7)' }}>
-                {banner.titulo}
-              </h2>
-              {banner.subtitulo && (
-                <p className="text-sm text-white/80 mt-1.5 leading-snug"
-                  style={{ textShadow: '0 1px 6px rgba(0,0,0,0.7)' }}>
-                  {banner.subtitulo}
-                </p>
-              )}
-              {(() => {
-                const ops = banner.opcoes_escolha
-                  ? (typeof banner.opcoes_escolha === 'string' ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha)
-                  : [];
-                return ops.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    <span className="text-[10px] text-white/60 self-center">Escolha:</span>
-                    {ops.map((op, i) => (
-                      <span key={i} className="text-[11px] font-bold px-2 py-0.5 rounded-full"
-                        style={{ background: 'rgba(255,255,255,0.18)', color: '#fff', backdropFilter: 'blur(8px)' }}>
-                        {op}
-                      </span>
-                    ))}
-                  </div>
-                ) : null;
-              })()}
-            </div>
-          </div>
+            if (els) {
+              // ── Layout customizado pelo editor visual ──
+              const elStyle = (key, extra = {}) => {
+                const e = els[key];
+                if (!e || e.oculto) return null;
+                return {
+                  position: 'absolute',
+                  left: `${e.x}%`, top: `${e.y}%`,
+                  fontSize: e.size, color: e.cor,
+                  fontWeight: e.negrito ? 900 : 400,
+                  textAlign: e.align || 'left',
+                  background: e.bg || undefined,
+                  borderRadius: (key === 'tag' || key === 'destaque') ? 999 : undefined,
+                  padding: (key === 'tag' || key === 'destaque') ? '3px 10px' : undefined,
+                  backdropFilter: key === 'tag' ? 'blur(12px)' : undefined,
+                  textShadow: (key === 'titulo' || key === 'subtitulo') ? '0 2px 8px rgba(0,0,0,0.7)' : undefined,
+                  pointerEvents: 'none',
+                  maxWidth: '90%',
+                  ...extra,
+                };
+              };
+              return (
+                <div className="absolute inset-0">
+                  {banner.tag && elStyle('tag') && (
+                    <span style={elStyle('tag')} className="font-black tracking-wider text-[11px]">{banner.tag}</span>
+                  )}
+                  {banner.destaque && elStyle('destaque') && (
+                    <span style={elStyle('destaque')} className="font-black leading-none whitespace-nowrap">{banner.destaque}</span>
+                  )}
+                  {elStyle('titulo') && (
+                    <h2 style={{ ...elStyle('titulo'), lineHeight: 1.15 }}>{banner.titulo}</h2>
+                  )}
+                  {banner.subtitulo && elStyle('subtitulo') && (
+                    <p style={{ ...elStyle('subtitulo'), lineHeight: 1.3 }}>{banner.subtitulo}</p>
+                  )}
+                  {ops.length > 0 && elStyle('opcoes') && (
+                    <div style={{ ...elStyle('opcoes'), display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {ops.map((op, i) => (
+                        <span key={i} style={{ background: 'rgba(255,255,255,0.18)', color: '#fff', borderRadius: 999, padding: '2px 9px', fontSize: (els.opcoes?.size || 12) - 1 }}>
+                          {op}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // ── Layout padrão ──
+            return (
+              <div className="absolute inset-0 flex flex-col justify-between p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-black tracking-wider px-3 py-1.5 rounded-full"
+                    style={{ background: 'rgba(0,0,0,0.45)', color: '#fff', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.15)', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>
+                    {banner.tag}
+                  </span>
+                  {banner.destaque && (
+                    <div className="shrink-0 px-3 py-2 rounded-xl text-center"
+                      style={{ background: 'rgba(var(--accent-rgb),0.9)', backdropFilter: 'blur(8px)', boxShadow: '0 4px 16px rgba(var(--accent-rgb),0.4)' }}>
+                      <span className="font-black text-white text-sm leading-none whitespace-nowrap">{banner.destaque}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 flex flex-col justify-end">
+                  <h2 className="text-2xl font-black text-white leading-tight"
+                    style={{ textShadow: '0 2px 12px rgba(0,0,0,0.7)' }}>
+                    {banner.titulo}
+                  </h2>
+                  {banner.subtitulo && (
+                    <p className="text-sm text-white/80 mt-1.5 leading-snug"
+                      style={{ textShadow: '0 1px 6px rgba(0,0,0,0.7)' }}>
+                      {banner.subtitulo}
+                    </p>
+                  )}
+                  {ops.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <span className="text-[10px] text-white/60 self-center">Escolha:</span>
+                      {ops.map((op, i) => (
+                        <span key={i} className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                          style={{ background: 'rgba(255,255,255,0.18)', color: '#fff', backdropFilter: 'blur(8px)' }}>
+                          {op}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       ))}
 

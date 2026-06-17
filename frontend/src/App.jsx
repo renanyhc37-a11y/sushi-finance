@@ -39,6 +39,7 @@ const PDV              = React.lazy(() => import('./pages/PDV'));
 const WhatsAppConfig   = React.lazy(() => import('./pages/WhatsAppConfig'));
 const Clientes         = React.lazy(() => import('./pages/Clientes'));
 const CardapioAdmin    = React.lazy(() => import('./pages/CardapioAdmin'));
+const EditorBanner     = React.lazy(() => import('./pages/EditorBanner'));
 const ImportarCardapio = React.lazy(() => import('./pages/ImportarCardapio'));
 const ImportarClientes = React.lazy(() => import('./pages/ImportarClientes'));
 const Promocoes        = React.lazy(() => import('./pages/Promocoes'));
@@ -566,6 +567,7 @@ function Layout({ logout }) {
               <Route path="/pdv" element={<PDV />} />
               <Route path="/clientes" element={<Clientes />} />
               <Route path="/cardapio-admin" element={<CardapioAdmin />} />
+              <Route path="/editor-banner/:id" element={<EditorBanner />} />
               <Route path="/promocoes" element={<Promocoes />} />
               <Route path="/criativo-social" element={<CriativoSocial />} />
               <Route path="/importar-cardapio" element={<ImportarCardapio />} />

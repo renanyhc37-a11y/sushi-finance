@@ -64,6 +64,7 @@ try {
 try { db.exec('ALTER TABLE banners_promocao ADD COLUMN item_id INTEGER'); } catch {}
 try { db.exec('ALTER TABLE banners_promocao ADD COLUMN usar_gradiente INTEGER NOT NULL DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE banners_promocao ADD COLUMN opcoes_escolha TEXT'); } catch {}
+try { db.exec('ALTER TABLE banners_promocao ADD COLUMN design TEXT'); } catch {}
 
 // ── Helpers ───────────────────────────────────────────────────
 function getContextoDados() {
@@ -224,17 +225,18 @@ router.post('/banners', (req, res) => {
 // PUT /ia/banners/:id
 router.put('/banners/:id', (req, res) => {
   try {
-    const { tag, titulo, subtitulo, destaque, emoji, cor1, cor2, img, ativo, ordem, item_id, usar_gradiente, opcoes_escolha } = req.body;
+    const { tag, titulo, subtitulo, destaque, emoji, cor1, cor2, img, ativo, ordem, item_id, usar_gradiente, opcoes_escolha, design } = req.body;
     if (!titulo) return res.status(400).json({ erro: 'titulo obrigatório' });
     db.prepare(
       `UPDATE banners_promocao SET tag=?, titulo=?, subtitulo=?, destaque=?, emoji=?,
-       cor1=?, cor2=?, img=?, ativo=?, ordem=?, item_id=?, usar_gradiente=?, opcoes_escolha=? WHERE id=?`
+       cor1=?, cor2=?, img=?, ativo=?, ordem=?, item_id=?, usar_gradiente=?, opcoes_escolha=?, design=? WHERE id=?`
     ).run(tag, titulo, subtitulo || '', destaque || '', emoji || '🍣',
          cor1 || '#7c2d12', cor2 || '#9a3412', img || '',
          ativo !== undefined ? (ativo ? 1 : 0) : 1, ordem || 0,
          item_id !== undefined ? item_id : null,
          usar_gradiente ? 1 : 0,
          opcoes_escolha ? JSON.stringify(opcoes_escolha) : null,
+         design ? JSON.stringify(design) : null,
          req.params.id);
     res.json({ ok: true, id: Number(req.params.id) });
   } catch (e) {
