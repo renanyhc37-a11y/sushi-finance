@@ -1456,6 +1456,8 @@ export default function PDV() {
   const [somAtual, setSomAtual] = useState(_somCfg.som);
   const [volumeAtual, setVolumeAtual] = useState(_somCfg.volume);
   const [printVer, setPrintVer] = useState(0); // força re-render ao mudar printCfg
+  const [aceiteAuto, setAceiteAuto] = useState(() => localStorage.getItem('pdv_aceite_auto') !== '0');
+  const [impressaoAuto, setImpressaoAuto] = useState(() => localStorage.getItem('pdv_impressao_auto') !== '0');
 
   // ── Controle de loja ────────────────────────────────────────
   const [statusLoja, setStatusLoja] = useState(null); // null | 'aberto_forcado' | 'fechado_forcado' | 'fechamento_temp' | 'auto'
@@ -1549,6 +1551,23 @@ export default function PDV() {
     es.addEventListener('novo_pedido', async (e) => {
       const dados = JSON.parse(e.data);
 
+      // Aceite automático: aceita direto sem precisar clicar no banner
+      if (localStorage.getItem('pdv_aceite_auto') !== '0') {
+        try {
+          await fetch(`${BASE}/pdv/pedidos/${dados.id}/status`, {
+            method: 'PATCH', headers: authH(),
+            body: JSON.stringify({ status: 'espera' }),
+          });
+          if (localStorage.getItem('pdv_impressao_auto') !== '0') {
+            const r2 = await fetch(`${BASE}/pdv/pedidos/${dados.id}`, { headers: authH() });
+            if (r2.ok) imprimirAuto(await r2.json());
+          }
+          toast(`✅ Pedido #${dados.numero} aceito automaticamente`, { duration: 5000 });
+          carregar(true);
+          return;
+        } catch {}
+      }
+
       // Adiciona ao banner de alerta e inicia alarme
       setPedidosNovosAlerta(prev => {
         if (prev.some(p => p.id === dados.id)) return prev;
@@ -1613,8 +1632,10 @@ export default function PDV() {
       toast.success(`#${pedido.numero} aceito — na fila de espera!`);
 
       // Impressão automática ao aceitar (idempotente: não reimprime se já saiu)
-      const res = await fetch(`${BASE}/pdv/pedidos/${pedido.id}`, { headers: authH() });
-      if (res.ok) imprimirAuto(await res.json());
+      if (impressaoAuto) {
+        const res = await fetch(`${BASE}/pdv/pedidos/${pedido.id}`, { headers: authH() });
+        if (res.ok) imprimirAuto(await res.json());
+      }
 
       carregar(true);
     } catch { toast.error('Erro ao aceitar pedido'); }
@@ -1641,7 +1662,7 @@ export default function PDV() {
       // Se era novo, remove do alerta e imprime (idempotente)
       if (pedido.status === 'novo') {
         removerAlerta(pedido.id);
-        imprimirAuto(pedido);
+        if (impressaoAuto) imprimirAuto(pedido);
       }
 
       if (pedido.cliente_telefone) {
@@ -2448,6 +2469,30 @@ export default function PDV() {
                   style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
                   <div className="px-3 py-2 text-[10px] font-black t-dim uppercase tracking-wider border-b border-zinc-800">Modelo de impressão</div>
                   <div className="p-3 space-y-3">
+
+                    {/* Aceite e impressão automáticos */}
+                    <div>
+                      <p className="text-[10px] t-dim font-bold mb-1.5">COMPORTAMENTO DE PEDIDOS</p>
+                      {[
+                        { key: 'aceite_auto', label: 'Aceitar automaticamente', desc: 'Pedidos entram direto na fila sem clicar', val: aceiteAuto, set: setAceiteAuto },
+                        { key: 'impressao_auto', label: 'Imprimir automaticamente', desc: 'Comanda sai ao aceitar o pedido', val: impressaoAuto, set: setImpressaoAuto },
+                      ].map(({ key, label, desc, val, set }) => (
+                        <label key={key} className="flex items-start gap-2 py-1.5 cursor-pointer">
+                          <div className="relative shrink-0 mt-0.5">
+                            <input type="checkbox" checked={val} className="sr-only"
+                              onChange={e => { set(e.target.checked); localStorage.setItem(`pdv_${key}`, e.target.checked ? '1' : '0'); }} />
+                            <div className="w-8 h-4 rounded-full transition-all" style={{ background: val ? 'var(--accent)' : '#333' }}>
+                              <div className="w-3 h-3 rounded-full bg-white absolute top-0.5 transition-all" style={{ left: val ? 'calc(100% - 14px)' : '2px' }} />
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold" style={{ color: val ? 'var(--txt-strong)' : '#666' }}>{label}</p>
+                            <p className="text-[10px]" style={{ color: 'var(--txt-faint)' }}>{desc}</p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="border-t border-zinc-800" />
 
                     {/* Largura do papel */}
                     <div>
