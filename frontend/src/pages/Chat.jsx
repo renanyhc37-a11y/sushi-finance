@@ -92,10 +92,21 @@ export default function Chat() {
   const inputRef = useRef(null);
   const convAtivaRef = useRef(null);
   convAtivaRef.current = convAtiva;
-  const carregarConversasRef = useRef(null);
-  carregarConversasRef.current = carregarConversas;
   const somAtivoRef = useRef(somAtivo);
   somAtivoRef.current = somAtivo;
+  const carregarConversasRef = useRef(null);
+
+  useEffect(() => { fimRef.current?.scrollIntoView({ behavior:'smooth' }); }, [mensagens]);
+
+  const carregarConversas = useCallback(async () => {
+    const r = await fetch(`${BASE}/chat/conversas?arquivadas=${abaConv==='arquivadas'?1:0}&busca=${busca}`, { headers:authH() });
+    if (r.ok) setConversas(await r.json());
+  }, [abaConv, busca]);
+
+  // Mantém ref sempre atualizado (evita stale closure no socket)
+  carregarConversasRef.current = carregarConversas;
+
+  useEffect(() => { carregarConversas(); }, [carregarConversas]);
 
   // ── Socket ────────────────────────────────────────────────────
   useEffect(() => {
@@ -125,21 +136,11 @@ export default function Chat() {
     sse.addEventListener('status', e => { try { setWaStatus(JSON.parse(e.data).status); } catch {} });
     sse.addEventListener('pronto', () => setWaStatus('pronto'));
 
-    carregarConversas();
     carregarConfig();
     carregarRespostasRapidas();
 
     return () => { socket.disconnect(); sse.close(); };
   }, []);
-
-  useEffect(() => { fimRef.current?.scrollIntoView({ behavior:'smooth' }); }, [mensagens]);
-
-  const carregarConversas = useCallback(async () => {
-    const r = await fetch(`${BASE}/chat/conversas?arquivadas=${abaConv==='arquivadas'?1:0}&busca=${busca}`, { headers:authH() });
-    if (r.ok) setConversas(await r.json());
-  }, [abaConv, busca]);
-
-  useEffect(() => { carregarConversas(); }, [carregarConversas]);
 
   async function carregarConfig() {
     const r = await fetch(`${BASE}/chat/config`, { headers:authH() });
