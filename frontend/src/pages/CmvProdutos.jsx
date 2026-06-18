@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, TrendingUp, Pencil, Plus, Trash2, X, Save } from 'lucide-react';
+import { AlertTriangle, TrendingUp, Pencil, Plus, Trash2, X, Save, Package, FlaskConical } from 'lucide-react';
 import { api } from '../api/client';
 import { mesAtual } from '../lib/fmt';
 import { PageLoading } from '../components/Loading';
@@ -17,59 +17,68 @@ function corCmv(cmv, semFicha) {
 
 // ── Modal de ficha técnica ────────────────────────────────────
 function ModalFicha({ nomeProduto, precoMedio, onClose, onSalvo }) {
-  const [ficha, setFicha] = useState(null);
-  const [item, setItem] = useState(null);
-  const [linhas, setLinhas] = useState([]);
+  const [dados, setDados] = useState(null);
+  const [aba, setAba] = useState('itens'); // 'itens' | 'ingredientes'
+  const [linhasItens, setLinhasItens] = useState([]);
+  const [linhasIng, setLinhasIng] = useState([]);
   const [salvando, setSalvando] = useState(false);
-  const { data: ingredientes = [] } = useQuery({
-    queryKey: ['ingredientes'],
-    queryFn: () => api.get('/ingredientes'),
+
+  const { data: ingredientes = [] } = useQuery({ queryKey: ['ingredientes'], queryFn: () => api.get('/ingredientes') });
+  const { data: todosItens = [] } = useQuery({
+    queryKey: ['cardapio-itens-lista'],
+    queryFn: () => api.get('/cardapio/itens'),
   });
+
+  // filtra o próprio produto da lista de itens
+  const itensDisponiveis = todosItens.filter(i => i.nome !== nomeProduto);
 
   useEffect(() => {
     api.get(`/relatorios/cmv-produtos/${encodeURIComponent(nomeProduto)}/ficha`)
       .then(d => {
-        setItem(d.item);
-        setLinhas(d.ficha.map(f => ({ ...f, _key: Math.random() })));
-        setFicha(d);
+        setDados(d);
+        setLinhasItens(d.composicao.map(c => ({ ...c, _key: Math.random() })));
+        setLinhasIng(d.ficha.map(f => ({ ...f, _key: Math.random() })));
+        // Se tem composição, começa na aba de itens; se só ingredientes, começa lá
+        if (d.composicao.length > 0) setAba('itens');
+        else if (d.ficha.length > 0) setAba('ingredientes');
       })
       .catch(e => toast.error(e.message));
   }, [nomeProduto]);
 
-  function addLinha() {
-    setLinhas(p => [...p, { _key: Math.random(), ingrediente_id: '', quantidade: '' }]);
-  }
+  // Custo vindo dos itens (usa o custo calculado pelo backend via ficha/composição)
+  // Para preview, calculamos pelo preço dos itens filho (aproximação via preco)
+  const custoItens = linhasItens.reduce((s, l) => {
+    const it = todosItens.find(i => String(i.id) === String(l.item_filho_id));
+    // usa custo_unit se disponível (já calculado), senão usa preco como proxy
+    return s + (Number(l.custo_unit || 0) || (it ? (it.custo_unit || 0) : 0)) * Number(l.quantidade || 0);
+  }, 0);
 
-  function remLinha(key) {
-    setLinhas(p => p.filter(l => l._key !== key));
-  }
-
-  function setLinha(key, field, val) {
-    setLinhas(p => p.map(l => l._key === key ? { ...l, [field]: val } : l));
-  }
-
-  const custoTotal = linhas.reduce((s, l) => {
+  const custoIng = linhasIng.reduce((s, l) => {
     const ing = ingredientes.find(i => String(i.id) === String(l.ingrediente_id));
     return s + (ing ? (ing.custo_unitario || 0) * Number(l.quantidade || 0) : 0);
   }, 0);
+
+  const custoTotal = custoItens + custoIng;
   const cmvCalc = precoMedio > 0 ? (custoTotal / precoMedio) * 100 : 0;
 
   async function salvar() {
-    if (!item) {
-      toast.error('Produto não encontrado no cardápio. Cadastre-o primeiro.');
-      return;
-    }
-    const validas = linhas.filter(l => l.ingrediente_id && Number(l.quantidade) > 0);
-    if (validas.length === 0) { toast.error('Adicione ao menos um ingrediente.'); return; }
+    if (!dados?.item) { toast.error('Produto não encontrado no cardápio.'); return; }
     setSalvando(true);
     try {
-      // Remove todas as linhas antigas e reinsere
-      for (const l of (ficha?.ficha || [])) {
-        await api.del(`/dashboard/ficha/${l.id}`);
+      // Salva composição (itens)
+      for (const l of (dados.composicao || [])) await api.del(`/dashboard/composicao/${l.id}`);
+      for (const l of linhasItens.filter(l => l.item_filho_id && Number(l.quantidade) > 0)) {
+        await api.post('/dashboard/composicao', {
+          item_pai_id: dados.item.id,
+          item_filho_id: Number(l.item_filho_id),
+          quantidade: Number(l.quantidade),
+        });
       }
-      for (const l of validas) {
+      // Salva ingredientes extras
+      for (const l of (dados.ficha || [])) await api.del(`/dashboard/ficha/${l.id}`);
+      for (const l of linhasIng.filter(l => l.ingrediente_id && Number(l.quantidade) > 0)) {
         await api.post('/dashboard/ficha', {
-          cardapio_item_id: item.id,
+          cardapio_item_id: dados.item.id,
           ingrediente_id: Number(l.ingrediente_id),
           quantidade: Number(l.quantidade),
         });
@@ -95,22 +104,18 @@ function ModalFicha({ nomeProduto, precoMedio, onClose, onSalvo }) {
             <p className="text-xs mt-0.5" style={{ color: 'var(--txt-dim)' }}>Ficha técnica · Preço médio {brl(precoMedio)}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl"
-            style={{ background: '#1a1a1a', color: '#666' }}>
-            <X size={16} />
-          </button>
+            style={{ background: '#1a1a1a', color: '#666' }}><X size={16} /></button>
         </div>
 
         {/* CMV preview */}
-        <div className="px-5 py-3 flex gap-4" style={{ background: '#0d0d0d', borderBottom: '1px solid #1a1a1a' }}>
+        <div className="px-5 py-3 flex gap-5" style={{ background: '#0d0d0d', borderBottom: '1px solid #1a1a1a' }}>
           <div>
             <p className="text-[10px] font-bold tracking-widest" style={{ color: 'var(--txt-faint)' }}>CUSTO TOTAL</p>
             <p className="text-lg font-black text-white">{brl(custoTotal)}</p>
           </div>
           <div>
             <p className="text-[10px] font-bold tracking-widest" style={{ color: 'var(--txt-faint)' }}>CMV</p>
-            <p className="text-lg font-black" style={{ color: corCmv(cmvCalc, false) }}>
-              {cmvCalc.toFixed(1)}%
-            </p>
+            <p className="text-lg font-black" style={{ color: corCmv(cmvCalc, false) }}>{cmvCalc.toFixed(1)}%</p>
           </div>
           <div>
             <p className="text-[10px] font-bold tracking-widest" style={{ color: 'var(--txt-faint)' }}>MARGEM</p>
@@ -120,39 +125,53 @@ function ModalFicha({ nomeProduto, precoMedio, onClose, onSalvo }) {
           </div>
         </div>
 
-        {/* Linhas da ficha */}
+        {/* Abas */}
+        <div className="flex" style={{ borderBottom: '1px solid #1a1a1a' }}>
+          {[
+            { id: 'itens', label: 'Itens do combo', Icon: Package, count: linhasItens.length },
+            { id: 'ingredientes', label: 'Ingredientes extras', Icon: FlaskConical, count: linhasIng.length },
+          ].map(a => (
+            <button key={a.id} onClick={() => setAba(a.id)}
+              className="flex-1 flex items-center justify-center gap-2 py-3 text-xs font-bold transition-all"
+              style={{
+                color: aba === a.id ? 'var(--accent)' : 'var(--txt-dim)',
+                borderBottom: aba === a.id ? '2px solid var(--accent)' : '2px solid transparent',
+                background: 'transparent',
+              }}>
+              <a.Icon size={13} strokeWidth={1.75} />
+              {a.label}
+              {a.count > 0 && <span className="w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center"
+                style={{ background: aba === a.id ? 'var(--accent)' : '#333', color: aba === a.id ? '#fff' : '#888' }}>{a.count}</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* Corpo */}
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-2">
-          {ficha === null ? (
+          {dados === null ? (
             <p className="text-center py-6" style={{ color: 'var(--txt-faint)' }}>Carregando...</p>
-          ) : (
+          ) : aba === 'itens' ? (
             <>
-              {linhas.map(l => {
-                const ing = ingredientes.find(i => String(i.id) === String(l.ingrediente_id));
-                const subtotal = ing ? (ing.custo_unitario || 0) * Number(l.quantidade || 0) : 0;
+              <p className="text-xs mb-3" style={{ color: 'var(--txt-dim)' }}>
+                Selecione os produtos que compõem este combo. O custo é calculado automaticamente pela ficha técnica de cada item.
+              </p>
+              {linhasItens.map(l => {
+                const it = todosItens.find(i => String(i.id) === String(l.item_filho_id));
                 return (
                   <div key={l._key} className="flex items-center gap-2 p-3 rounded-xl" style={{ background: '#1a1a1a' }}>
-                    <select
-                      value={l.ingrediente_id}
-                      onChange={e => setLinha(l._key, 'ingrediente_id', e.target.value)}
+                    <select value={l.item_filho_id} onChange={e => setLinhasItens(p => p.map(x => x._key === l._key ? { ...x, item_filho_id: e.target.value, custo_unit: 0 } : x))}
                       className="flex-1 rounded-lg px-2 py-1.5 text-sm"
                       style={{ background: '#111', border: '1px solid #333', color: '#fff', outline: 'none' }}>
-                      <option value="">Selecionar ingrediente…</option>
-                      {ingredientes.map(i => (
-                        <option key={i.id} value={i.id}>{i.nome} ({i.unidade_medida})</option>
-                      ))}
+                      <option value="">Selecionar item…</option>
+                      {itensDisponiveis.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
                     </select>
-                    <input
-                      type="number" step="0.001" min="0"
-                      placeholder="Qtd"
+                    <input type="number" step="1" min="1" placeholder="Qtd"
                       value={l.quantidade}
-                      onChange={e => setLinha(l._key, 'quantidade', e.target.value)}
-                      className="w-20 rounded-lg px-2 py-1.5 text-sm text-right"
-                      style={{ background: '#111', border: '1px solid #333', color: '#fff', outline: 'none' }}
-                    />
-                    <span className="text-xs w-20 text-right shrink-0" style={{ color: subtotal > 0 ? '#10b981' : 'var(--txt-faint)' }}>
-                      {subtotal > 0 ? brl(subtotal) : '—'}
-                    </span>
-                    <button onClick={() => remLinha(l._key)}
+                      onChange={e => setLinhasItens(p => p.map(x => x._key === l._key ? { ...x, quantidade: e.target.value } : x))}
+                      className="w-16 rounded-lg px-2 py-1.5 text-sm text-right"
+                      style={{ background: '#111', border: '1px solid #333', color: '#fff', outline: 'none' }} />
+                    <span className="text-[10px] w-8 text-center shrink-0" style={{ color: 'var(--txt-faint)' }}>un</span>
+                    <button onClick={() => setLinhasItens(p => p.filter(x => x._key !== l._key))}
                       className="w-7 h-7 flex items-center justify-center rounded-lg shrink-0"
                       style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
                       <Trash2 size={13} />
@@ -160,31 +179,67 @@ function ModalFicha({ nomeProduto, precoMedio, onClose, onSalvo }) {
                   </div>
                 );
               })}
-
-              <button onClick={addLinha}
+              <button onClick={() => setLinhasItens(p => [...p, { _key: Math.random(), item_filho_id: '', quantidade: 1, custo_unit: 0 }])}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold"
+                style={{ background: 'rgba(var(--accent-rgb),0.08)', border: '1px dashed rgba(var(--accent-rgb),0.3)', color: 'var(--accent)' }}>
+                <Plus size={15} /> Adicionar item
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-xs mb-3" style={{ color: 'var(--txt-dim)' }}>
+                Ingredientes extras que não fazem parte dos itens acima (ex: molho extra, embalagem especial).
+              </p>
+              {linhasIng.map(l => {
+                const ing = ingredientes.find(i => String(i.id) === String(l.ingrediente_id));
+                const subtotal = ing ? (ing.custo_unitario || 0) * Number(l.quantidade || 0) : 0;
+                return (
+                  <div key={l._key} className="flex items-center gap-2 p-3 rounded-xl" style={{ background: '#1a1a1a' }}>
+                    <select value={l.ingrediente_id}
+                      onChange={e => setLinhasIng(p => p.map(x => x._key === l._key ? { ...x, ingrediente_id: e.target.value } : x))}
+                      className="flex-1 rounded-lg px-2 py-1.5 text-sm"
+                      style={{ background: '#111', border: '1px solid #333', color: '#fff', outline: 'none' }}>
+                      <option value="">Selecionar ingrediente…</option>
+                      {ingredientes.map(i => <option key={i.id} value={i.id}>{i.nome} ({i.unidade_medida})</option>)}
+                    </select>
+                    <input type="number" step="0.001" min="0" placeholder="Qtd"
+                      value={l.quantidade}
+                      onChange={e => setLinhasIng(p => p.map(x => x._key === l._key ? { ...x, quantidade: e.target.value } : x))}
+                      className="w-20 rounded-lg px-2 py-1.5 text-sm text-right"
+                      style={{ background: '#111', border: '1px solid #333', color: '#fff', outline: 'none' }} />
+                    <span className="text-xs w-16 text-right shrink-0" style={{ color: subtotal > 0 ? '#10b981' : 'var(--txt-faint)' }}>
+                      {subtotal > 0 ? brl(subtotal) : '—'}
+                    </span>
+                    <button onClick={() => setLinhasIng(p => p.filter(x => x._key !== l._key))}
+                      className="w-7 h-7 flex items-center justify-center rounded-lg shrink-0"
+                      style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                );
+              })}
+              <button onClick={() => setLinhasIng(p => [...p, { _key: Math.random(), ingrediente_id: '', quantidade: '' }])}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold"
                 style={{ background: 'rgba(var(--accent-rgb),0.08)', border: '1px dashed rgba(var(--accent-rgb),0.3)', color: 'var(--accent)' }}>
                 <Plus size={15} /> Adicionar ingrediente
               </button>
-
-              {!item && (
-                <p className="text-xs text-center pt-1" style={{ color: '#f59e0b' }}>
-                  ⚠️ Este produto não está cadastrado no Cardápio. Cadastre-o lá para salvar a ficha.
-                </p>
-              )}
             </>
+          )}
+
+          {!dados?.item && dados !== null && (
+            <p className="text-xs text-center pt-2" style={{ color: '#f59e0b' }}>
+              ⚠️ Produto não encontrado no Cardápio. Cadastre-o lá para salvar a ficha.
+            </p>
           )}
         </div>
 
         {/* Footer */}
         <div className="px-5 py-4 flex justify-end gap-2" style={{ borderTop: '1px solid #1a1a1a' }}>
           <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-bold"
-            style={{ background: '#1a1a1a', color: '#666' }}>
-            Cancelar
-          </button>
-          <button onClick={salvar} disabled={salvando || !item}
+            style={{ background: '#1a1a1a', color: '#666' }}>Cancelar</button>
+          <button onClick={salvar} disabled={salvando || !dados?.item}
             className="px-5 py-2 rounded-xl text-sm font-black flex items-center gap-2"
-            style={{ background: 'var(--accent)', color: '#fff', opacity: (salvando || !item) ? 0.6 : 1 }}>
+            style={{ background: 'var(--accent)', color: '#fff', opacity: (salvando || !dados?.item) ? 0.6 : 1 }}>
             <Save size={14} /> {salvando ? 'Salvando…' : 'Salvar ficha'}
           </button>
         </div>
@@ -249,7 +304,7 @@ export default function CmvProdutos() {
               <div>
                 <p className="text-sm font-semibold" style={{ color: '#fbbf24' }}>{semFicha.length} item(ns) sem ficha técnica</p>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--txt-dim)' }}>
-                  Clique no <Pencil size={11} style={{ display: 'inline', verticalAlign: 'middle' }} /> de qualquer item para montar a ficha e calcular o CMV automaticamente.
+                  Clique em qualquer linha para montar a ficha e calcular o CMV.
                 </p>
               </div>
             </div>
@@ -292,8 +347,7 @@ export default function CmvProdutos() {
                       </td>
                       <td className="text-right font-mono font-semibold" style={{ color: l.margem >= 0 ? '#10b981' : '#ef4444' }}>{brl(l.margem)}</td>
                       <td>
-                        <button
-                          onClick={e => { e.stopPropagation(); setModalProduto(l); }}
+                        <button onClick={e => { e.stopPropagation(); setModalProduto(l); }}
                           className="w-7 h-7 flex items-center justify-center rounded-lg"
                           style={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}
                           title="Editar ficha técnica">
@@ -307,7 +361,7 @@ export default function CmvProdutos() {
             </div>
           </div>
           <p className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--txt-faint)' }}>
-            <TrendingUp size={12} /> CMV ideal pra sushi costuma ficar entre 30% e 40%. Verde ≤30% · amarelo ≤45% · vermelho acima. Clique em qualquer linha para editar a ficha.
+            <TrendingUp size={12} /> CMV ideal pra sushi: 30–40%. Verde ≤30% · amarelo ≤45% · vermelho acima.
           </p>
         </>
       )}

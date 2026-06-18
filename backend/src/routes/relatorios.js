@@ -164,12 +164,12 @@ router.get('/cmv-produtos', (req, res) => {
   } catch (e) { console.error('cmv-produtos:', e); res.status(500).json({ erro: e.message }); }
 });
 
-// GET /api/relatorios/cmv-produtos/:nome/ficha — retorna id do item + ingredientes da ficha
+// GET /api/relatorios/cmv-produtos/:nome/ficha — retorna id do item + ingredientes + composição
 router.get('/cmv-produtos/:nome/ficha', (req, res) => {
   try {
     const nome = decodeURIComponent(req.params.nome);
     const item = db.prepare('SELECT id, nome, preco FROM cardapio_itens WHERE nome = ? LIMIT 1').get(nome);
-    if (!item) return res.json({ item: null, ficha: [] });
+    if (!item) return res.json({ item: null, ficha: [], composicao: [] });
     const ficha = db.prepare(`
       SELECT cft.id, cft.ingrediente_id, cft.quantidade,
              i.nome as ingrediente_nome, i.unidade_medida, i.custo_unitario
@@ -177,7 +177,13 @@ router.get('/cmv-produtos/:nome/ficha', (req, res) => {
       JOIN ingredientes i ON i.id = cft.ingrediente_id
       WHERE cft.cardapio_item_id = ?
     `).all(item.id);
-    res.json({ item, ficha });
+    const composicao = db.prepare(`
+      SELECT cc.id, cc.item_filho_id, cc.quantidade, ci.nome as filho_nome
+      FROM cardapio_composicao cc
+      JOIN cardapio_itens ci ON ci.id = cc.item_filho_id
+      WHERE cc.item_pai_id = ?
+    `).all(item.id);
+    res.json({ item, ficha, composicao });
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
