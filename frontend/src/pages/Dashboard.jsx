@@ -352,7 +352,8 @@ export default function Dashboard() {
   );
 
   // Prepara dados do gráfico 7 dias
-  const hoje = new Date().toISOString().slice(0, 10);
+  const localDate = (d = new Date()) => { const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,'0'); const day = String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; };
+  const hoje = localDate();
   const nomes = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
   const grafico7d = ultimos7dias.map(d => ({
     v: d.total,
@@ -366,7 +367,7 @@ export default function Dashboard() {
     const filled = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(); d.setDate(d.getDate() - i);
-      const dia = d.toISOString().slice(0, 10);
+      const dia = localDate(d);
       const existing = ultimos7dias.find(x => x.dia === dia);
       filled.push({
         v: existing?.total || 0,

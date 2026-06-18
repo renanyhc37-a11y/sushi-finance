@@ -9,11 +9,9 @@ const authH = () => ({ Authorization: `Bearer ${getToken()}`, 'Content-Type': 'a
 const PAG_LABEL = { pix: 'PIX', dinheiro: 'Dinheiro', cartao_cred: 'Crédito', cartao_deb: 'Débito' };
 const STATUS_COR = { entregue: '#10b981', cancelado: '#ef4444', pronto: 'var(--accent-2)', preparando: 'var(--accent-2)', novo: '#3b82f6' };
 
-function hoje() { return new Date().toISOString().slice(0, 10); }
-function primeiroDiaMes() {
-  const d = new Date(); d.setDate(1);
-  return d.toISOString().slice(0, 10);
-}
+function localDate(d = new Date()) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function hoje() { return localDate(); }
+function primeiroDiaMes() { const d = new Date(); d.setDate(1); return localDate(d); }
 
 function exportarCSV(pedidos, inicio, fim) {
   const linhas = [
@@ -133,13 +131,13 @@ export default function RelatorioPedidos() {
         <div className="flex gap-1.5 flex-wrap">
           {[
             { l: 'Hoje',       fn: () => { setInicio(hoje()); setFim(hoje()); } },
-            { l: '7 dias',     fn: () => { const d = new Date(); d.setDate(d.getDate()-6); setInicio(d.toISOString().slice(0,10)); setFim(hoje()); } },
+            { l: '7 dias',     fn: () => { const d = new Date(); d.setDate(d.getDate()-6); setInicio(localDate(d)); setFim(hoje()); } },
             { l: 'Este mês',   fn: () => { setInicio(primeiroDiaMes()); setFim(hoje()); } },
             { l: 'Mês anterior', fn: () => {
               const d = new Date(); d.setDate(1); d.setMonth(d.getMonth()-1);
-              const ini = d.toISOString().slice(0,10);
+              const ini = localDate(d);
               d.setMonth(d.getMonth()+1); d.setDate(0);
-              setInicio(ini); setFim(d.toISOString().slice(0,10));
+              setInicio(ini); setFim(localDate(d));
             }},
           ].map(a => (
             <button key={a.l} onClick={a.fn}

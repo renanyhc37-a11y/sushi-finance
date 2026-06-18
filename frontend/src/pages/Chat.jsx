@@ -350,6 +350,11 @@ export default function Chat() {
     try {
       const r = await fetch(`${BASE}/chat/conversas/${convAtiva.id}/responder`, { method: 'POST', headers: authJ(), body: JSON.stringify({ corpo }) });
       if (!r.ok) { const d = await r.json(); throw new Error(d.erro || 'Erro'); }
+      const data = await r.json();
+      // Adiciona imediatamente ao estado (sem depender só do socket)
+      if (data.mensagem) {
+        setMensagens(m => m.some(x => x.id === data.mensagem.id) ? m : [...m, data.mensagem]);
+      }
     } catch (err) { toast.error(err.message); setTexto(corpo); }
     setEnviando(false);
   }

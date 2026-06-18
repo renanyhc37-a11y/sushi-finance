@@ -46,7 +46,10 @@ router.post('/conversas/:id/responder', async (req, res) => {
 
   try {
     await wa.enviarEsalvar(conversa, corpo.trim(), false);
-    res.json({ ok: true });
+    const mensagem = db.prepare(
+      'SELECT * FROM wa_mensagens WHERE conversa_id=? AND de_mim=1 ORDER BY id DESC LIMIT 1'
+    ).get(req.params.id);
+    res.json({ ok: true, mensagem });
   } catch (e) {
     res.status(500).json({ erro: e.message });
   }

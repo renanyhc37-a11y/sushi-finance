@@ -10,7 +10,7 @@ import {
 const BASE   = import.meta.env.VITE_API_URL || '/api';
 const brl    = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const authJ  = () => ({ Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' });
-const hoje   = () => new Date().toISOString().slice(0, 10);
+const hoje   = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const pct    = (part, total) => total > 0 ? Math.round((part / total) * 100) : 0;
 
 export default function Caixa() {
