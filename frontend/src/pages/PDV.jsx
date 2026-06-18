@@ -152,7 +152,7 @@ function imprimirPedido(pedido) {
   <div class="centro">
     <div class="secao-label">PEDIDO</div><br/>
     <div class="num-pedido">#${pedido.numero}</div>
-    <div class="data-hora">EFETUADO: ${new Date(pedido.created_at + 'Z').toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+    <div class="data-hora">EFETUADO: ${utcDate(pedido.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
     <div class="data-hora" style="font-size:${fs-4}px;letter-spacing:1px;">IMP: ${agora}</div>
     ${pedido.agendado_para ? `<div class="data-hora">AGENDADO P/ ${new Date(pedido.agendado_para).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>` : ''}
   </div>
@@ -389,8 +389,11 @@ const AVANCAR = {
   preparando: { status: 'pronto',     label: 'Pronto',   Icon: CheckCircle2 },
   pronto:     { status: 'entregue',   label: 'Entregue', Icon: Bike },
 };
+// SQLite retorna '2026-06-18 17:36:00' (UTC sem fuso) — converte para Date corretamente
+function utcDate(s) { return s ? new Date(String(s).replace(' ', 'T') + 'Z') : new Date(0); }
+
 function tempo(created_at) {
-  const s = Math.floor((Date.now() - new Date(created_at + 'Z').getTime()) / 1000);
+  const s = Math.floor((Date.now() - utcDate(created_at).getTime()) / 1000);
   if (s < 60) return { texto: `${s}s`, urgente: false };
   const m = Math.floor(s / 60);
   if (m < 60) return { texto: `${m}min`, urgente: m >= 20 };
@@ -1745,7 +1748,7 @@ export default function PDV() {
       const rows = lista.map((p, i) => {
         const a = nivelAtraso(p);
         const itens = (p.itens || []).map(it => `${it.quantidade}x ${it.item_nome || it.nome || ''}`).join(', ');
-        return `<tr><td class="n">${i + 1}</td><td class="num">#${p.numero}</td><td>${new Date(p.created_at + 'Z').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td><td class="${a.nivel}">${a.min}min${a.nivel !== 'ok' ? ' · ' + a.label : ''}</td><td class="it">${itens || '—'}${p.cliente_nome ? ' <span class=cl>(' + p.cliente_nome + ')</span>' : ''}</td></tr>`;
+        return `<tr><td class="n">${i + 1}</td><td class="num">#${p.numero}</td><td>${utcDate(p.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</td><td class="${a.nivel}">${a.min}min${a.nivel !== 'ok' ? ' · ' + a.label : ''}</td><td class="it">${itens || '—'}${p.cliente_nome ? ' <span class=cl>(' + p.cliente_nome + ')</span>' : ''}</td></tr>`;
       }).join('');
       return `<h2>${titulo} (${lista.length})</h2><table><thead><tr><th>#</th><th>Pedido</th><th>Hora</th><th>Espera</th><th>Itens</th></tr></thead><tbody>${rows}</tbody></table>`;
     };
@@ -1838,7 +1841,7 @@ export default function PDV() {
               <span className="text-xs font-black flex items-center gap-1"
                 style={{ color: atraso && atraso.nivel !== 'ok' ? atraso.cor : `${cfg.cor}99` }}>
                 {atraso && atraso.nivel !== 'ok' && <AlertTriangle size={11} strokeWidth={2.5} />}
-                {new Date(pedido.created_at + 'Z').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                {utcDate(pedido.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           </div>
@@ -1926,7 +1929,7 @@ export default function PDV() {
                 style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)' }}>
                 <CheckCircle2 size={13} strokeWidth={2} style={{ color: '#34d399' }} />
                 <span className="text-[11px] font-bold" style={{ color: '#34d399' }}>
-                  PIX confirmado {new Date(pedido.pix_confirmado_em + 'Z').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  PIX confirmado {utcDate(pedido.pix_confirmado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
             ) : (
@@ -2041,7 +2044,7 @@ export default function PDV() {
         const { texto: tempoTexto } = tempo(p.created_at);
         const tempoAceito = p.aceito_em ? tempo(p.aceito_em) : null;
         const tempoPronto = p.pronto_em && p.aceito_em
-          ? Math.round((new Date(p.pronto_em + 'Z') - new Date(p.aceito_em + 'Z')) / 60000)
+          ? Math.round((utcDate(p.pronto_em) - utcDate(p.aceito_em)) / 60000)
           : null;
         const linhas = (p.observacao || '').split('\n');
         const obsNormal = linhas.filter(l => !l.startsWith('📩 WhatsApp:')).join('\n').trim();
@@ -2073,7 +2076,7 @@ export default function PDV() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs t-dim mt-0.5">{tempoTexto} · {new Date(p.created_at + 'Z').toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>
+                  <p className="text-xs t-dim mt-0.5">{tempoTexto} · {utcDate(p.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>
                 </div>
                 <button onClick={() => setPedidoModal(null)}
                   className="ml-auto w-8 h-8 flex items-center justify-center rounded-xl t-dim"
@@ -2111,7 +2114,7 @@ export default function PDV() {
                     <Clock size={14} style={{ color: cfg.cor, flexShrink: 0 }} />
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest t-dim">Pedido recebido</p>
-                      <p className="text-sm font-black t-strong">{new Date(p.created_at + 'Z').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} <span className="font-normal t-dim text-xs">({tempoTexto} atrás)</span></p>
+                      <p className="text-sm font-black t-strong">{utcDate(p.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} <span className="font-normal t-dim text-xs">({tempoTexto} atrás)</span></p>
                     </div>
                   </div>
                   {p.aceito_em && (
@@ -2119,7 +2122,7 @@ export default function PDV() {
                       <CheckCircle2 size={14} style={{ color: '#34d399', flexShrink: 0 }} />
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest t-dim">Aceito às</p>
-                        <p className="text-sm font-black t-strong">{new Date(p.aceito_em + 'Z').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        <p className="text-sm font-black t-strong">{utcDate(p.aceito_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           {tempoAceito && p.status !== 'entregue' && p.status !== 'cancelado' && (
                             <span className="font-normal t-dim text-xs"> — em preparo há {tempoAceito.texto}</span>
                           )}
@@ -2205,7 +2208,7 @@ export default function PDV() {
                           style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--hairline)' }}>
                           <span className="text-xs font-black t-dim w-8 shrink-0">#{h.numero}</span>
                           <span className="text-xs t-dim flex-1">
-                            {new Date(h.created_at + 'Z').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                            {utcDate(h.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                           </span>
                           <span className="text-xs font-bold t-strong shrink-0">{brl(h.total)}</span>
                           <span className="text-[10px] px-1.5 py-0.5 rounded-md shrink-0"
