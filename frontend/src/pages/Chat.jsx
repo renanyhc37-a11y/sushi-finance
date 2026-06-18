@@ -477,10 +477,10 @@ export default function Chat() {
       {/* ── Sidebar conversas ── */}
       {aba === 'chat' && (
         <div style={{
-          width: 360, flexShrink: 0, display: mobileMostrarChat ? 'none' : 'flex',
-          flexDirection: 'column', borderRight: `1px solid ${WA.border}`,
-          background: WA.sidebar,
-        }} className="lg:flex">
+          width: 360, flexShrink: 0, borderRight: `1px solid ${WA.border}`,
+          background: WA.sidebar, flexDirection: 'column',
+        }}
+          className={mobileMostrarChat ? 'hidden lg:flex' : 'flex'}>
 
           {/* Header sidebar */}
           <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: WA.header }}>
