@@ -1106,6 +1106,11 @@ export default function CriativoSocial() {
       });
       if (!r.ok) throw new Error((await r.json()).erro || 'Erro');
       const d = await r.json();
+      // Garante que campos de array sejam sempre arrays (IA pode retornar string ou null)
+      if (d.hashtags && !Array.isArray(d.hashtags))
+        d.hashtags = String(d.hashtags).split(/[,\s]+/).map(h => h.replace(/^#/, '')).filter(Boolean);
+      if (d.emojis_extras && !Array.isArray(d.emojis_extras))
+        d.emojis_extras = [];
       setDados(prev => ({ ...prev, ...d }));
       // Auto-seleciona template e paleta sugeridos pela IA
       const tplIds = ['luxo','neon','bold','magazine','cinema','urgente','zen','split','retro','gradient','frame','dark','sticker','duo','wave','poster'];
@@ -1519,7 +1524,7 @@ export default function CriativoSocial() {
                     <textarea className={IC} style={{ ...IS, minHeight: 140, resize: 'vertical', lineHeight: 1.55, fontSize: 12 }}
                       value={dados.legenda} onChange={e => setDados(p => ({ ...p, legenda: e.target.value }))} />
                   </div>
-                  {dados.hashtags?.length > 0 && (
+                  {Array.isArray(dados.hashtags) && dados.hashtags.length > 0 && (
                     <div>
                       <label className="text-[10px] text-zinc-600 font-bold mb-1.5 block tracking-widest">HASHTAGS ({dados.hashtags.length})</label>
                       <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
