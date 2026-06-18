@@ -4,7 +4,7 @@ import { AlertTriangle, TrendingUp, Pencil, Check, X } from 'lucide-react';
 import { api } from '../api/client';
 import { mesAtual } from '../lib/fmt';
 import { PageLoading } from '../components/Loading';
-import toast from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 
 const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -41,8 +41,8 @@ function CustoEditavel({ linha, onSalvo }) {
 
   if (editando) {
     return (
-      <div className="flex items-center gap-1 justify-end">
-        <span className="text-xs" style={{ color: 'var(--txt-faint)' }}>R$</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+        <span style={{ fontSize: 11, color: 'var(--txt-faint)' }}>R$</span>
         <input
           ref={inputRef}
           type="text"
@@ -50,14 +50,13 @@ function CustoEditavel({ linha, onSalvo }) {
           value={val}
           onChange={e => setVal(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') cancelar(); }}
-          className="w-20 px-2 py-1 rounded-lg text-xs text-right font-mono"
-          style={{ background: '#1a1a2e', border: '1px solid var(--accent)', color: 'var(--txt-strong)', outline: 'none' }}
+          style={{ width: 72, padding: '3px 6px', borderRadius: 8, fontSize: 12, textAlign: 'right', fontFamily: 'monospace', background: '#1a1a2e', border: '1px solid var(--accent)', color: 'var(--txt-strong)', outline: 'none' }}
           autoFocus
         />
-        <button onClick={salvar} className="w-6 h-6 flex items-center justify-center rounded-md" style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981' }}>
+        <button onClick={salvar} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: 'none', cursor: 'pointer', background: 'rgba(16,185,129,0.15)', color: '#10b981' }}>
           <Check size={12} strokeWidth={2.5} />
         </button>
-        <button onClick={cancelar} className="w-6 h-6 flex items-center justify-center rounded-md" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+        <button onClick={cancelar} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: 'none', cursor: 'pointer', background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
           <X size={12} strokeWidth={2.5} />
         </button>
       </div>
@@ -65,14 +64,17 @@ function CustoEditavel({ linha, onSalvo }) {
   }
 
   return (
-    <div className="flex items-center gap-1 justify-end group cursor-pointer" onClick={abrir} title="Clique para editar o custo">
-      <span className="font-mono" style={{ color: linha.sem_ficha && !linha.custo_manual ? 'var(--txt-faint)' : 'var(--txt)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+      <span style={{ fontFamily: 'monospace', color: linha.sem_ficha && !linha.custo_manual ? 'var(--txt-faint)' : 'var(--txt)' }}>
         {linha.custo_unit > 0 ? brl(linha.custo_unit) : '—'}
       </span>
       {linha.custo_manual && (
-        <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>manual</span>
+        <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 6, background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>manual</span>
       )}
-      <Pencil size={11} strokeWidth={2} className="opacity-0 group-hover:opacity-60 transition-opacity shrink-0" style={{ color: 'var(--accent)' }} />
+      <button onClick={abrir} title="Editar custo"
+        style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', background: 'rgba(255,255,255,0.04)', color: 'var(--accent)', flexShrink: 0 }}>
+        <Pencil size={11} strokeWidth={2} />
+      </button>
     </div>
   );
 }
@@ -96,6 +98,7 @@ export default function CmvProdutos() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
+      <Toaster position="top-right" />
       <div className="page-header">
         <div>
           <h1 className="page-title">CMV por Produto</h1>
