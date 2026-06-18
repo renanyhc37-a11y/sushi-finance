@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import toast, { Toaster } from 'react-hot-toast';
 import { getToken } from '../hooks/useAuth';
+import EmojiPicker from 'emoji-picker-react';
 import {
   MessageCircle, Zap, Brain, Megaphone, BarChart3, Settings, Bell, BellOff,
   Search, FlaskConical, Check, Package, Hand, Bot, X, Send, RefreshCw,
@@ -227,6 +228,7 @@ export default function Chat() {
   const [pedidosCliente, setPedidosCliente]     = useState([]);
   const [mostrarPedidos, setMostrarPedidos]     = useState(false);
   const [mostrarRespostasRapidas, setMostrarRespostasRapidas] = useState(false);
+  const [mostrarEmoji, setMostrarEmoji]         = useState(false);
   const [mostrarTags, setMostrarTags]           = useState(false);
   const [respostasRapidas, setRespostasRapidas] = useState([]);
   const [novaResposta, setNovaResposta]         = useState({ titulo:'', corpo:'', atalho:'' });
@@ -770,9 +772,39 @@ export default function Chat() {
               </div>
             )}
 
+            {/* Emoji picker */}
+            {mostrarEmoji && (
+              <div style={{ position: 'absolute', bottom: 70, left: 12, zIndex: 100 }}>
+                <EmojiPicker
+                  theme="dark"
+                  onEmojiClick={e => {
+                    const el = inputRef.current;
+                    if (el) {
+                      const start = el.selectionStart ?? texto.length;
+                      const end   = el.selectionEnd   ?? texto.length;
+                      const novo  = texto.slice(0, start) + e.emoji + texto.slice(end);
+                      setTexto(novo);
+                      setTimeout(() => { el.focus(); el.setSelectionRange(start + e.emoji.length, start + e.emoji.length); }, 0);
+                    } else {
+                      setTexto(t => t + e.emoji);
+                    }
+                  }}
+                  lazyLoadEmojis
+                  searchPlaceholder="Buscar emoji..."
+                  height={380}
+                  width={320}
+                />
+              </div>
+            )}
+
             {/* Input */}
-            <div style={{ padding: '8px 12px', background: WA.header, borderTop: `1px solid ${WA.border}`, display: 'flex', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
-              <button onClick={() => setMostrarRespostasRapidas(p => !p)}
+            <div style={{ position: 'relative', padding: '8px 12px', background: WA.header, borderTop: `1px solid ${WA.border}`, display: 'flex', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+              <button onClick={() => { setMostrarEmoji(p => !p); setMostrarRespostasRapidas(false); }}
+                style={{ width: 40, height: 40, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: mostrarEmoji ? WA.accent : WA.txtSecondary, flexShrink: 0 }}
+                title="Emojis">
+                <Smile size={22} strokeWidth={1.75} />
+              </button>
+              <button onClick={() => { setMostrarRespostasRapidas(p => !p); setMostrarEmoji(false); }}
                 style={{ width: 40, height: 40, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: mostrarRespostasRapidas ? WA.accent : WA.txtSecondary, flexShrink: 0 }}
                 title="Respostas rápidas">
                 <Zap size={20} strokeWidth={1.75} />
@@ -784,6 +816,7 @@ export default function Chat() {
               </button>
               <textarea ref={inputRef} value={texto} onChange={e => setTexto(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); } }}
+                onClick={() => setMostrarEmoji(false)}
                 placeholder="Digite uma mensagem"
                 rows={Math.min(4, Math.max(1, texto.split('\n').length))}
                 style={{ flex: 1, padding: '10px 14px', borderRadius: 22, fontSize: 14, outline: 'none', resize: 'none', background: WA.input, color: WA.txtPrimary, border: 'none', lineHeight: 1.5, maxHeight: 120, fontFamily: 'inherit' }} />
