@@ -152,7 +152,7 @@ function imprimirPedido(pedido) {
   <div class="centro">
     <div class="secao-label">PEDIDO</div><br/>
     <div class="num-pedido">#${pedido.numero}</div>
-    <div class="data-hora">EFETUADO: ${new Date(pedido.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+    <div class="data-hora">EFETUADO: ${new Date(pedido.created_at + 'Z').toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
     <div class="data-hora" style="font-size:${fs-4}px;letter-spacing:1px;">IMP: ${agora}</div>
     ${pedido.agendado_para ? `<div class="data-hora">AGENDADO P/ ${new Date(pedido.agendado_para).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>` : ''}
   </div>
@@ -1838,7 +1838,7 @@ export default function PDV() {
               <span className="text-xs font-black flex items-center gap-1"
                 style={{ color: atraso && atraso.nivel !== 'ok' ? atraso.cor : `${cfg.cor}99` }}>
                 {atraso && atraso.nivel !== 'ok' && <AlertTriangle size={11} strokeWidth={2.5} />}
-                {new Date(pedido.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                {new Date(pedido.created_at + 'Z').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           </div>
@@ -2039,6 +2039,10 @@ export default function PDV() {
         const cfg = STATUS_CFG[p.status] || STATUS_CFG.novo;
         const av = AVANCAR[p.status];
         const { texto: tempoTexto } = tempo(p.created_at);
+        const tempoAceito = p.aceito_em ? tempo(p.aceito_em) : null;
+        const tempoPronto = p.pronto_em && p.aceito_em
+          ? Math.round((new Date(p.pronto_em + 'Z') - new Date(p.aceito_em + 'Z')) / 60000)
+          : null;
         const linhas = (p.observacao || '').split('\n');
         const obsNormal = linhas.filter(l => !l.startsWith('📩 WhatsApp:')).join('\n').trim();
         const wppMsgs = linhas.filter(l => l.startsWith('📩 WhatsApp:')).map(l => l.replace('📩 WhatsApp:', '').trim()).filter(Boolean);
@@ -2069,7 +2073,7 @@ export default function PDV() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs t-dim mt-0.5">{tempoTexto} · {new Date(p.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>
+                  <p className="text-xs t-dim mt-0.5">{tempoTexto} · {new Date(p.created_at + 'Z').toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</p>
                 </div>
                 <button onClick={() => setPedidoModal(null)}
                   className="ml-auto w-8 h-8 flex items-center justify-center rounded-xl t-dim"
@@ -2098,6 +2102,33 @@ export default function PDV() {
                     <p className="text-xs font-bold flex items-center gap-1" style={{ color: '#fbbf24' }}>
                       <Star size={12} /> {p.cliente_total_pedidos}º pedido deste cliente
                     </p>
+                  )}
+                </div>
+
+                {/* Linha do tempo */}
+                <div className="rounded-2xl p-3 flex flex-wrap gap-3" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Clock size={14} style={{ color: cfg.cor, flexShrink: 0 }} />
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest t-dim">Pedido recebido</p>
+                      <p className="text-sm font-black t-strong">{new Date(p.created_at + 'Z').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} <span className="font-normal t-dim text-xs">({tempoTexto} atrás)</span></p>
+                    </div>
+                  </div>
+                  {p.aceito_em && (
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <CheckCircle2 size={14} style={{ color: '#34d399', flexShrink: 0 }} />
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest t-dim">Aceito às</p>
+                        <p className="text-sm font-black t-strong">{new Date(p.aceito_em + 'Z').toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          {tempoAceito && p.status !== 'entregue' && p.status !== 'cancelado' && (
+                            <span className="font-normal t-dim text-xs"> — em preparo há {tempoAceito.texto}</span>
+                          )}
+                          {tempoPronto !== null && (
+                            <span className="font-normal t-dim text-xs"> — pronto em {tempoPronto}min</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -2174,7 +2205,7 @@ export default function PDV() {
                           style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--hairline)' }}>
                           <span className="text-xs font-black t-dim w-8 shrink-0">#{h.numero}</span>
                           <span className="text-xs t-dim flex-1">
-                            {new Date(h.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                            {new Date(h.created_at + 'Z').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                           </span>
                           <span className="text-xs font-bold t-strong shrink-0">{brl(h.total)}</span>
                           <span className="text-[10px] px-1.5 py-0.5 rounded-md shrink-0"
