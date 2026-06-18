@@ -318,8 +318,8 @@ router.get('/relatorio', (req, res) => {
 
     const totais = db.prepare(`
       SELECT COUNT(*) as total_pedidos,
-             COALESCE(SUM(total),0) as total_faturado,
-             COALESCE(AVG(total),0) as ticket_medio,
+             COALESCE(SUM(CASE WHEN status != 'cancelado' THEN total ELSE 0 END), 0) as total_faturado,
+             COALESCE(AVG(CASE WHEN status != 'cancelado' THEN total END), 0) as ticket_medio,
              SUM(CASE WHEN status='cancelado' THEN 1 ELSE 0 END) as cancelados
       FROM pdv_pedidos WHERE date(created_at) BETWEEN ? AND ?
     `).get(inicio, fim);

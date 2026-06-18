@@ -81,12 +81,75 @@ function exportarPDF(pedidos, totais, inicio, fim) {
   iframe.onload = () => { setTimeout(() => { iframe.contentWindow.print(); setTimeout(() => iframe.remove(), 2000); }, 300); };
 }
 
+function ModalDetalhe({ pedido, onClose }) {
+  if (!pedido) return null;
+  const itens = pedido.itens_resumo ? pedido.itens_resumo.split(' | ').map(s => s.trim()).filter(Boolean) : [];
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3"
+      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="w-full max-w-md rounded-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        style={{ background: '#111', border: '1px solid #222' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid #1a1a1a' }}>
+          <div>
+            <p className="text-lg font-black text-white">Pedido #{pedido.numero}</p>
+            <p className="text-xs text-zinc-500">{new Date(pedido.created_at + 'Z').toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold px-2 py-1 rounded-lg capitalize"
+              style={{ background: `${STATUS_COR[pedido.status] || '#666'}22`, color: STATUS_COR[pedido.status] || '#666' }}>
+              {pedido.status}
+            </span>
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl text-zinc-500" style={{ background: '#1a1a1a' }}>✕</button>
+          </div>
+        </div>
+        <div className="overflow-y-auto p-5 space-y-4">
+          {/* Cliente */}
+          <div className="rounded-xl p-3 space-y-1" style={{ background: '#1a1a1a' }}>
+            <p className="text-[10px] font-black tracking-widest text-zinc-600">CLIENTE</p>
+            <p className="font-bold text-white">{pedido.cliente_nome}</p>
+            {pedido.cliente_telefone && <p className="text-sm text-zinc-400">{pedido.cliente_telefone}</p>}
+            {pedido.cliente_endereco && <p className="text-sm text-zinc-400">{pedido.cliente_endereco}{pedido.bairro ? ` — ${pedido.bairro}` : ''}</p>}
+          </div>
+          {/* Itens */}
+          <div className="rounded-xl p-3" style={{ background: '#1a1a1a' }}>
+            <p className="text-[10px] font-black tracking-widest text-zinc-600 mb-2">ITENS</p>
+            {itens.length > 0 ? itens.map((it, i) => (
+              <p key={i} className="text-sm text-zinc-300 py-1" style={{ borderBottom: i < itens.length-1 ? '1px solid #252525' : 'none' }}>{it}</p>
+            )) : <p className="text-sm text-zinc-600">—</p>}
+          </div>
+          {/* Pagamento + Total */}
+          <div className="rounded-xl p-3 flex items-center justify-between" style={{ background: '#1a1a1a' }}>
+            <div>
+              <p className="text-[10px] font-black tracking-widest text-zinc-600">PAGAMENTO</p>
+              <p className="text-sm font-semibold text-zinc-300 mt-0.5">{PAG_LABEL[pedido.forma_pagamento] || pedido.forma_pagamento || '—'}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] font-black tracking-widest text-zinc-600">TOTAL</p>
+              <p className="text-xl font-black" style={{ color: 'var(--accent)' }}>{brl(pedido.total)}</p>
+              {pedido.frete > 0 && <p className="text-xs text-zinc-600">Frete: {brl(pedido.frete)}</p>}
+            </div>
+          </div>
+          {pedido.observacao && (
+            <div className="rounded-xl p-3" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
+              <p className="text-[10px] font-black tracking-widest mb-1" style={{ color: '#f59e0b' }}>OBSERVAÇÃO</p>
+              <p className="text-sm" style={{ color: '#fbbf24', whiteSpace: 'pre-wrap' }}>{pedido.observacao}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function RelatorioPedidos() {
   const [inicio, setInicio] = useState(primeiroDiaMes());
   const [fim, setFim] = useState(hoje());
   const [dados, setDados] = useState(null);
   const [loading, setLoading] = useState(false);
   const [busca, setBusca] = useState('');
+  const [pedidoDetalhe, setPedidoDetalhe] = useState(null);
 
   async function buscar() {
     setLoading(true);
@@ -106,6 +169,7 @@ export default function RelatorioPedidos() {
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-5">
       <Toaster />
+      <ModalDetalhe pedido={pedidoDetalhe} onClose={() => setPedidoDetalhe(null)} />
 
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
@@ -205,16 +269,18 @@ export default function RelatorioPedidos() {
             {pedidosFiltrados.length === 0 ? (
               <p className="text-center py-10 text-zinc-600 text-sm">Nenhum pedido encontrado</p>
             ) : pedidosFiltrados.map(p => (
-              <div key={p.id} className="grid md:grid-cols-[40px_1fr_1fr_100px_90px_90px] px-4 py-3 items-center gap-2 border-b border-[#111] hover:bg-[#0d0d0d]">
+              <div key={p.id} onClick={() => setPedidoDetalhe(p)}
+                className="grid md:grid-cols-[40px_1fr_1fr_100px_90px_90px] px-4 py-3 items-center gap-2 border-b border-[#111] hover:bg-[#0d0d0d] cursor-pointer"
+                style={{ opacity: p.status === 'cancelado' ? 0.5 : 1 }}>
                 <p className="text-xs font-black text-zinc-600">#{p.numero}</p>
                 <div>
                   <p className="text-sm font-bold text-white">{p.cliente_nome}</p>
-                  <p className="text-[10px] text-zinc-600">{p.cliente_telefone || '—'} · {new Date(p.created_at).toLocaleDateString('pt-BR')}</p>
+                  <p className="text-[10px] text-zinc-600">{p.cliente_telefone || '—'} · {new Date(p.created_at + 'Z').toLocaleDateString('pt-BR')}</p>
                 </div>
                 <p className="text-xs text-zinc-500 truncate">{p.itens_resumo || '—'}</p>
                 <p className="text-xs font-semibold text-zinc-400">{PAG_LABEL[p.forma_pagamento] || p.forma_pagamento || '—'}</p>
                 <p className="text-xs font-bold capitalize" style={{ color: STATUS_COR[p.status] || '#666' }}>{p.status}</p>
-                <p className="text-sm font-black" style={{ color: 'var(--accent)' }}>{brl(p.total)}</p>
+                <p className="text-sm font-black" style={{ color: p.status === 'cancelado' ? '#666' : 'var(--accent)' }}>{brl(p.total)}</p>
               </div>
             ))}
           </div>
