@@ -320,7 +320,11 @@ router.get('/relatorio', (req, res) => {
       SELECT COUNT(*) as total_pedidos,
              COALESCE(SUM(CASE WHEN status != 'cancelado' THEN total ELSE 0 END), 0) as total_faturado,
              COALESCE(AVG(CASE WHEN status != 'cancelado' THEN total END), 0) as ticket_medio,
-             SUM(CASE WHEN status='cancelado' THEN 1 ELSE 0 END) as cancelados
+             SUM(CASE WHEN status='cancelado' THEN 1 ELSE 0 END) as cancelados,
+             COALESCE(SUM(CASE WHEN status != 'cancelado' AND forma_pagamento='pix'          THEN total ELSE 0 END), 0) as total_pix,
+             COALESCE(SUM(CASE WHEN status != 'cancelado' AND forma_pagamento='dinheiro'     THEN total ELSE 0 END), 0) as total_dinheiro,
+             COALESCE(SUM(CASE WHEN status != 'cancelado' AND forma_pagamento='cartao_cred'  THEN total ELSE 0 END), 0) as total_credito,
+             COALESCE(SUM(CASE WHEN status != 'cancelado' AND forma_pagamento='cartao_deb'   THEN total ELSE 0 END), 0) as total_debito
       FROM pdv_pedidos WHERE date(created_at) BETWEEN ? AND ?
     `).get(inicio, fim);
 

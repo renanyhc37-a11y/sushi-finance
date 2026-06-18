@@ -236,6 +236,33 @@ export default function RelatorioPedidos() {
             ))}
           </div>
 
+          {/* Formas de pagamento */}
+          <div className="rounded-2xl p-4" style={{ background: '#111', border: '1px solid #1a1a1a' }}>
+            <p className="text-[10px] font-black tracking-widest text-zinc-600 mb-3">FORMAS DE PAGAMENTO</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: 'PIX',      val: dados.totais.total_pix,      cor: '#10b981', icon: '💠' },
+                { label: 'Dinheiro', val: dados.totais.total_dinheiro,  cor: '#f59e0b', icon: '💵' },
+                { label: 'Crédito',  val: dados.totais.total_credito,   cor: '#6366f1', icon: '💳' },
+                { label: 'Débito',   val: dados.totais.total_debito,    cor: '#8b5cf6', icon: '💳' },
+              ].map(k => {
+                const pct = dados.totais.total_faturado > 0 ? Math.round(k.val / dados.totais.total_faturado * 100) : 0;
+                return (
+                  <div key={k.label} className="rounded-xl p-3" style={{ background: '#1a1a1a' }}>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs font-bold text-zinc-500">{k.icon} {k.label}</p>
+                      <p className="text-[10px] font-black text-zinc-600">{pct}%</p>
+                    </div>
+                    <p className="text-base font-black" style={{ color: k.val > 0 ? k.cor : '#333' }}>{brl(k.val)}</p>
+                    <div className="mt-1.5 h-1 rounded-full bg-zinc-800">
+                      <div className="h-1 rounded-full transition-all" style={{ width: `${pct}%`, background: k.cor }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Exportar */}
           <div className="flex gap-2 justify-end">
             <button onClick={() => exportarCSV(dados.pedidos, inicio, fim)}
