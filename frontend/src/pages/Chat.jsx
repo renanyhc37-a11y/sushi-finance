@@ -92,10 +92,16 @@ export default function Chat() {
   const inputRef = useRef(null);
   const convAtivaRef = useRef(null);
   convAtivaRef.current = convAtiva;
+  const carregarConversasRef = useRef(null);
+  carregarConversasRef.current = carregarConversas;
+  const somAtivoRef = useRef(somAtivo);
+  somAtivoRef.current = somAtivo;
 
   // ── Socket ────────────────────────────────────────────────────
   useEffect(() => {
     const socket = io(window.location.origin, { path:'/socket.io', auth:{ token: getToken() }, transports:['websocket','polling'] });
+
+    socket.on('connect_error', (err) => console.warn('[Socket] erro de conexão:', err.message));
 
     socket.on('wa:mensagem', ({ conversa, mensagem }) => {
       setConversas(prev => {
@@ -107,11 +113,11 @@ export default function Chat() {
       if (convAtivaRef.current?.id === conversa.id) {
         setMensagens(m => [...m, mensagem]);
         setConvAtiva(p => ({ ...p, ...conversa, nao_lidas: 0 }));
-      } else if (mensagem.de_mim === 0 && somAtivo) {
+      } else if (mensagem.de_mim === 0 && somAtivoRef.current) {
         playNotif();
       }
     });
-    socket.on('wa:conversas_atualizar', carregarConversas);
+    socket.on('wa:conversas_atualizar', () => carregarConversasRef.current?.());
     carregarExemplos();
 
     const token = getToken();
