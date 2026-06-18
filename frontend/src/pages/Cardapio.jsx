@@ -304,9 +304,10 @@ function Carrossel({ onBannerClick }) {
           {(() => {
             const d = banner.design ? (typeof banner.design === 'string' ? JSON.parse(banner.design) : banner.design) : null;
             const els = d?.elementos;
-            const ops = banner.opcoes_escolha
-              ? (typeof banner.opcoes_escolha === 'string' ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha)
+            const _rawOps = banner.opcoes_escolha
+              ? (() => { try { return typeof banner.opcoes_escolha === 'string' ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha; } catch { return []; } })()
               : [];
+            const ops = Array.isArray(_rawOps) ? _rawOps : [];
 
             if (els) {
               // ── Layout customizado pelo editor visual ──
