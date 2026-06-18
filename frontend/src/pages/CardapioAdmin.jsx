@@ -542,13 +542,10 @@ function ModalBanner({ banner, onClose, onSalvo }) {
     ordem: banner?.ordem || 0,
     item_id: banner?.item_id ?? null,
     usar_gradiente: banner?.usar_gradiente ? 1 : 0,
-    opcoes_escolha: banner?.opcoes_escolha
-      ? (typeof banner.opcoes_escolha === 'string' ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha)
-      : [],
+    opcoes_escolha: (() => { try { const v = banner?.opcoes_escolha ? (typeof banner.opcoes_escolha === 'string' ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha) : []; return Array.isArray(v) ? v : []; } catch { return []; } })(),
   });
   const [modoDestaque, setModoDestaque] = useState(
-    (banner?.opcoes_escolha && (typeof banner.opcoes_escolha === 'string'
-      ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha)?.length > 0)
+    (banner?.opcoes_escolha && (() => { try { const v = typeof banner.opcoes_escolha === 'string' ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha; return Array.isArray(v) && v.length > 0; } catch { return false; } })())
       ? 'multiplo' : 'simples'
   );
   const [fotoFile, setFotoFile] = useState(null);
