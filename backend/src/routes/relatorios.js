@@ -164,6 +164,23 @@ router.get('/cmv-produtos', (req, res) => {
   } catch (e) { console.error('cmv-produtos:', e); res.status(500).json({ erro: e.message }); }
 });
 
+// GET /api/relatorios/cmv-produtos/:nome/ficha — retorna id do item + ingredientes da ficha
+router.get('/cmv-produtos/:nome/ficha', (req, res) => {
+  try {
+    const nome = decodeURIComponent(req.params.nome);
+    const item = db.prepare('SELECT id, nome, preco FROM cardapio_itens WHERE nome = ? LIMIT 1').get(nome);
+    if (!item) return res.json({ item: null, ficha: [] });
+    const ficha = db.prepare(`
+      SELECT cft.id, cft.ingrediente_id, cft.quantidade,
+             i.nome as ingrediente_nome, i.unidade_medida, i.custo_unitario
+      FROM cardapio_ficha_tecnica cft
+      JOIN ingredientes i ON i.id = cft.ingrediente_id
+      WHERE cft.cardapio_item_id = ?
+    `).all(item.id);
+    res.json({ item, ficha });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // PATCH /api/relatorios/cmv-produtos/:nome/custo — salva custo manual
 router.patch('/cmv-produtos/:nome/custo', (req, res) => {
   try {
