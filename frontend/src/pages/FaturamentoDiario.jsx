@@ -148,8 +148,8 @@ export default function FaturamentoDiario() {
       {/* Header */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Faturamento Diário</h1>
-          <p className="page-subtitle">Caixa do dia por forma de pagamento</p>
+          <h1 className="page-title">Faturamento Mensal</h1>
+          <p className="page-subtitle">Totais do mês com detalhamento por dia</p>
         </div>
         <div className="flex items-center gap-3">
           <input type="month" value={mes} onChange={e => setMes(e.target.value)} className="input max-w-[160px]" />
