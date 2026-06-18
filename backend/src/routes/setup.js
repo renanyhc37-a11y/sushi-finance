@@ -7,11 +7,13 @@ const set = (k, v) => db.prepare('INSERT OR REPLACE INTO config (chave,valor) VA
 
 // GET /api/setup/status
 router.get('/status', (req, res) => {
+  try {
   const concluido = get('setup_concluido') === '1';
-  const totalIngredientes = db.prepare('SELECT COUNT(*) as n FROM ingredientes').get().n;
-  const totalItensCardapio = db.prepare('SELECT COUNT(*) as n FROM cardapio_itens WHERE disponivel=1').get().n;
-  const totalFichas = db.prepare('SELECT COUNT(DISTINCT item_id) as n FROM cardapio_ficha_tecnica').get().n;
-  const totalPedidos = db.prepare('SELECT COUNT(*) as n FROM pdv_pedidos').get().n;
+  const totalIngredientes = db.prepare('SELECT COUNT(*) as n FROM ingredientes').get()?.n ?? 0;
+  const totalItensCardapio = db.prepare('SELECT COUNT(*) as n FROM cardapio_itens WHERE disponivel=1').get()?.n ?? 0;
+  let totalFichas = 0;
+  try { totalFichas = db.prepare('SELECT COUNT(DISTINCT item_id) as n FROM cardapio_ficha_tecnica').get()?.n ?? 0; } catch {}
+  const totalPedidos = db.prepare('SELECT COUNT(*) as n FROM pdv_pedidos').get()?.n ?? 0;
 
   res.json({
     concluido,
@@ -25,6 +27,7 @@ router.get('/status', (req, res) => {
       ingredientes: totalIngredientes > 0,
     },
   });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
 // POST /api/setup/estoque-inicial

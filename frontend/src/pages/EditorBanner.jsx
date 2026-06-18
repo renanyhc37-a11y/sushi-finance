@@ -121,9 +121,10 @@ function BannerCanvas({ banner, ds, selected, onSelect, onMove, onResize, editin
   const containerRef = useRef(null);
   const { elementos: els, overlay, angulo } = ds;
 
-  const ops = banner?.opcoes_escolha
-    ? (typeof banner.opcoes_escolha === 'string' ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha)
+  const _rawOps = banner?.opcoes_escolha
+    ? (() => { try { return typeof banner.opcoes_escolha === 'string' ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha; } catch { return []; } })()
     : [];
+  const ops = Array.isArray(_rawOps) ? _rawOps : [];
 
   /* Drag para mover */
   function startDrag(e, key) {
