@@ -150,6 +150,22 @@ export default function RelatorioPedidos() {
   const [loading, setLoading] = useState(false);
   const [busca, setBusca] = useState('');
   const [pedidoDetalhe, setPedidoDetalhe] = useState(null);
+  const [enviandoWpp, setEnviandoWpp] = useState(false);
+
+  async function enviarWpp() {
+    setEnviandoWpp(true);
+    try {
+      const res = await fetch(`${BASE}/pdv/relatorio/enviar-wpp`, {
+        method: 'POST',
+        headers: { ...authH(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inicio, fim }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.erro || 'Erro ao enviar');
+      toast.success('Relatório enviado pelo WhatsApp!');
+    } catch (e) { toast.error(e.message); }
+    setEnviandoWpp(false);
+  }
 
   async function buscar() {
     setLoading(true);
@@ -274,6 +290,11 @@ export default function RelatorioPedidos() {
               className="px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"
               style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
               📄 Imprimir / PDF
+            </button>
+            <button onClick={enviarWpp} disabled={enviandoWpp}
+              className="px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"
+              style={{ background: 'rgba(37,211,102,0.1)', color: '#25d366', border: '1px solid rgba(37,211,102,0.2)', opacity: enviandoWpp ? 0.6 : 1 }}>
+              {enviandoWpp ? '⏳ Enviando...' : '📲 Enviar para ADM'}
             </button>
           </div>
 

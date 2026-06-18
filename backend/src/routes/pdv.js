@@ -332,6 +332,62 @@ router.get('/relatorio', (req, res) => {
   } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
+// POST /api/pdv/relatorio/enviar-wpp — envia resumo do relatório para o WhatsApp do ADM
+router.post('/relatorio/enviar-wpp', (req, res) => {
+  const { inicio, fim } = req.body;
+  if (!inicio || !fim) return res.status(400).json({ erro: 'inicio e fim são obrigatórios' });
+  try {
+    const getCfg = k => db.prepare('SELECT valor FROM config WHERE chave=?').get(k)?.valor;
+
+    // Número do admin: preferência ao número conectado via QR; fallback para config manual
+    let numeroAdmin;
+    try { numeroAdmin = require('../services/whatsapp').getNumero(); } catch {}
+    if (!numeroAdmin) numeroAdmin = getCfg('admin_whatsapp');
+    if (!numeroAdmin) return res.status(400).json({ erro: 'Número do administrador não configurado' });
+
+    const numLimpo = String(numeroAdmin).replace(/\D/g, '');
+    if (!numLimpo) return res.status(400).json({ erro: 'Número inválido' });
+
+    const totais = db.prepare(`
+      SELECT COUNT(*) as total_pedidos,
+             COALESCE(SUM(CASE WHEN status != 'cancelado' THEN total ELSE 0 END), 0) as total_faturado,
+             COALESCE(AVG(CASE WHEN status != 'cancelado' THEN total END), 0) as ticket_medio,
+             SUM(CASE WHEN status='cancelado' THEN 1 ELSE 0 END) as cancelados,
+             COALESCE(SUM(CASE WHEN status != 'cancelado' AND forma_pagamento='pix'          THEN total ELSE 0 END), 0) as total_pix,
+             COALESCE(SUM(CASE WHEN status != 'cancelado' AND forma_pagamento='dinheiro'     THEN total ELSE 0 END), 0) as total_dinheiro,
+             COALESCE(SUM(CASE WHEN status != 'cancelado' AND forma_pagamento='cartao_cred'  THEN total ELSE 0 END), 0) as total_credito,
+             COALESCE(SUM(CASE WHEN status != 'cancelado' AND forma_pagamento='cartao_deb'   THEN total ELSE 0 END), 0) as total_debito
+      FROM pdv_pedidos WHERE date(created_at) BETWEEN ? AND ?
+    `).get(inicio, fim);
+
+    const fmt = v => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const d1 = inicio.split('-').reverse().join('/');
+    const d2 = fim.split('-').reverse().join('/');
+    const periodo = d1 === d2 ? d1 : `${d1} a ${d2}`;
+
+    const texto = [
+      `📊 *Relatório de Pedidos*`,
+      `🗓️ Período: ${periodo}`,
+      ``,
+      `📦 Total de pedidos: ${totais.total_pedidos}`,
+      `✅ Faturado: *${fmt(totais.total_faturado)}*`,
+      `🎟️ Ticket médio: ${fmt(totais.ticket_medio)}`,
+      `❌ Cancelados: ${totais.cancelados || 0}`,
+      ``,
+      `💳 *Formas de pagamento:*`,
+      `  💠 PIX: ${fmt(totais.total_pix)}`,
+      `  💵 Dinheiro: ${fmt(totais.total_dinheiro)}`,
+      `  💳 Crédito: ${fmt(totais.total_credito)}`,
+      `  💳 Débito: ${fmt(totais.total_debito)}`,
+    ].join('\n');
+
+    const { enviar } = require('../services/whatsapp');
+    enviar(`${numLimpo}@c.us`, texto)
+      .then(() => res.json({ ok: true }))
+      .catch(e => res.status(500).json({ erro: 'Falha ao enviar WhatsApp: ' + e.message }));
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // GET /api/pdv/cliente/:telefone/historico — últimos pedidos do cliente
 router.get('/cliente/:telefone/historico', (req, res) => {
   try {
