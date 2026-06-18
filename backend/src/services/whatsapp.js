@@ -293,16 +293,42 @@ function iniciar() {
   cliente.on('message', async (msg) => {
     try {
       if (msg.isStatus || msg.from === 'status@broadcast') return;
-      const chatId = msg.from; // ID real do WhatsApp (pode ser LID)
+      const chatId = msg.from;
       const telefone = chatId.replace('@c.us', '').replace('@lid', '').replace(/\D/g,'');
-      const corpo = msg.body || '';
+      let corpo = msg.body || '';
       const contact = await msg.getContact().catch(() => null);
       const nome = contact?.pushname || contact?.name || telefone;
-      // Número REAL do cliente (resolve LID/número oculto) — usado para casar
-      // com o pedido feito no site, onde o cliente digitou o telefone de verdade.
       const telefoneReal = (contact?.number || telefone).replace(/\D/g, '');
 
-      await receberMensagem({ telefone, telefoneReal, nome, corpo, waId: msg.id?.id, chatId });
+      // Foto de perfil do contato
+      const fotoUrl = await contact?.getProfilePicUrl().catch(() => null);
+
+      // Mídia (imagens, comprovantes, áudio, etc.)
+      let mediaUrl = null;
+      let tipo = 'texto';
+      if (msg.hasMedia) {
+        try {
+          const media = await msg.downloadMedia();
+          if (media?.data) {
+            const mime = media.mimetype || 'application/octet-stream';
+            const ext = mime.split('/')[1]?.split(';')[0] || 'bin';
+            const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+            const dir = path.join(__dirname, '..', '..', 'uploads', 'wa-media');
+            fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(path.join(dir, filename), Buffer.from(media.data, 'base64'));
+            mediaUrl = `/api/chat/media/${filename}`;
+            tipo = mime.startsWith('image/') ? 'imagem'
+                 : mime.startsWith('video/') ? 'video'
+                 : mime.startsWith('audio/') ? 'audio'
+                 : 'arquivo';
+            if (!corpo) corpo = msg.caption || `[${tipo}]`;
+          }
+        } catch (e) {
+          console.error('[WhatsApp] Erro ao baixar mídia:', e.message);
+        }
+      }
+
+      await receberMensagem({ telefone, telefoneReal, nome, corpo, waId: msg.id?.id, chatId, fotoUrl, mediaUrl, tipo });
     } catch (err) {
       console.error('[WhatsApp] Erro ao processar mensagem recebida:', err.message);
     }
@@ -562,33 +588,36 @@ function anexarSolicitacaoAoPedido(telefone, corpo, nome) {
   } catch (e) { console.error('[WhatsApp] anexarSolicitacao erro:', e.message); return false; }
 }
 
-async function receberMensagem({ telefone, telefoneReal, nome, corpo, waId, chatId }) {
+async function receberMensagem({ telefone, telefoneReal, nome, corpo, waId, chatId, fotoUrl, mediaUrl, tipo = 'texto' }) {
   // Upsert conversa — salva o chatId real para envio correto + telefone real
   db.prepare(`
-    INSERT INTO wa_conversas(telefone, nome, ultima_mensagem, ultima_em, nao_lidas, chat_id, telefone_real)
-    VALUES(?,?,?,datetime('now'),1,?,?)
+    INSERT INTO wa_conversas(telefone, nome, foto_url, ultima_mensagem, ultima_em, nao_lidas, chat_id, telefone_real)
+    VALUES(?,?,?,?,datetime('now'),1,?,?)
     ON CONFLICT(telefone) DO UPDATE SET
       nome = COALESCE(excluded.nome, nome),
+      foto_url = COALESCE(excluded.foto_url, foto_url),
       ultima_mensagem = excluded.ultima_mensagem,
       ultima_em = excluded.ultima_em,
       nao_lidas = nao_lidas + 1,
       chat_id = COALESCE(excluded.chat_id, chat_id),
       telefone_real = COALESCE(excluded.telefone_real, telefone_real)
-  `).run(telefone, nome, corpo, chatId || null, telefoneReal || null);
+  `).run(telefone, nome, fotoUrl || null, corpo, chatId || null, telefoneReal || null);
 
   const conversa = db.prepare('SELECT * FROM wa_conversas WHERE telefone=?').get(telefone);
 
-  // Salva mensagem recebida
+  // Salva mensagem recebida com suporte a mídia
   const msgRow = db.prepare(`
-    INSERT INTO wa_mensagens(conversa_id, wa_id, de, corpo, de_mim, lida)
-    VALUES(?,?,?,?,0,0)
-  `).run(conversa.id, waId || null, telefone, corpo);
+    INSERT INTO wa_mensagens(conversa_id, wa_id, de, corpo, tipo, de_mim, lida, media_url)
+    VALUES(?,?,?,?,?,0,0,?)
+  `).run(conversa.id, waId || null, telefone, corpo, tipo, mediaUrl || null);
 
   const mensagem = {
     id: msgRow.lastInsertRowid,
     conversa_id: conversa.id,
     de: telefone,
     corpo,
+    tipo,
+    media_url: mediaUrl || null,
     de_mim: 0,
     ia: 0,
     created_at: new Date().toISOString(),

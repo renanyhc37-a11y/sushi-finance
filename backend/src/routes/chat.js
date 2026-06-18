@@ -1,4 +1,6 @@
 const { Router } = require('express');
+const path = require('path');
+const fs = require('fs');
 const db = require('../db/database');
 const wa = require('../services/whatsapp');
 
@@ -296,6 +298,14 @@ router.put('/exemplos/:id', (req, res) => {
 router.delete('/exemplos/:id', (req, res) => {
   db.prepare('DELETE FROM wa_exemplos WHERE id=?').run(req.params.id);
   res.json({ ok: true });
+});
+
+// GET /api/chat/media/:filename — serve arquivos de mídia recebidos via WhatsApp
+router.get('/media/:filename', (req, res) => {
+  const filename = path.basename(req.params.filename); // previne path traversal
+  const filepath = path.join(__dirname, '..', '..', 'uploads', 'wa-media', filename);
+  if (!fs.existsSync(filepath)) return res.status(404).send('Not found');
+  res.sendFile(filepath);
 });
 
 module.exports = router;
