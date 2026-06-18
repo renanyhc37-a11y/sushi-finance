@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, TrendingUp } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, TrendingUp, Pencil, Check, X } from 'lucide-react';
 import { api } from '../api/client';
 import { mesAtual } from '../lib/fmt';
 import { PageLoading } from '../components/Loading';
+import toast from 'react-hot-toast';
 
 const brl = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-// Cor do CMV: bom (≤30%), atenção (≤45%), ruim (>45%)
 function corCmv(cmv, semFicha) {
   if (semFicha) return 'var(--txt-faint)';
   if (cmv <= 30) return '#10b981';
@@ -15,19 +15,84 @@ function corCmv(cmv, semFicha) {
   return '#ef4444';
 }
 
+function CustoEditavel({ linha, onSalvo }) {
+  const [editando, setEditando] = useState(false);
+  const [val, setVal] = useState('');
+  const inputRef = useRef(null);
+
+  function abrir() {
+    setVal(linha.custo_unit > 0 ? String(linha.custo_unit).replace('.', ',') : '');
+    setEditando(true);
+    setTimeout(() => inputRef.current?.select(), 50);
+  }
+
+  async function salvar() {
+    const custo = parseFloat(String(val).replace(',', '.'));
+    if (isNaN(custo) || custo < 0) { toast.error('Valor inválido'); return; }
+    try {
+      await api.patch(`/relatorios/cmv-produtos/${encodeURIComponent(linha.nome)}/custo`, { custo });
+      toast.success('Custo salvo!');
+      setEditando(false);
+      onSalvo();
+    } catch (e) { toast.error(e.message); }
+  }
+
+  function cancelar() { setEditando(false); }
+
+  if (editando) {
+    return (
+      <div className="flex items-center gap-1 justify-end">
+        <span className="text-xs" style={{ color: 'var(--txt-faint)' }}>R$</span>
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="decimal"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') cancelar(); }}
+          className="w-20 px-2 py-1 rounded-lg text-xs text-right font-mono"
+          style={{ background: '#1a1a2e', border: '1px solid var(--accent)', color: 'var(--txt-strong)', outline: 'none' }}
+          autoFocus
+        />
+        <button onClick={salvar} className="w-6 h-6 flex items-center justify-center rounded-md" style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981' }}>
+          <Check size={12} strokeWidth={2.5} />
+        </button>
+        <button onClick={cancelar} className="w-6 h-6 flex items-center justify-center rounded-md" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>
+          <X size={12} strokeWidth={2.5} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 justify-end group cursor-pointer" onClick={abrir} title="Clique para editar o custo">
+      <span className="font-mono" style={{ color: linha.sem_ficha && !linha.custo_manual ? 'var(--txt-faint)' : 'var(--txt)' }}>
+        {linha.custo_unit > 0 ? brl(linha.custo_unit) : '—'}
+      </span>
+      {linha.custo_manual && (
+        <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: 'rgba(99,102,241,0.15)', color: '#818cf8' }}>manual</span>
+      )}
+      <Pencil size={11} strokeWidth={2} className="opacity-0 group-hover:opacity-60 transition-opacity shrink-0" style={{ color: 'var(--accent)' }} />
+    </div>
+  );
+}
+
 export default function CmvProdutos() {
   const [mes, setMes] = useState(mesAtual());
+  const qc = useQueryClient();
   const { data: linhas = [], isLoading } = useQuery({
     queryKey: ['cmv-produtos', mes],
     queryFn: () => api.get(`/relatorios/cmv-produtos?mes=${mes}`),
   });
 
-  const comFicha = linhas.filter(l => !l.sem_ficha);
-  const semFicha = linhas.filter(l => l.sem_ficha);
+  const comFicha = linhas.filter(l => !l.sem_ficha || l.custo_manual);
+  const semFicha = linhas.filter(l => l.sem_ficha && !l.custo_manual);
   const totReceita = linhas.reduce((s, l) => s + l.receita, 0);
   const totCusto = comFicha.reduce((s, l) => s + l.custo_total, 0);
   const cmvMedio = totReceita > 0 ? (totCusto / totReceita) * 100 : 0;
   const margemTotal = comFicha.reduce((s, l) => s + l.margem, 0);
+
+  const invalidar = () => qc.invalidateQueries(['cmv-produtos', mes]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -56,9 +121,9 @@ export default function CmvProdutos() {
             <div className="rounded-2xl p-3.5 flex items-start gap-3" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)' }}>
               <AlertTriangle size={18} className="shrink-0 mt-0.5" style={{ color: '#f59e0b' }} />
               <div>
-                <p className="text-sm font-semibold" style={{ color: '#fbbf24' }}>{semFicha.length} item(ns) vendido(s) sem ficha técnica</p>
+                <p className="text-sm font-semibold" style={{ color: '#fbbf24' }}>{semFicha.length} item(ns) vendido(s) sem custo definido</p>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--txt-dim)' }}>
-                  Esses entram no CMV como custo 0 (subestimam o custo real). Cadastre a ficha em <b>Cardápio → ícone de ficha</b> no item: {semFicha.slice(0, 6).map(l => l.nome).join(', ')}{semFicha.length > 6 ? '…' : ''}
+                  Clique na coluna <b>Custo/un</b> de qualquer item para inserir o custo manualmente, ou cadastre a ficha técnica no Cardápio. Itens: {semFicha.slice(0, 6).map(l => l.nome).join(', ')}{semFicha.length > 6 ? '…' : ''}
                 </p>
               </div>
             </div>
@@ -73,7 +138,12 @@ export default function CmvProdutos() {
                     <th>Produto</th>
                     <th className="text-center">Vendas</th>
                     <th className="text-right">Preço médio</th>
-                    <th className="text-right">Custo/un</th>
+                    <th className="text-right">
+                      <span className="flex items-center gap-1 justify-end">
+                        Custo/un
+                        <Pencil size={10} style={{ color: 'var(--accent)', opacity: 0.7 }} />
+                      </span>
+                    </th>
                     <th className="text-center">CMV</th>
                     <th className="text-right">Margem</th>
                   </tr>
@@ -83,13 +153,19 @@ export default function CmvProdutos() {
                     <tr key={l.nome}>
                       <td className="font-semibold">
                         {l.nome}
-                        {l.sem_ficha && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>sem ficha</span>}
+                        {l.sem_ficha && !l.custo_manual && (
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>sem ficha</span>
+                        )}
                       </td>
                       <td className="text-center font-mono">{l.qtd}</td>
                       <td className="text-right font-mono" style={{ color: 'var(--txt-dim)' }}>{brl(l.preco_medio)}</td>
-                      <td className="text-right font-mono">{l.sem_ficha ? '—' : brl(l.custo_unit)}</td>
+                      <td className="text-right">
+                        <CustoEditavel linha={l} onSalvo={invalidar} />
+                      </td>
                       <td className="text-center">
-                        <span className="font-black" style={{ color: corCmv(l.cmv, l.sem_ficha) }}>{l.sem_ficha ? '—' : `${l.cmv}%`}</span>
+                        <span className="font-black" style={{ color: corCmv(l.cmv, l.sem_ficha && !l.custo_manual) }}>
+                          {(l.sem_ficha && !l.custo_manual) ? '—' : `${l.cmv}%`}
+                        </span>
                       </td>
                       <td className="text-right font-mono font-semibold" style={{ color: l.margem >= 0 ? '#10b981' : '#ef4444' }}>{brl(l.margem)}</td>
                     </tr>
@@ -99,7 +175,7 @@ export default function CmvProdutos() {
             </div>
           </div>
           <p className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--txt-faint)' }}>
-            <TrendingUp size={12} /> CMV ideal pra sushi costuma ficar entre 30% e 40%. Verde ≤30% · amarelo ≤45% · vermelho acima.
+            <TrendingUp size={12} /> CMV ideal pra sushi costuma ficar entre 30% e 40%. Verde ≤30% · amarelo ≤45% · vermelho acima. Clique em Custo/un para editar diretamente.
           </p>
         </>
       )}

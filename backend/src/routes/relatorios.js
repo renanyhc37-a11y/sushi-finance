@@ -7,12 +7,18 @@ function getMes(mes) {
   return mes || new Date().toISOString().slice(0, 7);
 }
 
+// ── Tabela de custo manual por item (override da ficha técnica) ───
+try { db.exec("CREATE TABLE IF NOT EXISTS cmv_custo_direto (item_nome TEXT PRIMARY KEY, custo_unit REAL NOT NULL, updated_at TEXT DEFAULT (datetime('now')))"); } catch {}
+
 // ── CMV real: custo dos itens efetivamente vendidos no mês ────
 // Vendas vêm dos pedidos do PDV (pdv_itens). O custo de cada item sai da
 // ficha técnica do cardápio (cardapio_ficha_tecnica × custo do ingrediente).
 // Itens sem ficha entram com custo 0 (e são listados como "sem ficha").
 // Custo recursivo: ingredientes diretos + sub-composições (até 2 níveis)
 function _custoItemCardapio(nome) {
+  // Custo manual tem prioridade sobre ficha técnica
+  const manual = db.prepare('SELECT custo_unit FROM cmv_custo_direto WHERE item_nome = ?').get(nome);
+  if (manual) return { c: manual.custo_unit, tem_ficha: 1, manual: true };
   const item = db.prepare('SELECT id FROM cardapio_itens WHERE nome = ? LIMIT 1').get(nome);
   if (!item) return { c: 0, tem_ficha: 0 };
   return { c: _custoById(item.id), tem_ficha: _temFicha(item.id) };
@@ -151,10 +157,26 @@ router.get('/cmv-produtos', (req, res) => {
         cmv: parseFloat(cmv.toFixed(1)),
         margem: v.receita - custo_total,
         sem_ficha,
+        custo_manual: !!r?.manual,
       };
     });
     res.json(linhas);
   } catch (e) { console.error('cmv-produtos:', e); res.status(500).json({ erro: e.message }); }
+});
+
+// PATCH /api/relatorios/cmv-produtos/:nome/custo — salva custo manual
+router.patch('/cmv-produtos/:nome/custo', (req, res) => {
+  try {
+    const nome = decodeURIComponent(req.params.nome);
+    const custo = parseFloat(req.body?.custo);
+    if (isNaN(custo) || custo < 0) return res.status(400).json({ erro: 'Custo inválido' });
+    if (custo === 0) {
+      db.prepare('DELETE FROM cmv_custo_direto WHERE item_nome = ?').run(nome);
+    } else {
+      db.prepare("INSERT OR REPLACE INTO cmv_custo_direto (item_nome, custo_unit, updated_at) VALUES (?, ?, datetime('now'))").run(nome, custo);
+    }
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ erro: e.message }); }
 });
 
 router.get('/evolucao', (req, res) => {
