@@ -241,80 +241,92 @@ export default function Relatorios() {
                   const t = tend(item.receita, item.prev_receita);
                   const abc = abcMap[item.nome];
                   const isOpen = aberto === item.nome;
-                  const margCor = item.margem_pct >= 40 ? '#22c55e' : item.margem_pct >= 20 ? '#f59e0b' : '#ef4444';
+                  const margCor = item.sem_ficha ? '#6b7280'
+                    : item.margem_pct >= 40 ? '#22c55e'
+                    : item.margem_pct >= 20 ? '#f59e0b' : '#ef4444';
+                  const abcCor = C[`abc${abc}`] || '#6b7280';
 
                   return (
                     <div key={item.nome}
                       onClick={() => setAberto(isOpen ? null : item.nome)}
-                      className={`card cursor-pointer hover:shadow-md transition-all border-2 ${isOpen ? 'border-blue-300' : 'border-transparent'}`}
+                      className="card cursor-pointer transition-all"
+                      style={{ borderWidth: 2, borderColor: isOpen ? '#3b82f6' : 'transparent' }}
                     >
-                      {/* topo do card */}
-                      <div className="p-4 pb-3">
-                        <div className="flex items-start justify-between gap-2 mb-3">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-xs font-mono text-slate-300 shrink-0">#{idx + 1}</span>
+                      <div className="p-4">
+                        {/* linha topo: rank + abc + badges */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono" style={{ color: '#555' }}>#{idx + 1}</span>
                             {abc && (
-                              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                                style={{ background: C[`abc${abc}`] }}>{abc}</span>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md"
+                                style={{ background: abcCor + '22', color: abcCor, border: `1px solid ${abcCor}44` }}>
+                                {abc}
+                              </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex items-center gap-1.5">
                             {item.sem_ficha && (
-                              <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                                style={{ background: '#78350f22', color: '#f59e0b', border: '1px solid #78350f44' }}>
                                 sem custo
                               </span>
                             )}
                             {item.prev_receita === 0
-                              ? <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">novo</span>
+                              ? <span className="text-[10px] font-medium px-2 py-0.5 rounded-full" style={{ background: '#ffffff11', color: '#6b7280' }}>novo</span>
                               : t !== null && <TendBadge v={t} />
                             }
                           </div>
                         </div>
-                        <p className="font-semibold text-slate-800 leading-tight mb-4" style={{ fontSize: 13 }}>{item.nome}</p>
 
-                        {/* métricas principais */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="bg-slate-50 rounded-xl p-3">
-                            <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium mb-0.5">Receita</p>
-                            <p className="font-bold text-slate-900 text-base">{brl(item.receita)}</p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">{item.qtd} unidades</p>
+                        {/* nome */}
+                        <p className="font-semibold leading-snug mb-4" style={{ color: '#e2e8f0', fontSize: 14 }}>{item.nome}</p>
+
+                        {/* métricas */}
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                          {/* receita */}
+                          <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#6b7280' }}>Receita</p>
+                            <p className="font-bold text-base" style={{ color: '#f1f5f9' }}>{brl(item.receita)}</p>
+                            <p className="text-[11px] mt-0.5" style={{ color: '#4b5563' }}>{item.qtd} vendas</p>
                           </div>
-                          <div className="bg-slate-50 rounded-xl p-3">
-                            <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium mb-0.5">Margem</p>
-                            {item.sem_ficha
-                              ? <p className="font-bold text-amber-500 text-base">—</p>
-                              : <p className="font-bold text-base" style={{ color: margCor }}>{pct(item.margem_pct)}</p>
-                            }
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                              {item.sem_ficha ? 'sem ficha técnica' : brl(item.margem) + ' de lucro'}
+                          {/* margem */}
+                          <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${margCor}33` }}>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: '#6b7280' }}>Margem</p>
+                            <p className="font-bold text-base" style={{ color: margCor }}>
+                              {item.sem_ficha ? '—' : pct(item.margem_pct)}
+                            </p>
+                            <p className="text-[11px] mt-0.5" style={{ color: '#4b5563' }}>
+                              {item.sem_ficha ? 'cadastre a ficha' : brl(item.margem)}
                             </p>
                           </div>
                         </div>
 
                         {/* barra de participação */}
-                        <div className="mt-3">
-                          <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                        <div>
+                          <div className="flex justify-between mb-1" style={{ fontSize: 10, color: '#4b5563' }}>
                             <span>Participação no faturamento</span>
-                            <span className="font-medium">{partic.toFixed(1)}%</span>
+                            <span className="font-semibold" style={{ color: '#6b7280' }}>{partic.toFixed(1)}%</span>
                           </div>
-                          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full bg-blue-400 transition-all" style={{ width: `${Math.min(100, partic)}%` }} />
+                          <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                            <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, partic)}%`, background: abcCor }} />
                           </div>
                         </div>
                       </div>
 
-                      {/* histórico expandido */}
+                      {/* painel histórico */}
                       {isOpen && (
-                        <div className="border-t border-slate-100 p-4 bg-slate-50">
-                          <div className="flex gap-3 text-xs text-slate-500 mb-3 flex-wrap">
-                            <span>Preço médio: <strong className="text-slate-700">{brl(item.preco_medio)}</strong></span>
-                            {!item.sem_ficha && <span>Custo: <strong className="text-slate-700">{brl(item.custo_unit)}</strong></span>}
-                            {!item.sem_ficha && <span>CMV: <strong className="text-slate-700">{pct(item.cmv_pct)}</strong></span>}
+                        <div className="p-4 pt-0">
+                          <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                            <div className="flex gap-4 mb-3 flex-wrap" style={{ fontSize: 11, color: '#6b7280' }}>
+                              <span>Preço médio: <strong style={{ color: '#94a3b8' }}>{brl(item.preco_medio)}</strong></span>
+                              {!item.sem_ficha && <span>Custo: <strong style={{ color: '#94a3b8' }}>{brl(item.custo_unit)}</strong></span>}
+                              {!item.sem_ficha && <span>CMV: <strong style={{ color: '#94a3b8' }}>{pct(item.cmv_pct)}</strong></span>}
+                            </div>
+                            {historico.length === 0
+                              ? <p style={{ fontSize: 11, color: '#4b5563' }}>Carregando...</p>
+                              : <MiniHistorico data={historico} />
+                            }
                           </div>
-                          {historico.length === 0
-                            ? <p className="text-xs text-slate-400">Carregando...</p>
-                            : <MiniHistorico data={historico} />
-                          }
                         </div>
                       )}
                     </div>
