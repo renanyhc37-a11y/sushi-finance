@@ -914,7 +914,7 @@ export default function Cardapio() {
       if (res.ok) {
         const data = await res.json();
         setClienteEncontrado(data);
-        setForm(p => ({ ...p, nome: data.nome, endereco: data.endereco || '' }));
+        setForm(p => ({ ...p, nome: data.nome, endereco: data.endereco || '', bairro: data.bairro || '' }));
         setEtapaCheckout('confirmar');
       } else {
         setClienteEncontrado(null);
@@ -1307,8 +1307,8 @@ export default function Cardapio() {
       );
     };
 
-    const BairroSelector = () => {
-      if (ehRetirada || !temBairros) return null;
+    // BairroSelector como JSX inline para evitar re-mount a cada keystroke
+    const bairroSelectorJsx = (!ehRetirada && temBairros) ? (() => {
       const frete = calcFrete();
       return (
         <div>
@@ -1332,7 +1332,7 @@ export default function Cardapio() {
           ) : null}
         </div>
       );
-    };
+    })() : null;
 
     // Aniversário (mimo) + agendamento do pedido
     const ExtrasPedido = () => (
@@ -1525,19 +1525,28 @@ export default function Cardapio() {
               {/* Como receber: entrega ou retirada */}
               <TipoEntregaSelector />
 
-              {/* Endereço — só aparece se cliente não tem endereço salvo e é entrega */}
-              {!ehRetirada && !clienteEncontrado.endereco && (
-                <div className="rounded-3xl p-4" style={{ background: '#111', border: '1px solid rgba(var(--accent-rgb),0.3)' }}>
-                  <label className="text-xs text-orange-400 font-bold flex items-center gap-1.5 mb-2">
-                    <MapPin size={13} strokeWidth={1.75} />Endereço de entrega *
-                    <span className="text-zinc-600 font-normal">(primeira vez)</span>
-                  </label>
-                  <input type="text" placeholder="Rua, número, bairro..."
-                    value={form.endereco} onChange={e => setForm(p => ({ ...p, endereco: e.target.value }))}
-                    className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
-                    style={{ background: '#1a1a1a', border: '1px solid var(--accent)' }}
-                    onFocus={e => e.target.style.borderColor = 'var(--accent-2)'}
-                    onBlur={e => e.target.style.borderColor = 'var(--accent)'} />
+              {/* Endereço de entrega — sempre visível para entrega */}
+              {!ehRetirada && (
+                <div className="rounded-3xl p-4 space-y-3" style={{ background: '#111', border: `1px solid ${clienteEncontrado.endereco ? 'rgba(255,255,255,0.06)' : 'rgba(var(--accent-rgb),0.3)'}` }}>
+                  <p className="text-xs font-bold tracking-widest text-zinc-600 flex items-center gap-1.5">
+                    <MapPin size={12} strokeWidth={1.75} /> ENDEREÇO DE ENTREGA
+                    {!clienteEncontrado.endereco && <span className="text-orange-400 font-normal normal-case">(primeira vez)</span>}
+                  </p>
+                  {[
+                    { key: 'endereco',    Icon: MapPin,        label: 'Rua *',       placeholder: 'Nome da rua ou avenida' },
+                    { key: 'numero',      Icon: Hash,          label: 'Número *',    placeholder: 'Ex: 123' },
+                    { key: 'complemento', Icon: MessageSquare, label: 'Complemento', placeholder: 'Apto, casa, bloco... (opcional)' },
+                  ].map(({ key, Icon, label, placeholder }) => (
+                    <div key={key}>
+                      <label className="text-xs text-zinc-600 font-medium flex items-center gap-1.5 mb-1.5"><Icon size={13} strokeWidth={1.75} />{label}</label>
+                      <input type="text" placeholder={placeholder}
+                        value={form[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
+                        className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
+                        style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}
+                        onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                        onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -1556,7 +1565,7 @@ export default function Cardapio() {
 
               {/* Bairro / Pagamento */}
               <div className="rounded-3xl p-4 space-y-4" style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <BairroSelector />
+                {bairroSelectorJsx}
                 <PagamentoSelector />
                 <ExtrasPedido />
               </div>
