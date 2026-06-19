@@ -2106,7 +2106,7 @@ export default function Cardapio() {
 
         {/* Banner de cupom ativo */}
         {cupomAtivo && (
-          <div className="max-w-2xl mx-auto px-4 pt-3">
+          <div className="max-w-2xl mx-auto px-4 mb-6">
             <div className="rounded-2xl overflow-hidden"
               style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.10) 0%, rgba(5,150,105,0.04) 100%)', border: '1px solid rgba(16,185,129,0.25)' }}>
               {/* linha de luz no topo */}
