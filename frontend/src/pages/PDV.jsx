@@ -1852,16 +1852,20 @@ export default function PDV() {
     // Cards entregues ficam colapsados até clicar
     if (eEntregue && !aberto) {
       return (
-        <div key={pedido.id} className="rounded-2xl overflow-hidden transition-all duration-200 cursor-pointer"
-          style={{ background: 'var(--space-elev)', border: '1.5px solid var(--space-elev-2)' }}
-          onClick={() => setPedidoAberto(pedido)}>
-          <div style={{ height: 3, background: `linear-gradient(90deg, ${cfg.cor}, ${cfg.cor}44)` }} />
-          <div className="px-3 py-2 flex items-center gap-2">
-            <span className="text-sm font-black t-strong">#{pedido.numero}</span>
-            <span className="text-sm font-bold t-strong truncate flex-1">{pedido.cliente_nome}</span>
-            <span className="text-xs t-dim">{tempoTexto}</span>
-            <span className="text-sm font-black t-strong shrink-0">{brl(pedido.total)}</span>
-            <ChevronDown size={14} className="t-dim shrink-0" />
+        <div key={pedido.id} onClick={() => setPedidoAberto(pedido)} className="cursor-pointer transition-all duration-300"
+          style={{
+            borderRadius: 14,
+            overflow: 'hidden',
+            background: 'var(--space-elev)',
+            border: `0.5px solid ${cfg.cor}33`,
+          }}>
+          <div style={{ height: '0.5px', background: `linear-gradient(90deg, ${cfg.cor}88, transparent 70%)` }} />
+          <div className="flex items-center gap-3 px-3 py-2.5">
+            <span style={{ fontFamily: 'monospace', fontSize: 12, color: cfg.cor, opacity: 0.7 }}>#{pedido.numero}</span>
+            <span className="text-xs flex-1 truncate" style={{ color: 'var(--txt-dim)', fontWeight: 500 }}>{pedido.cliente_nome}</span>
+            <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--txt-dim)' }}>{tempoTexto}</span>
+            <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: 'var(--txt-strong)' }}>{brl(pedido.total)}</span>
+            <ChevronDown size={12} style={{ color: 'var(--txt-dim)', opacity: 0.5 }} />
           </div>
         </div>
       );
@@ -1869,82 +1873,84 @@ export default function PDV() {
     const PgtoIcon = { pix: Smartphone, dinheiro: Banknote, cartao_cred: CreditCard, cartao_deb: CreditCard }[pedido.forma_pagamento] || null;
     const pgtoLabel = { pix: 'PIX', dinheiro: 'Dinheiro', cartao_cred: 'Crédito', cartao_deb: 'Débito' }[pedido.forma_pagamento] || '';
 
-    const accentColor = eNovo ? '#3b82f6' : cfg.cor;
+    const ac = eNovo ? '#3b82f6' : cfg.cor; // accent color
 
     return (
-      <div key={pedido.id} className="rounded-2xl overflow-hidden transition-all duration-200"
+      <div key={pedido.id} className="transition-all duration-300"
         style={{
+          borderRadius: 16,
+          overflow: 'hidden',
           background: 'var(--space-elev)',
-          borderLeft: `4px solid ${accentColor}`,
-          border: `1px solid var(--hairline)`,
-          borderLeftWidth: 4,
-          borderLeftColor: accentColor,
-          boxShadow: eNovo
-            ? '0 4px 20px rgba(59,130,246,0.18), 0 1px 4px rgba(0,0,0,0.08)'
-            : '0 2px 8px rgba(0,0,0,0.06)',
+          border: `0.5px solid ${ac}44`,
+          boxShadow: `0 0 0 0.5px ${ac}22, 0 8px 32px ${ac}11, 0 2px 8px rgba(0,0,0,0.08)`,
         }}>
 
-        {/* ── Cabeçalho: número + pagamento + hora ── */}
-        <button onClick={() => abrirModal(pedido)} className="w-full text-left active:opacity-70 transition-opacity">
-          <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-            {/* número */}
-            <span className="text-base font-black" style={{ color: accentColor }}>#{pedido.numero}</span>
+        {/* linha de luz no topo */}
+        <div style={{ height: 1, background: `linear-gradient(90deg, transparent 0%, ${ac}cc 40%, ${ac} 50%, ${ac}cc 60%, transparent 100%)` }} />
+
+        {/* ── HEADER: número · pagamento · hora ── */}
+        <button onClick={() => abrirModal(pedido)} className="w-full text-left" style={{ WebkitTapHighlightColor: 'transparent' }}>
+          <div className="flex items-center gap-2 px-3.5 pt-3 pb-2">
+
+            {/* número — monospace com glow */}
+            <span style={{ fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace", fontSize: 15, fontWeight: 700, color: ac, letterSpacing: '0.02em', textShadow: `0 0 16px ${ac}66` }}>
+              #{pedido.numero}
+            </span>
+
             {eNovo && (
-              <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md text-white animate-pulse"
-                style={{ background: '#3b82f6' }}>NOVO</span>
+              <span className="animate-pulse" style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', padding: '2px 6px', borderRadius: 4, background: `${ac}22`, color: ac, border: `0.5px solid ${ac}88` }}>
+                NOVO
+              </span>
             )}
             {pedido.agendado_para && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1"
-                style={{ background: 'rgba(168,85,247,0.15)', color: '#9333ea', border: '1px solid rgba(168,85,247,0.3)' }}>
-                <Clock size={9} strokeWidth={2.5} />
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', padding: '2px 6px', borderRadius: 4, background: 'rgba(168,85,247,0.1)', color: '#a855f7', border: '0.5px solid rgba(168,85,247,0.4)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                <Clock size={8} strokeWidth={2} />
                 {new Date(pedido.agendado_para).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
-            {/* pagamento + horário (direita) */}
-            <div className="ml-auto flex items-center gap-2">
+
+            <div className="ml-auto flex items-center gap-2.5">
               {pedido.forma_pagamento && PgtoIcon && (
-                <span className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: 'var(--txt-dim)' }}>
-                  <PgtoIcon size={12} strokeWidth={1.75} /> {pgtoLabel}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, color: 'var(--txt-dim)', letterSpacing: '0.04em' }}>
+                  <PgtoIcon size={11} strokeWidth={1.5} /> {pgtoLabel}
                 </span>
               )}
-              <span className="text-[11px] font-bold flex items-center gap-0.5"
-                style={{ color: atraso && atraso.nivel !== 'ok' ? atraso.cor : 'var(--txt-dim)' }}>
-                {atraso && atraso.nivel !== 'ok' && <AlertTriangle size={10} strokeWidth={2.5} />}
+              <span style={{ fontFamily: "'SF Mono', monospace", fontSize: 11, fontWeight: 600, color: atraso && atraso.nivel !== 'ok' ? atraso.cor : 'var(--txt-dim)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                {atraso && atraso.nivel !== 'ok' && <AlertTriangle size={10} strokeWidth={2} />}
                 {utcDate(pedido.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           </div>
 
-          {/* ── Cliente + entrega ── */}
-          <div className="flex items-start justify-between gap-2 px-3 pb-3">
+          {/* ── CLIENTE ── */}
+          <div className="flex items-end justify-between gap-2 px-3.5 pb-3">
             <div className="min-w-0">
-              <p className="font-black text-sm leading-tight truncate" style={{ color: 'var(--txt-strong)' }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--txt-strong)', letterSpacing: '-0.01em', lineHeight: 1.2 }} className="truncate">
                 {pedido.cliente_nome}
               </p>
               <div className="flex items-center gap-1 mt-1">
                 {pedido.tipo_entrega === 'retirada'
-                  ? <><ShoppingBag size={10} strokeWidth={2} style={{ color: accentColor }} /><span className="text-[11px] font-bold" style={{ color: accentColor }}>Retirada</span></>
-                  : <><MapPin size={10} strokeWidth={1.75} style={{ color: 'var(--txt-dim)' }} /><span className="text-[11px] truncate max-w-[160px]" style={{ color: 'var(--txt-dim)' }}>{pedido.cliente_endereco}</span></>
+                  ? <><ShoppingBag size={9} strokeWidth={1.75} style={{ color: ac }} /><span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: ac }}>RETIRADA</span></>
+                  : <><MapPin size={9} strokeWidth={1.5} style={{ color: 'var(--txt-dim)' }} /><span className="truncate" style={{ fontSize: 10, color: 'var(--txt-dim)', maxWidth: 160 }}>{pedido.cliente_endereco}</span></>
                 }
               </div>
             </div>
-            {/* badge fidelidade */}
             <div className="shrink-0">
               {pedido.cliente_total_pedidos === 1 && (
-                <span className="text-[9px] font-black px-2 py-1 rounded-full" style={{ background: 'rgba(34,197,94,0.15)', color: '#15803d', border: '1px solid rgba(34,197,94,0.35)' }}>
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', padding: '2px 7px', borderRadius: 99, background: 'rgba(34,197,94,0.12)', color: '#22c55e', border: '0.5px solid rgba(34,197,94,0.4)' }}>
                   1º pedido
                 </span>
               )}
               {pedido.cliente_total_pedidos > 1 && (
-                <span className="text-[9px] font-black px-2 py-1 rounded-full flex items-center gap-0.5" style={{ background: 'rgba(245,158,11,0.15)', color: '#b45309', border: '1px solid rgba(245,158,11,0.35)' }}>
-                  <Star size={8} strokeWidth={2} /> {pedido.cliente_total_pedidos}º
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.04em', padding: '2px 7px', borderRadius: 99, background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '0.5px solid rgba(245,158,11,0.4)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <Star size={7} strokeWidth={2} /> {pedido.cliente_total_pedidos}°
                 </span>
               )}
             </div>
           </div>
         </button>
 
-        {/* ── Observação ── */}
+        {/* ── OBSERVAÇÃO ── */}
         {pedido.observacao && (() => {
           const linhas = pedido.observacao.split('\n');
           const obsNormal = linhas.filter(l => !l.startsWith('📩 WhatsApp:')).join(' ').replace(/\s+/g, ' ').trim();
@@ -1952,123 +1958,121 @@ export default function PDV() {
           const obsTrunc = obsNormal.length > 80 ? obsNormal.slice(0, 80) + '…' : obsNormal;
           const wppRecentes = wppMsgs.slice(-2);
           return (
-            <div className="px-3 space-y-1.5 mb-2">
+            <div style={{ padding: '0 12px 10px' }}>
               {obsTrunc && (
-                <div className="flex items-start gap-2 px-2.5 py-2 rounded-lg"
-                  style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.4)' }}>
-                  <AlertTriangle size={13} strokeWidth={2} className="shrink-0 mt-0.5" style={{ color: '#d97706' }} />
-                  <p className="text-[12px] font-semibold leading-snug" style={{ color: '#92400e' }}>{obsTrunc}</p>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'rgba(245,158,11,0.08)', border: '0.5px solid rgba(245,158,11,0.5)', marginBottom: wppRecentes.length > 0 ? 6 : 0 }}>
+                  <AlertTriangle size={11} strokeWidth={2} style={{ color: '#f59e0b', flexShrink: 0, marginTop: 1 }} />
+                  <p style={{ fontSize: 11, fontWeight: 600, color: '#d97706', lineHeight: 1.4 }}>{obsTrunc}</p>
                 </div>
               )}
               {wppRecentes.length > 0 && (
-                <div className="px-2.5 py-2 rounded-lg" style={{ background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.35)' }}>
-                  <p className="text-[10px] font-bold mb-1" style={{ color: '#15803d' }}>📩 WhatsApp</p>
-                  {wppRecentes.map((m, i) => <p key={i} className="text-[11px] leading-snug" style={{ color: '#166534' }}>• {m.length > 60 ? m.slice(0, 60) + '…' : m}</p>)}
+                <div style={{ padding: '7px 10px', borderRadius: 8, background: 'rgba(37,211,102,0.08)', border: '0.5px solid rgba(37,211,102,0.35)' }}>
+                  <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: '#22c55e', marginBottom: 3 }}>WHATSAPP</p>
+                  {wppRecentes.map((m, i) => <p key={i} style={{ fontSize: 10, color: '#16a34a', lineHeight: 1.4 }}>· {m.length > 60 ? m.slice(0, 60) + '…' : m}</p>)}
                 </div>
               )}
             </div>
           );
         })()}
 
-        {/* ── Divisor ── */}
-        <div style={{ height: 1, background: 'var(--hairline)', margin: '0 12px' }} />
+        {/* divisor gradiente */}
+        <div style={{ height: '0.5px', background: `linear-gradient(90deg, transparent, ${ac}33 30%, ${ac}33 70%, transparent)`, margin: '0 14px' }} />
 
-        {/* ── Itens ── */}
-        <div className="px-3 py-2.5 space-y-1.5">
+        {/* ── ITENS ── */}
+        <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 7 }}>
           {(aberto ? pedido.itens : pedido.itens.slice(0, 3)).map(item => (
-            <div key={item.id} className="flex items-center gap-2">
-              <span className="text-xs font-black w-5 text-center shrink-0" style={{ color: accentColor }}>{item.quantidade}×</span>
-              <span className="text-[13px] font-semibold flex-1 leading-tight" style={{ color: 'var(--txt-strong)' }}>{item.item_nome}</span>
-              <span className="text-[12px] font-medium shrink-0" style={{ color: 'var(--txt-dim)' }}>{brl(item.valor_unitario * item.quantidade)}</span>
+            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontFamily: "'SF Mono', monospace", fontSize: 10, fontWeight: 700, color: ac, width: 18, textAlign: 'center', flexShrink: 0, opacity: 0.9 }}>{item.quantidade}×</span>
+              <span style={{ fontSize: 12, fontWeight: 500, flex: 1, color: 'var(--txt-strong)', lineHeight: 1.3 }}>{item.item_nome}</span>
+              <span style={{ fontFamily: "'SF Mono', monospace", fontSize: 11, color: 'var(--txt-dim)', flexShrink: 0 }}>{brl(item.valor_unitario * item.quantidade)}</span>
             </div>
           ))}
           {!aberto && pedido.itens.length > 3 && (
             <button onClick={e => { e.stopPropagation(); setPedidoAberto(pedido); }}
-              className="text-[11px] font-bold flex items-center gap-0.5 pt-0.5" style={{ color: accentColor }}>
-              +{pedido.itens.length - 3} mais <ChevronDown size={10} strokeWidth={2.5} />
+              style={{ fontSize: 10, fontWeight: 600, color: ac, letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 2, opacity: 0.8, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              +{pedido.itens.length - 3} itens <ChevronDown size={9} strokeWidth={2} />
             </button>
           )}
         </div>
 
-        {/* ── Divisor + Total ── */}
-        <div style={{ borderTop: '1px solid var(--hairline)', margin: '0 12px' }} />
-        <div className="flex items-center justify-between px-3 py-2.5">
-          <span className="text-[11px] font-semibold" style={{ color: 'var(--txt-dim)' }}>Total</span>
-          <span className="text-xl font-black" style={{ color: 'var(--txt-strong)' }}>{brl(pedido.total)}</span>
+        {/* divisor + TOTAL */}
+        <div style={{ height: '0.5px', background: `linear-gradient(90deg, transparent, ${ac}33 30%, ${ac}33 70%, transparent)`, margin: '0 14px' }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--txt-dim)', textTransform: 'uppercase' }}>Total</span>
+          <span style={{ fontFamily: "'SF Mono', monospace", fontSize: 20, fontWeight: 800, color: 'var(--txt-strong)', letterSpacing: '-0.02em', textShadow: `0 0 20px ${ac}22` }}>
+            {brl(pedido.total)}
+          </span>
         </div>
 
         {/* ── PIX ── */}
         {pedido.forma_pagamento === 'pix' && !['cancelado'].includes(pedido.status) && (
-          <div className="px-3 pb-2.5 -mt-1">
+          <div style={{ padding: '0 12px 10px', marginTop: -4 }}>
             {pedido.pix_confirmado_em ? (
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
-                style={{ background: 'rgba(22,163,74,0.12)', border: '1px solid rgba(22,163,74,0.3)' }}>
-                <CheckCircle2 size={12} strokeWidth={2.5} style={{ color: '#16a34a' }} />
-                <span className="text-[11px] font-bold" style={{ color: '#15803d' }}>
-                  PIX confirmado às {utcDate(pedido.pix_confirmado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, background: 'rgba(34,197,94,0.08)', border: '0.5px solid rgba(34,197,94,0.35)' }}>
+                <CheckCircle2 size={11} strokeWidth={2} style={{ color: '#22c55e' }} />
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#16a34a', letterSpacing: '0.02em' }}>
+                  PIX confirmado · {utcDate(pedido.pix_confirmado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
             ) : (
-              <div className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg animate-pulse"
-                style={{ background: 'rgba(245,158,11,0.15)', border: '1.5px solid rgba(245,158,11,0.6)' }}>
-                <span className="text-[11px] font-black flex items-center gap-1.5" style={{ color: '#b45309' }}>
-                  <AlertTriangle size={13} strokeWidth={2.5} /> Aguardando PIX
+              <div className="animate-pulse" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '7px 10px', borderRadius: 8, background: 'rgba(245,158,11,0.1)', border: '0.5px solid rgba(245,158,11,0.6)' }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <AlertTriangle size={11} strokeWidth={2} /> AGUARDANDO PIX
                 </span>
-                <button onClick={() => confirmarPix(pedido)}
-                  className="px-3 py-1 rounded-lg text-[11px] font-black transition-all active:scale-95"
-                  style={{ background: '#16a34a', color: '#fff' }}>
-                  ✓ Confirmado
+                <button onClick={() => confirmarPix(pedido)} style={{ fontSize: 10, fontWeight: 700, padding: '4px 10px', borderRadius: 6, background: 'rgba(34,197,94,0.2)', color: '#22c55e', border: '0.5px solid rgba(34,197,94,0.6)', cursor: 'pointer', letterSpacing: '0.04em' }}>
+                  ✓ Caiu
                 </button>
               </div>
             )}
           </div>
         )}
 
-        {/* ── Troco ── */}
+        {/* ── TROCO ── */}
         {pedido.forma_pagamento === 'dinheiro' && pedido.troco_para > pedido.total && (
-          <div className="px-3 pb-2.5 -mt-1">
-            <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg"
-              style={{ background: 'rgba(22,163,74,0.1)', border: '1px solid rgba(22,163,74,0.3)' }}>
-              <span className="text-[11px] font-bold flex items-center gap-1.5" style={{ color: '#15803d' }}>
-                <Banknote size={12} strokeWidth={2} /> Troco p/ {brl(pedido.troco_para)}
+          <div style={{ padding: '0 12px 10px', marginTop: -4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 8, background: 'rgba(34,197,94,0.08)', border: '0.5px solid rgba(34,197,94,0.3)' }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Banknote size={11} strokeWidth={1.5} /> Troco p/ {brl(pedido.troco_para)}
               </span>
-              <span className="text-[12px] font-black" style={{ color: '#15803d' }}>
+              <span style={{ fontFamily: "'SF Mono', monospace", fontSize: 12, fontWeight: 700, color: '#22c55e' }}>
                 {brl(pedido.troco_para - pedido.total)}
               </span>
             </div>
           </div>
         )}
 
-        {/* ── Ações ── */}
-        <div className="px-3 pb-3 pt-1 flex gap-2">
+        {/* ── AÇÕES ── */}
+        <div style={{ padding: '8px 12px 12px', display: 'flex', gap: 8 }}>
           {av && (
             <button onClick={() => avancar(pedido)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-black text-white text-sm transition-all active:scale-95"
-              style={{ background: accentColor, boxShadow: `0 3px 12px ${accentColor}44` }}>
-              <av.Icon size={15} strokeWidth={2.5} /> {av.label}
+              className="active:scale-95 transition-transform"
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 0', borderRadius: 10, background: ac, color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: '0.04em', border: 'none', cursor: 'pointer', boxShadow: `0 4px 18px ${ac}44, inset 0 1px 0 rgba(255,255,255,0.2)` }}>
+              <av.Icon size={13} strokeWidth={2.5} /> {av.label}
             </button>
           )}
-          <div className="flex gap-1.5">
+          <div style={{ display: 'flex', gap: 6 }}>
             {pedido.cliente_telefone && (
               <button onClick={() => abrirWhatsApp(pedido, pedido.status)}
-                className="w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-90"
-                style={{ background: 'rgba(37,211,102,0.15)', color: '#16a34a', border: '1px solid rgba(37,211,102,0.35)' }}
-                title="WhatsApp"><MessageCircle size={16} strokeWidth={2} /></button>
+                className="active:scale-90 transition-transform"
+                title="WhatsApp"
+                style={{ width: 36, height: 36, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(37,211,102,0.1)', color: '#22c55e', border: '0.5px solid rgba(37,211,102,0.4)', cursor: 'pointer' }}>
+                <MessageCircle size={14} strokeWidth={1.75} />
+              </button>
             )}
             <button onClick={() => reimprimir(pedido)}
-              className="w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-90 relative"
-              style={pedido.impresso
-                ? { background: 'var(--space-elev-2)', color: 'var(--txt-dim)', border: '1px solid var(--hairline)' }
-                : { background: 'rgba(249,115,22,0.15)', color: '#ea580c', border: '1px solid rgba(249,115,22,0.4)' }}
-              title={pedido.impresso ? 'Reimprimir' : 'Imprimir'}>
-              <Printer size={16} strokeWidth={2} />
-              {!pedido.impresso && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-500 border border-white" />}
+              className="active:scale-90 transition-transform"
+              title={pedido.impresso ? 'Reimprimir' : 'Imprimir'}
+              style={{ width: 36, height: 36, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', cursor: 'pointer', ...(pedido.impresso ? { background: 'var(--space-elev-2)', color: 'var(--txt-dim)', border: '0.5px solid var(--hairline)' } : { background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '0.5px solid rgba(249,115,22,0.45)' }) }}>
+              <Printer size={14} strokeWidth={1.75} />
+              {!pedido.impresso && <span style={{ position: 'absolute', top: -2, right: -2, width: 6, height: 6, borderRadius: '50%', background: '#f97316', border: '1.5px solid var(--space-surface)' }} />}
             </button>
             {pedido.status !== 'cancelado' && pedido.status !== 'entregue' && (
               <button onClick={() => cancelar(pedido)}
-                className="w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-90"
-                style={{ background: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)' }}
-                title="Cancelar"><X size={16} strokeWidth={2} /></button>
+                className="active:scale-90 transition-transform"
+                title="Cancelar"
+                style={{ width: 36, height: 36, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '0.5px solid rgba(239,68,68,0.35)', cursor: 'pointer' }}>
+                <X size={14} strokeWidth={1.75} />
+              </button>
             )}
           </div>
         </div>
