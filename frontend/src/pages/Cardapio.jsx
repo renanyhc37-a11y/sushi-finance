@@ -511,7 +511,8 @@ function ItemModal({ item, onClose, carrinho, onConfirm }) {
   }
 
   const brl = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const total = qty * item.preco;
+  const precoEfetivo = item.promo_ativa && item.preco_promo ? item.preco_promo : item.preco;
+  const total = qty * precoEfetivo;
 
   return (
     <div
@@ -543,6 +544,14 @@ function ItemModal({ item, onClose, carrinho, onConfirm }) {
             <div className="relative w-full shrink-0" style={{ height: 220 }}>
               <img src={item.foto} alt={item.nome} className="w-full h-full object-cover" />
               <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(17,17,17,0.9) 0%, transparent 60%)' }} />
+              {item.promo_ativa && item.promo_tag && (
+                <div className="absolute top-3 left-3">
+                  <span className="inline-flex items-center text-[11px] font-black px-3 py-1.5 rounded-full text-white animate-pulse"
+                    style={{ background: '#ef4444', boxShadow: '0 4px 14px rgba(239,68,68,0.55)', letterSpacing: '0.04em' }}>
+                    {item.promo_tag}
+                  </span>
+                </div>
+              )}
               <button onClick={close}
                 className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center text-white font-bold"
                 style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}><X size={17} strokeWidth={2} /></button>
@@ -551,6 +560,14 @@ function ItemModal({ item, onClose, carrinho, onConfirm }) {
             <div className="relative flex items-center justify-center shrink-0" style={{ height: 160, background: '#181818' }}>
               <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 50%, rgba(var(--accent-rgb),0.1), transparent 70%)' }} />
               <span style={{ color: 'rgba(251,146,60,0.85)' }}><UtensilsCrossed size={64} strokeWidth={1.4} /></span>
+              {item.promo_ativa && item.promo_tag && (
+                <div className="absolute top-3 left-3">
+                  <span className="inline-flex items-center text-[11px] font-black px-3 py-1.5 rounded-full text-white animate-pulse"
+                    style={{ background: '#ef4444', boxShadow: '0 4px 14px rgba(239,68,68,0.55)', letterSpacing: '0.04em' }}>
+                    {item.promo_tag}
+                  </span>
+                </div>
+              )}
               <button onClick={close}
                 className="absolute top-3 right-3 w-9 h-9 rounded-full flex items-center justify-center text-white font-bold"
                 style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)' }}><X size={17} strokeWidth={2} /></button>
@@ -562,7 +579,16 @@ function ItemModal({ item, onClose, carrinho, onConfirm }) {
             {/* Nome e preço */}
             <div className="flex items-start justify-between gap-3">
               <h2 className="font-black text-white text-2xl leading-tight flex-1">{item.nome}</h2>
-              <span className="font-black text-2xl shrink-0 mt-0.5" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</span>
+              <div className="shrink-0 mt-0.5 text-right">
+                {item.promo_ativa && item.preco_promo ? (
+                  <>
+                    <span className="block text-sm line-through" style={{ color: '#71717a' }}>{brl(item.preco)}</span>
+                    <span className="font-black text-2xl" style={{ color: '#10b981' }}>{brl(item.preco_promo)}</span>
+                  </>
+                ) : (
+                  <span className="font-black text-2xl" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</span>
+                )}
+              </div>
             </div>
 
             {/* Descrição completa */}
@@ -2097,6 +2123,15 @@ export default function Cardapio() {
                                 {qty}
                               </div>
                             )}
+                            {/* Badge promocional */}
+                            {item.promo_ativa && item.promo_tag && qty === 0 && (
+                              <div className="absolute top-2 left-2">
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md text-white"
+                                  style={{ background: '#ef4444', boxShadow: '0 2px 8px rgba(239,68,68,0.5)' }}>
+                                  {item.promo_tag}
+                                </span>
+                              </div>
+                            )}
                           </div>
 
                           {/* Info below photo */}
@@ -2112,7 +2147,14 @@ export default function Cardapio() {
                               )}
                             </div>
                             <div className="flex items-center justify-between mt-3">
-                              <p className="font-black text-base" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</p>
+                              {item.promo_ativa && item.preco_promo ? (
+                                <div>
+                                  <span className="text-[10px] line-through block" style={{ color: '#52525b' }}>{brl(item.preco)}</span>
+                                  <span className="font-black text-sm" style={{ color: '#10b981' }}>{brl(item.preco_promo)}</span>
+                                </div>
+                              ) : (
+                                <p className="font-black text-base" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</p>
+                              )}
                               {qty === 0 ? (
                                 <button
                                   onClick={e => { e.stopPropagation(); setItemModal(item); }}
@@ -2175,7 +2217,15 @@ export default function Cardapio() {
                           {/* Info */}
                           <div className="flex-1 px-3 py-3.5 flex flex-col justify-between min-w-0">
                             <div>
-                              <p className="font-bold text-white text-sm leading-tight">{item.nome}</p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-bold text-white text-sm leading-tight">{item.nome}</p>
+                                {item.promo_ativa && item.promo_tag && (
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md text-white shrink-0"
+                                    style={{ background: '#ef4444' }}>
+                                    {item.promo_tag}
+                                  </span>
+                                )}
+                              </div>
                               {item.descricao && (
                                 <p className="text-xs text-zinc-600 mt-0.5 leading-snug line-clamp-1">{item.descricao}</p>
                               )}
@@ -2185,7 +2235,14 @@ export default function Cardapio() {
                               )}
                             </div>
                             <div className="flex items-center justify-between mt-2">
-                              <p className="font-black text-base" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</p>
+                              {item.promo_ativa && item.preco_promo ? (
+                                <div>
+                                  <span className="text-[10px] line-through block" style={{ color: '#52525b' }}>{brl(item.preco)}</span>
+                                  <span className="font-black text-base" style={{ color: '#10b981' }}>{brl(item.preco_promo)}</span>
+                                </div>
+                              ) : (
+                                <p className="font-black text-base" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</p>
+                              )}
 
                               {qty === 0 ? (
                                 <button

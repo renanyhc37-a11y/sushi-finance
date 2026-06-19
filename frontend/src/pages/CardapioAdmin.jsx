@@ -196,6 +196,9 @@ function ModalItem({ item, categorias, catIdInicial, onClose, onSalvo }) {
     categoria_id: item?.categoria_id || catIdInicial || categorias[0]?.id || '',
     disponivel: item?.disponivel !== 0,
     is_sugestao: item?.is_sugestao === 1,
+    promo_ativa: item?.promo_ativa === 1,
+    preco_promo: item?.preco_promo ? String(item.preco_promo) : '',
+    promo_tag: item?.promo_tag || '',
   });
   const [foto, setFoto] = useState(item?.foto || null);
   const [fotoFile, setFotoFile] = useState(null);
@@ -220,9 +223,16 @@ function ModalItem({ item, categorias, catIdInicial, onClose, onSalvo }) {
       // 1. Salva dados do item
       const url    = isNovo ? `${BASE}/cardapio/itens` : `${BASE}/cardapio/itens/${item.id}`;
       const method = isNovo ? 'POST' : 'PATCH';
+      const preco_promo = form.preco_promo ? parseFloat(String(form.preco_promo).replace(',', '.')) : null;
+      if (preco_promo !== null && (isNaN(preco_promo) || preco_promo <= 0)) return toast.error('Preço promocional inválido');
       const res = await fetch(url, {
         method, headers: authJ(),
-        body: JSON.stringify({ ...form, preco, disponivel: form.disponivel }),
+        body: JSON.stringify({
+          ...form, preco, disponivel: form.disponivel,
+          preco_promo: preco_promo || null,
+          promo_tag: form.promo_tag || null,
+          promo_ativa: form.promo_ativa ? 1 : 0,
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).erro || 'Erro');
       const salvo = await res.json();
@@ -386,6 +396,84 @@ function ModalItem({ item, categorias, catIdInicial, onClose, onSalvo }) {
               <span className="text-xs" style={{ color: 'var(--txt-dim)' }}>Aparece na seção de sugestões ao finalizar pedido</span>
             </div>
           </button>
+
+          {/* ── PROMOÇÃO ──────────────────────────────────────────── */}
+          <div className="rounded-xl overflow-hidden" style={{ border: `2px solid ${form.promo_ativa ? 'rgba(239,68,68,0.5)' : 'var(--hairline)'}`, background: form.promo_ativa ? 'rgba(239,68,68,0.05)' : 'transparent' }}>
+            {/* Toggle promoção */}
+            <button type="button" onClick={() => setForm(f => ({ ...f, promo_ativa: !f.promo_ativa }))}
+              className="flex items-center gap-3 w-full p-3 transition-all">
+              <div className="w-10 h-6 rounded-full relative shrink-0" style={{ background: form.promo_ativa ? '#ef4444' : '#374151' }}>
+                <div className="w-4 h-4 bg-white rounded-full absolute top-1 transition-all" style={{ left: form.promo_ativa ? '22px' : '4px' }} />
+              </div>
+              <div className="text-left">
+                <span className="text-sm font-bold block" style={{ color: form.promo_ativa ? '#ef4444' : 'var(--txt-dim)' }}>
+                  {form.promo_ativa ? '🔥 Promoção ATIVA' : 'Ativar promoção'}
+                </span>
+                <span className="text-xs" style={{ color: 'var(--txt-dim)' }}>Preço riscado + tag de gatilho no cardápio</span>
+              </div>
+            </button>
+
+            {form.promo_ativa && (
+              <div className="px-3 pb-3 space-y-3">
+                {/* Preço promocional */}
+                <div>
+                  <label className="text-xs font-bold mb-1.5 block" style={{ color: 'var(--txt-dim)' }}>PREÇO PROMOCIONAL (R$)</label>
+                  <input type="number" step="0.01" min="0"
+                    value={form.preco_promo}
+                    onChange={e => setForm(f => ({ ...f, preco_promo: e.target.value }))}
+                    placeholder={`Ex: ${form.preco ? (parseFloat(form.preco)*0.8).toFixed(2) : '27.90'}`}
+                    className="w-full px-4 py-2.5 rounded-xl text-sm t-strong outline-none"
+                    style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(239,68,68,0.3)' }}
+                    onFocus={e => e.target.style.borderColor='#ef4444'} onBlur={e => e.target.style.borderColor='rgba(239,68,68,0.3)'} />
+                  {form.preco && form.preco_promo && parseFloat(form.preco_promo) < parseFloat(form.preco) && (
+                    <p className="text-xs mt-1" style={{ color: '#10b981' }}>
+                      Desconto de {Math.round((1 - parseFloat(form.preco_promo)/parseFloat(form.preco))*100)}% · cliente economiza R$ {(parseFloat(form.preco)-parseFloat(form.preco_promo)).toFixed(2).replace('.',',')}
+                    </p>
+                  )}
+                </div>
+
+                {/* Tag de gatilho */}
+                <div>
+                  <label className="text-xs font-bold mb-2 block" style={{ color: 'var(--txt-dim)' }}>GATILHO / TAG (aparece na foto)</label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {['🔥 PROMOÇÃO','⏰ HOJE APENAS','💥 OFERTA','🎯 IMPERDÍVEL','💸 ECONOMIA','⚡ LIMITADO','🏆 MAIS VENDIDO','✨ DESTAQUE','🆕 NOVIDADE','🎁 ESPECIAL'].map(t => (
+                      <button key={t} type="button"
+                        onClick={() => setForm(f => ({ ...f, promo_tag: f.promo_tag === t ? '' : t }))}
+                        className="text-xs px-2.5 py-1 rounded-full font-bold transition-all"
+                        style={{
+                          background: form.promo_tag === t ? 'rgba(239,68,68,0.2)' : 'var(--space-elev-2)',
+                          border: `1px solid ${form.promo_tag === t ? '#ef4444' : 'transparent'}`,
+                          color: form.promo_tag === t ? '#ef4444' : 'var(--txt-dim)',
+                        }}>{t}</button>
+                    ))}
+                  </div>
+                  <input
+                    value={form.promo_tag}
+                    onChange={e => setForm(f => ({ ...f, promo_tag: e.target.value }))}
+                    placeholder="Ou escreva sua tag personalizada..."
+                    className="w-full px-3 py-2 rounded-xl text-sm t-strong outline-none"
+                    style={{ background: 'var(--space-elev-2)', border: '1px solid rgba(239,68,68,0.3)' }}
+                    onFocus={e => e.target.style.borderColor='#ef4444'} onBlur={e => e.target.style.borderColor='rgba(239,68,68,0.3)'} />
+                </div>
+
+                {/* Preview */}
+                {form.preco && (
+                  <div className="rounded-xl p-3 flex items-center gap-3" style={{ background: 'rgba(0,0,0,0.3)' }}>
+                    <span className="text-xs font-bold" style={{ color: 'var(--txt-dim)' }}>PREVIEW:</span>
+                    <div className="flex items-center gap-2">
+                      {form.promo_tag && (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full" style={{ background: '#ef4444', color: '#fff' }}>{form.promo_tag}</span>
+                      )}
+                      <span className="text-sm line-through" style={{ color: 'var(--txt-dim)' }}>R$ {parseFloat(form.preco).toFixed(2).replace('.',',')}</span>
+                      {form.preco_promo && (
+                        <span className="text-sm font-black" style={{ color: '#10b981' }}>R$ {parseFloat(form.preco_promo).toFixed(2).replace('.',',')}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer */}

@@ -140,6 +140,9 @@ try { db.exec('ALTER TABLE clientes ADD COLUMN aniversario TEXT'); } catch {}
 try { db.exec('ALTER TABLE clientes ADD COLUMN aniversario_enviado_ano INTEGER'); } catch {}
 try { db.exec('ALTER TABLE cardapio_itens ADD COLUMN foto TEXT'); } catch {}
 try { db.exec('ALTER TABLE cardapio_categorias ADD COLUMN descricao TEXT'); } catch {}
+try { db.exec('ALTER TABLE cardapio_itens ADD COLUMN preco_promo REAL'); } catch {}
+try { db.exec('ALTER TABLE cardapio_itens ADD COLUMN promo_tag TEXT'); } catch {}
+try { db.exec('ALTER TABLE cardapio_itens ADD COLUMN promo_ativa INTEGER DEFAULT 0'); } catch {}
 
 // Novas tabelas: cupons e config
 db.exec(`
@@ -327,7 +330,7 @@ router.post('/itens', requireAuth, (req, res) => {
 
 // PATCH /api/cardapio/itens/:id
 router.patch('/itens/:id', requireAuth, (req, res) => {
-  const { nome, descricao, preco, emoji, disponivel, ordem, categoria_id, is_sugestao } = req.body;
+  const { nome, descricao, preco, emoji, disponivel, ordem, categoria_id, is_sugestao, preco_promo, promo_tag, promo_ativa } = req.body;
   const item = db.prepare('SELECT * FROM cardapio_itens WHERE id = ?').get(req.params.id);
   if (!item) return res.status(404).json({ erro: 'Item não encontrado' });
   db.prepare(`UPDATE cardapio_itens SET
@@ -338,12 +341,18 @@ router.patch('/itens/:id', requireAuth, (req, res) => {
     disponivel = COALESCE(?, disponivel),
     ordem      = COALESCE(?, ordem),
     categoria_id = COALESCE(?, categoria_id),
-    is_sugestao  = COALESCE(?, is_sugestao)
+    is_sugestao  = COALESCE(?, is_sugestao),
+    preco_promo  = ?,
+    promo_tag    = ?,
+    promo_ativa  = COALESCE(?, promo_ativa)
     WHERE id = ?
   `).run(nome ?? null, descricao ?? null, preco !== undefined ? Number(preco) : null,
     emoji ?? null, disponivel !== undefined ? (disponivel ? 1 : 0) : null,
     ordem ?? null, categoria_id ?? null,
     is_sugestao !== undefined ? (is_sugestao ? 1 : 0) : null,
+    preco_promo !== undefined ? (preco_promo ? Number(preco_promo) : null) : item.preco_promo,
+    promo_tag !== undefined ? (promo_tag || null) : item.promo_tag,
+    promo_ativa !== undefined ? (promo_ativa ? 1 : 0) : null,
     req.params.id);
   res.json(db.prepare('SELECT * FROM cardapio_itens WHERE id = ?').get(req.params.id));
 });
