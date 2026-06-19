@@ -1876,13 +1876,14 @@ export default function PDV() {
         style={{
           background: 'var(--space-elev)',
           borderLeft: `4px solid ${accentColor}`,
-          border: `1px solid var(--hairline)`,
+          border: `0.5px solid ${accentColor}44`,
           borderLeftWidth: 4,
           borderLeftColor: accentColor,
-          boxShadow: eNovo
-            ? '0 4px 20px rgba(59,130,246,0.18), 0 1px 4px rgba(0,0,0,0.08)'
-            : '0 2px 8px rgba(0,0,0,0.06)',
+          boxShadow: `0 0 0 0.5px ${accentColor}22, ${eNovo ? `0 4px 24px ${accentColor}28` : `0 4px 16px ${accentColor}14`}, 0 2px 6px rgba(0,0,0,0.08)`,
         }}>
+
+        {/* linha de luz no topo */}
+        <div style={{ height: 1, background: `linear-gradient(90deg, transparent 0%, ${accentColor}bb 35%, ${accentColor} 50%, ${accentColor}bb 65%, transparent 100%)` }} />
 
         {/* ── Cabeçalho: número + pagamento + hora ── */}
         <button onClick={() => abrirModal(pedido)} className="w-full text-left active:opacity-70 transition-opacity">
@@ -1971,7 +1972,7 @@ export default function PDV() {
         })()}
 
         {/* ── Divisor ── */}
-        <div style={{ height: 1, background: 'var(--hairline)', margin: '0 12px' }} />
+        <div style={{ height: '0.5px', background: `linear-gradient(90deg, transparent, ${accentColor}44 25%, ${accentColor}44 75%, transparent)`, margin: '0 12px' }} />
 
         {/* ── Itens ── */}
         <div className="px-3 py-2.5 space-y-1.5">
@@ -1991,7 +1992,7 @@ export default function PDV() {
         </div>
 
         {/* ── Divisor + Total ── */}
-        <div style={{ borderTop: '1px solid var(--hairline)', margin: '0 12px' }} />
+        <div style={{ height: '0.5px', background: `linear-gradient(90deg, transparent, ${accentColor}44 25%, ${accentColor}44 75%, transparent)`, margin: '0 12px' }} />
         <div className="flex items-center justify-between px-3 py-2.5">
           <span className="text-[11px] font-semibold" style={{ color: 'var(--txt-dim)' }}>Total</span>
           <span className="text-xl font-black" style={{ color: 'var(--txt-strong)' }}>{brl(pedido.total)}</span>
@@ -2044,31 +2045,31 @@ export default function PDV() {
           {av && (
             <button onClick={() => avancar(pedido)}
               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-black text-white text-sm transition-all active:scale-95"
-              style={{ background: accentColor, boxShadow: `0 3px 12px ${accentColor}44` }}>
+              style={{ background: accentColor, boxShadow: `0 4px 16px ${accentColor}55, inset 0 1px 0 rgba(255,255,255,0.22)` }}>
               <av.Icon size={15} strokeWidth={2.5} /> {av.label}
             </button>
           )}
           <div className="flex gap-1.5">
             {pedido.cliente_telefone && (
               <button onClick={() => abrirWhatsApp(pedido, pedido.status)}
-                className="w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-90"
-                style={{ background: 'rgba(37,211,102,0.15)', color: '#16a34a', border: '1px solid rgba(37,211,102,0.35)' }}
-                title="WhatsApp"><MessageCircle size={16} strokeWidth={2} /></button>
+                className="w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-90"
+                style={{ background: 'rgba(37,211,102,0.12)', color: '#16a34a', border: '0.5px solid rgba(37,211,102,0.45)' }}
+                title="WhatsApp"><MessageCircle size={15} strokeWidth={1.75} /></button>
             )}
             <button onClick={() => reimprimir(pedido)}
-              className="w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-90 relative"
+              className="w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-90 relative"
               style={pedido.impresso
-                ? { background: 'var(--space-elev-2)', color: 'var(--txt-dim)', border: '1px solid var(--hairline)' }
-                : { background: 'rgba(249,115,22,0.15)', color: '#ea580c', border: '1px solid rgba(249,115,22,0.4)' }}
+                ? { background: 'var(--space-elev-2)', color: 'var(--txt-dim)', border: '0.5px solid var(--hairline)' }
+                : { background: 'rgba(249,115,22,0.12)', color: '#ea580c', border: '0.5px solid rgba(249,115,22,0.45)' }}
               title={pedido.impresso ? 'Reimprimir' : 'Imprimir'}>
-              <Printer size={16} strokeWidth={2} />
+              <Printer size={15} strokeWidth={1.75} />
               {!pedido.impresso && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-500 border border-white" />}
             </button>
             {pedido.status !== 'cancelado' && pedido.status !== 'entregue' && (
               <button onClick={() => cancelar(pedido)}
-                className="w-10 h-10 flex items-center justify-center rounded-xl transition-all active:scale-90"
-                style={{ background: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '1px solid rgba(239,68,68,0.3)' }}
-                title="Cancelar"><X size={16} strokeWidth={2} /></button>
+                className="w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-90"
+                style={{ background: 'rgba(239,68,68,0.1)', color: '#dc2626', border: '0.5px solid rgba(239,68,68,0.45)' }}
+                title="Cancelar"><X size={15} strokeWidth={1.75} /></button>
             )}
           </div>
         </div>
