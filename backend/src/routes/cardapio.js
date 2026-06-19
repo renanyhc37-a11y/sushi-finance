@@ -869,6 +869,21 @@ router.put('/horario', requireAuth, (req, res) => {
 // ── CUPONS DE DESCONTO ────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
 
+// GET /api/cardapio/cupom-ativo — público, retorna o cupom ativo mais recente (para auto-exibir no cardápio)
+router.get('/cupom-ativo', (req, res) => {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const cupom = db.prepare(`
+    SELECT id, codigo, descricao, tipo, valor, minimo
+    FROM cupons
+    WHERE ativo = 1
+      AND (validade IS NULL OR validade >= ?)
+      AND (usos_maximos = 0 OR usos_atuais < usos_maximos)
+    ORDER BY created_at DESC LIMIT 1
+  `).get(hoje);
+  if (!cupom) return res.json(null);
+  res.json(cupom);
+});
+
 // GET /api/cardapio/cupom/:codigo — público, valida cupom
 router.get('/cupom/:codigo', (req, res) => {
   const cupom = db.prepare('SELECT * FROM cupons WHERE UPPER(codigo) = UPPER(?) AND ativo = 1').get(req.params.codigo.trim());

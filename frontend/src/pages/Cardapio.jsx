@@ -745,6 +745,7 @@ export default function Cardapio() {
   const [cupomCodigo, setCupomCodigo] = useState('');
   const [cupomAplicado, setCupomAplicado] = useState(null); // { codigo, tipo, valor, descricao }
   const [cupomBuscando, setCupomBuscando] = useState(false);
+  const [cupomAtivo, setCupomAtivo] = useState(null); // cupom ativo para exibição pública
   const [horarioStatus, setHorarioStatus] = useState(null); // { aberta, fecha, mensagem_fechado }
   const [nomeRestaurante, setNomeRestaurante] = useState('Sushi Control');
   const [fechamentoTemp, setFechamentoTemp] = useState(null);
@@ -799,6 +800,10 @@ export default function Cardapio() {
     fetch(`${BASE}/cardapio/horario`)
       .then(r => r.json())
       .then(data => setHorarioStatus(data))
+      .catch(() => {});
+    fetch(`${BASE}/cardapio/cupom-ativo`)
+      .then(r => r.json())
+      .then(data => setCupomAtivo(data || null))
       .catch(() => {});
     fetch(`${BASE}/cardapio/config`)
       .then(r => r.json())
@@ -1812,7 +1817,14 @@ export default function Cardapio() {
                   <span className="flex items-center justify-center gap-2">🔒 Estamos fechados no momento</span>
                 </button>
               ) : (
-                <button onClick={() => setTela('checkout')}
+                <button onClick={() => {
+                    // auto-aplica cupom ativo se o cliente ainda não inseriu um
+                    if (cupomAtivo && !cupomAplicado) {
+                      setCupomCodigo(cupomAtivo.codigo);
+                      setCupomAplicado(cupomAtivo);
+                    }
+                    setTela('checkout');
+                  }}
                   className="w-full py-4 rounded-2xl font-black text-white text-lg active:scale-95 transition-transform"
                   style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 8px 32px rgba(var(--accent-rgb),0.35)' }}>
                   <span className="flex items-center justify-center gap-2">Ir para entrega <ArrowRight size={18} strokeWidth={2} /></span>
@@ -2091,6 +2103,35 @@ export default function Cardapio() {
             )}
           </div>
         </div>
+
+        {/* Banner de cupom ativo */}
+        {cupomAtivo && (
+          <div className="max-w-2xl mx-auto px-4 pt-4">
+            <div className="rounded-2xl px-4 py-3 flex items-center gap-3"
+              style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(5,150,105,0.06) 100%)', border: '1px solid rgba(16,185,129,0.3)' }}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.25)' }}>
+                <Tag size={17} strokeWidth={1.75} className="text-green-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-green-400 font-black tracking-wide">CUPOM ATIVO</p>
+                <p className="text-sm text-white font-bold leading-snug">
+                  Use <span className="text-green-300 font-black">{cupomAtivo.codigo}</span> e ganhe{' '}
+                  {cupomAtivo.tipo === 'percentual'
+                    ? <span className="text-green-300 font-black">{cupomAtivo.valor}% de desconto</span>
+                    : <span className="text-green-300 font-black">R$ {Number(cupomAtivo.valor).toFixed(2).replace('.',',')} de desconto</span>
+                  }
+                  {cupomAtivo.minimo > 0 && <span className="text-zinc-500 text-xs font-normal"> · mín. {brl(cupomAtivo.minimo)}</span>}
+                </p>
+                {cupomAtivo.descricao && <p className="text-xs text-zinc-500 mt-0.5 truncate">{cupomAtivo.descricao}</p>}
+              </div>
+              <div className="shrink-0 text-[10px] font-black text-green-400 px-2 py-1 rounded-lg"
+                style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.25)' }}>
+                AUTO
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Seções do cardápio */}
         <div className="max-w-2xl mx-auto px-4 space-y-12">
