@@ -5,7 +5,7 @@ import {
   Megaphone, Percent, Image as ImageIcon, Wallet, TrendingDown, Receipt,
   TrendingUp, FileBarChart, ClipboardList, Beef, FileText, Fish, Upload, Boxes,
   Smartphone, ConciergeBell, Bot, StickyNote, Sun, Moon, Palette, KeyRound,
-  LogOut, Menu, ChevronDown, Circle, Calculator, ChefHat, Pin, Plus, Check, ArrowDownUp, PieChart,
+  LogOut, Menu, ChevronDown, Circle, Calculator, ChefHat, Pin, Plus, Check, ArrowDownUp, PieChart, Coins,
 } from 'lucide-react';
 import { useTheme } from './hooks/useTheme';
 import { useBoletoAlert } from './hooks/useBoletoAlert';
@@ -54,6 +54,7 @@ const FluxoCaixa       = React.lazy(() => import('./pages/FluxoCaixa'));
 const CmvProdutos      = React.lazy(() => import('./pages/CmvProdutos'));
 const Setup            = React.lazy(() => import('./pages/Setup'));
 const DroneSimulator   = React.lazy(() => import('./pages/Drone'));
+const Cashback         = React.lazy(() => import('./pages/Cashback'));
 import NotasRapidas from './components/NotasRapidas';
 import OfflineIndicator from './components/OfflineIndicator';
 import ServidorMonitor from './components/ServidorMonitor';
@@ -71,6 +72,7 @@ const NAV_GRUPOS = [
     itens: [
       { to: '/chat',           icon: MessageCircle,    label: 'Chat & WhatsApp' },
       { to: '/clientes',         icon: Users,            label: 'Clientes'          },
+      { to: '/cashback',         icon: Coins,            label: 'Cashback'          },
       { to: '/cardapio-admin', icon: UtensilsCrossed,  label: 'Cardápio'        },
       { to: '/producao',       icon: ChefHat,          label: 'Produção'        },
       { to: '/lista-compras',  icon: ShoppingCart,     label: 'Compras'         },
@@ -566,6 +568,7 @@ function Layout({ logout }) {
               <Route path="/insumos" element={<Insumos />} />
               <Route path="/pdv" element={<PDV />} />
               <Route path="/clientes" element={<Clientes />} />
+              <Route path="/cashback" element={<Cashback />} />
               <Route path="/cardapio-admin" element={<CardapioAdmin />} />
               <Route path="/editor-banner/:id" element={<EditorBanner />} />
               <Route path="/promocoes" element={<Promocoes />} />

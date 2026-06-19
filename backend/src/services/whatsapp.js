@@ -810,6 +810,16 @@ function dentroDoHorario(horario) {
   } catch { return true; }
 }
 
+async function notificarCashback(pedido, valorGanho, saldoTotal) {
+  if (!process.env.WHATSAPP_ENABLED || process.env.WHATSAPP_ENABLED === 'false') return;
+  const tel = (pedido.cliente_telefone || '').replace(/\D/g, '');
+  if (!tel || tel.startsWith('TESTE')) return;
+  const conv = db.prepare('SELECT * FROM wa_conversas WHERE telefone=?').get(tel);
+  if (!conv) return;
+  const msg = `✅ *Cashback creditado!*\n\nVocê ganhou *R$ ${Number(valorGanho).toFixed(2)}* de volta no seu pedido! 🎉\n\n💰 Seu saldo atual: *R$ ${Number(saldoTotal).toFixed(2)}*\n\nUse no próximo pedido e economize! 😊`;
+  await enviarEsalvar(conv, msg, false);
+}
+
 module.exports = {
   iniciar,
   enviar,
@@ -819,6 +829,7 @@ module.exports = {
   setIo,
   notificarNovoPedido,
   notificarMudancaStatus,
+  notificarCashback,
   getStatus: () => ({ status, qr: qrBase64 }),
   // Número conectado via QR (o WhatsApp do restaurante). Ex: '5544999998888'
   getNumero: () => { try { return cliente?.info?.wid?.user || null; } catch { return null; } },

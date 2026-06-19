@@ -143,12 +143,21 @@ router.patch('/pedidos/:id/status', (req, res) => {
     deduzirEstoque(pedido.id);
   }
 
-  // Promoções: registra progresso quando pedido é entregue
+  // Promoções + cashback quando pedido é entregue
   if (status === 'entregue' && pedido.status !== 'entregue') {
     try {
       const { registrarPedidoEntregue } = require('./promocoes');
       registrarPedidoEntregue(pedido.cliente_telefone);
     } catch (e) { console.error('[pdv] Erro ao registrar progresso de promoção:', e.message); }
+
+    try {
+      const { creditarCashback } = require('./cashback');
+      const cb = creditarCashback(pedido.cliente_telefone, pedido.cliente_nome, pedido.total, pedido.id);
+      if (cb) {
+        require('../services/whatsapp').notificarCashback(pedido, cb.valor, cb.saldo)
+          .catch(() => {});
+      }
+    } catch (e) { console.error('[pdv] Erro ao creditar cashback:', e.message); }
   }
 
   // Notifica PDVs conectados
@@ -431,7 +440,7 @@ router.get('/metricas-hoje', (req, res) => {
 router.post('/pedido', (req, res) => {
   try {
     const { cliente_nome, cliente_telefone, cliente_endereco, bairro, observacao,
-            forma_pagamento, tipo_entrega, itens, troco_para, frete = 0 } = req.body;
+            forma_pagamento, tipo_entrega, itens, troco_para, frete = 0, desconto = 0 } = req.body;
 
     if (!cliente_nome?.trim()) return res.status(400).json({ erro: 'Nome obrigatório' });
     if (!Array.isArray(itens) || itens.length === 0) return res.status(400).json({ erro: 'Nenhum item' });
@@ -447,7 +456,7 @@ router.post('/pedido', (req, res) => {
     }
 
     const subtotal = itensValidos.reduce((s, i) => s + i.valor_unitario * i.quantidade, 0);
-    const total = subtotal + Number(frete || 0);
+    const total = Math.max(0, subtotal + Number(frete || 0) - Number(desconto || 0));
 
     // Numeração
     const getCfg = k => db.prepare('SELECT valor FROM config WHERE chave=?').get(k)?.valor;

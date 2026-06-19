@@ -503,6 +503,8 @@ function ModalNovoPedido({ onClose, onCriado }) {
   const [frete, setFrete] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [painelAberto, setPainelAberto] = useState(false); // resumo/cliente no mobile
+  const [cashbackSaldo, setCashbackSaldo] = useState(null);
+  const [cashbackDesc, setCashbackDesc] = useState(0);
   const buscaRef = useRef(null);
 
   useEffect(() => {
@@ -541,7 +543,22 @@ function ModalNovoPedido({ onClose, onCriado }) {
   }
 
   const subtotal = carrinho.reduce((s, c) => s + c.item.preco * c.qtd, 0);
-  const totalFinal = subtotal + Number(frete || 0);
+  const totalFinal = Math.max(0, subtotal + Number(frete || 0) - cashbackDesc);
+
+  async function buscarCashback(tel) {
+    const t = (tel || '').replace(/\D/g, '');
+    if (t.length < 8) { setCashbackSaldo(null); setCashbackDesc(0); return; }
+    try {
+      const r = await fetch(`${BASE}/cashback/saldo/${t}`, { headers: authH() });
+      if (r.ok) { const d = await r.json(); setCashbackSaldo(d); }
+    } catch {}
+  }
+
+  function aplicarCashback() {
+    if (!cashbackSaldo || cashbackSaldo.saldo < (cashbackSaldo.config?.minimo_resgate || 10)) return;
+    const max = Math.min(cashbackSaldo.saldo, subtotal + Number(frete || 0));
+    setCashbackDesc(Math.round(max * 100) / 100);
+  }
   const qtdItem = id => carrinho.find(c => c.item.id === id)?.qtd || 0;
   const totalItens = carrinho.reduce((s, c) => s + c.qtd, 0);
 
@@ -562,11 +579,16 @@ function ModalNovoPedido({ onClose, onCriado }) {
           tipo_entrega: tipoEntrega,
           frete: Number(frete || 0),
           troco_para: Number(troco || 0),
+          desconto: cashbackDesc > 0 ? cashbackDesc : 0,
           itens: carrinho.map(c => ({ item_id: c.item.id, quantidade: c.qtd })),
         }),
       });
       const data = await r.json();
       if (!r.ok) { toast.error(data.erro || 'Erro ao criar pedido'); setEnviando(false); return; }
+      // Debita cashback se aplicado
+      if (cashbackDesc > 0 && cliente.telefone) {
+        await fetch(`${BASE}/cashback/usar`, { method: 'POST', headers: authH(), body: JSON.stringify({ telefone: cliente.telefone, valor: cashbackDesc, pedido_id: data.id, descricao: `Desconto no pedido #${data.numero}` }), }).catch(() => {});
+      }
       toast.success(`Pedido #${data.numero} criado!`);
       onCriado?.();
       onClose();
@@ -641,17 +663,41 @@ function ModalNovoPedido({ onClose, onCriado }) {
           <p className="text-[10px] font-black uppercase tracking-wider t-dim">Cliente</p>
           {[
             { k: 'nome',     ph: 'Nome *',    type: 'text' },
-            { k: 'telefone', ph: 'Telefone',  type: 'tel' },
+            { k: 'telefone', ph: 'Telefone',  type: 'tel', onBlur: e => buscarCashback(e.target.value) },
             ...(tipoEntrega === 'entrega' ? [
               { k: 'endereco', ph: 'Endereço', type: 'text' },
               { k: 'bairro',   ph: 'Bairro',   type: 'text' },
             ] : []),
-          ].map(({ k, ph, type }) => (
+          ].map(({ k, ph, type, onBlur }) => (
             <input key={k} type={type} placeholder={ph} value={cliente[k]}
               onChange={e => setCliente(prev => ({ ...prev, [k]: e.target.value }))}
+              onBlur={onBlur}
               className="w-full text-xs rounded-xl px-3 py-2 outline-none"
               style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
           ))}
+
+          {/* Cashback */}
+          {cashbackSaldo && cashbackSaldo.saldo > 0 && (
+            <div style={{ borderRadius: 10, padding: '10px 12px', background: cashbackDesc > 0 ? 'rgba(245,158,11,0.08)' : 'var(--space-elev)', border: `1px solid ${cashbackDesc > 0 ? 'rgba(245,158,11,0.4)' : 'var(--hairline)'}` }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-black uppercase" style={{ color: '#f59e0b' }}>💰 Cashback disponível</span>
+                  <div className="text-xs font-black" style={{ color: '#f59e0b' }}>{brl(cashbackSaldo.saldo)}</div>
+                </div>
+                {cashbackDesc > 0 ? (
+                  <button onClick={() => setCashbackDesc(0)} className="text-xs px-3 py-1 rounded-lg font-bold" style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: 'none', cursor: 'pointer' }}>Remover</button>
+                ) : (
+                  <button onClick={aplicarCashback} className="text-xs px-3 py-1 rounded-lg font-bold" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: 'none', cursor: 'pointer' }}>Aplicar</button>
+                )}
+              </div>
+              {cashbackDesc > 0 && (
+                <div className="text-xs mt-1" style={{ color: '#4ade80' }}>✓ Desconto de {brl(cashbackDesc)} aplicado</div>
+              )}
+              {cashbackDesc === 0 && cashbackSaldo.saldo < (cashbackSaldo.config?.minimo_resgate || 10) && (
+                <div className="text-[10px] mt-1" style={{ color: 'var(--txt-dim)' }}>Mínimo para usar: {brl(cashbackSaldo.config?.minimo_resgate || 10)}</div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Pagamento */}
