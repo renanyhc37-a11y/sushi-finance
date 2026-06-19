@@ -2106,28 +2106,26 @@ export default function Cardapio() {
 
         {/* Banner de cupom ativo */}
         {cupomAtivo && (
-          <div className="max-w-2xl mx-auto px-4 pt-4">
-            <div className="rounded-2xl px-4 py-3 flex items-center gap-3"
-              style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(5,150,105,0.06) 100%)', border: '1px solid rgba(16,185,129,0.3)' }}>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.25)' }}>
-                <Tag size={17} strokeWidth={1.75} className="text-green-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-green-400 font-black tracking-wide">CUPOM ATIVO</p>
-                <p className="text-sm text-white font-bold leading-snug">
-                  Use <span className="text-green-300 font-black">{cupomAtivo.codigo}</span> e ganhe{' '}
-                  {cupomAtivo.tipo === 'percentual'
-                    ? <span className="text-green-300 font-black">{cupomAtivo.valor}% de desconto</span>
-                    : <span className="text-green-300 font-black">R$ {Number(cupomAtivo.valor).toFixed(2).replace('.',',')} de desconto</span>
-                  }
-                  {cupomAtivo.minimo > 0 && <span className="text-zinc-500 text-xs font-normal"> · mín. {brl(cupomAtivo.minimo)}</span>}
-                </p>
-                {cupomAtivo.descricao && <p className="text-xs text-zinc-500 mt-0.5 truncate">{cupomAtivo.descricao}</p>}
-              </div>
-              <div className="shrink-0 text-[10px] font-black text-green-400 px-2 py-1 rounded-lg"
-                style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.25)' }}>
-                AUTO
+          <div className="max-w-2xl mx-auto px-4 pt-3">
+            <div className="rounded-2xl overflow-hidden"
+              style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.10) 0%, rgba(5,150,105,0.04) 100%)', border: '1px solid rgba(16,185,129,0.25)' }}>
+              {/* linha de luz no topo */}
+              <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(16,185,129,0.6) 40%, rgba(16,185,129,0.9) 50%, rgba(16,185,129,0.6) 60%, transparent)' }} />
+              <div className="flex items-center gap-3 px-4 py-3">
+                <Tag size={15} strokeWidth={1.75} style={{ color: '#10b981', flexShrink: 0 }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-white leading-snug">
+                    <span className="text-green-400 font-black">{cupomAtivo.codigo}</span>
+                    {' · '}
+                    {cupomAtivo.tipo === 'percentual'
+                      ? <span className="font-semibold">{cupomAtivo.valor}% de desconto</span>
+                      : <span className="font-semibold">R$ {Number(cupomAtivo.valor).toFixed(2).replace('.',',')} de desconto</span>
+                    }
+                    {cupomAtivo.minimo > 0 && <span className="text-zinc-500"> · mín. {brl(cupomAtivo.minimo)}</span>}
+                  </p>
+                  <p className="text-[10px] text-green-600 font-medium mt-0.5">Aplicado automaticamente no checkout</p>
+                </div>
+                <span className="text-[9px] font-black tracking-widest text-green-500 shrink-0">AUTO</span>
               </div>
             </div>
           </div>
