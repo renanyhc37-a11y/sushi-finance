@@ -1,52 +1,55 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell, PieChart, Pie, Legend,
-  LineChart, Line,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  Cell, PieChart, Pie, LineChart, Line, CartesianGrid,
 } from 'recharts';
 import {
   TrendingUp, TrendingDown, Minus, AlertTriangle, Star,
-  Target, Zap, Package, ChevronUp, ChevronDown,
-  ArrowUpRight, ArrowDownRight, Info, Search, X,
-  BarChart2, Award, Lightbulb, ShoppingBag,
+  Target, Package, ArrowUpRight, ArrowDownRight,
+  Search, X, ChevronDown, ChevronUp, Info,
+  CheckCircle, Zap, ShoppingCart, DollarSign, Percent,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { PageLoading } from '../components/Loading';
-import { brl, pct, mesLabel, mesAtual } from '../lib/fmt';
+import { brl, mesLabel, mesAtual } from '../lib/fmt';
 
-const CORES_ABC = { A: '#10b981', B: '#f59e0b', C: '#94a3b8' };
+// ── helpers ────────────────────────────────────────────────────────────────────
+const pct = v => `${(+(v ?? 0)).toFixed(1)}%`;
+const tend = (a, p) => (!p || p === 0) ? null : ((a - p) / p) * 100;
 
-function mesPrevStr(mes) {
-  const [ano, m] = mes.split('-').map(Number);
-  const d = new Date(ano, m - 2, 1);
-  return d.toISOString().slice(0, 7);
-}
-
-function classificarABC(itens) {
-  const ordenados = [...itens].filter(i => i.receita > 0).sort((a, b) => b.receita - a.receita);
-  const total = ordenados.reduce((s, i) => s + i.receita, 0);
+function abcClassify(itens) {
+  const sorted = [...itens].filter(i => i.receita > 0).sort((a, b) => b.receita - a.receita);
+  const total = sorted.reduce((s, i) => s + i.receita, 0);
   let acum = 0;
-  const mapa = {};
-  for (const item of ordenados) {
-    acum += item.receita;
-    const pctAcum = total > 0 ? (acum / total) * 100 : 100;
-    mapa[item.nome] = pctAcum <= 70 ? 'A' : pctAcum <= 90 ? 'B' : 'C';
+  const map = {};
+  for (const it of sorted) {
+    acum += it.receita;
+    const p = total > 0 ? (acum / total) * 100 : 100;
+    map[it.nome] = p <= 70 ? 'A' : p <= 90 ? 'B' : 'C';
   }
-  return mapa;
+  return map;
 }
 
-function tendencia(atual, prev) {
-  if (!prev || prev === 0) return 0;
-  return ((atual - prev) / prev) * 100;
+function mesAnterior(mes) {
+  const [y, m] = mes.split('-').map(Number);
+  return new Date(y, m - 2, 1).toISOString().slice(0, 7);
 }
 
+// ── cores ──────────────────────────────────────────────────────────────────────
+const C = {
+  green: '#22c55e', amber: '#f59e0b', red: '#ef4444',
+  blue: '#3b82f6', slate: '#94a3b8',
+  abcA: '#22c55e', abcB: '#f59e0b', abcC: '#cbd5e1',
+};
+
+// ── componente principal ───────────────────────────────────────────────────────
 export default function Relatorios() {
   const [mes, setMes] = useState(mesAtual());
   const [aba, setAba] = useState('ranking');
   const [busca, setBusca] = useState('');
-  const [ordenar, setOrdenar] = useState({ col: 'receita', dir: 'desc' });
-  const [itemDetalhe, setItemDetalhe] = useState(null);
+  const [ord, setOrd] = useState({ col: 'receita', dir: 'desc' });
+  const [aberto, setAberto] = useState(null); // item com histórico expandido
 
   const { data: comp, isLoading } = useQuery({
     queryKey: ['itens-comp', mes],
@@ -54,272 +57,402 @@ export default function Relatorios() {
   });
 
   const { data: historico = [] } = useQuery({
-    queryKey: ['item-historico', itemDetalhe],
-    queryFn: () => api.get(`/relatorios/item-historico?nome=${encodeURIComponent(itemDetalhe)}`),
-    enabled: !!itemDetalhe,
+    queryKey: ['item-historico', aberto],
+    queryFn: () => api.get(`/relatorios/item-historico?nome=${encodeURIComponent(aberto)}`),
+    enabled: !!aberto,
   });
 
   const itens = comp?.itens || [];
-  const diasComVendas = comp?.dias_com_vendas || 0;
+  const diasVenda = comp?.dias_com_vendas || 0;
   const totalPedidos = comp?.total_pedidos || 0;
 
-  // Projeção: dias passados no mês vs dias totais
-  const projecao = useMemo(() => {
-    if (!mes) return 1;
-    const [ano, m] = mes.split('-').map(Number);
+  // projeção
+  const fatorProj = useMemo(() => {
+    if (!mes || diasVenda === 0) return 1;
+    const [y, m] = mes.split('-').map(Number);
     const hoje = new Date();
-    const isMesAtual = ano === hoje.getFullYear() && m === (hoje.getMonth() + 1);
-    const diasNoMes = new Date(ano, m, 0).getDate();
-    if (!isMesAtual || diasComVendas === 0) return 1;
-    return diasNoMes / diasComVendas;
-  }, [mes, diasComVendas]);
+    if (y !== hoje.getFullYear() || m !== hoje.getMonth() + 1) return 1;
+    return new Date(y, m, 0).getDate() / diasVenda;
+  }, [mes, diasVenda]);
 
-  const abcMapa = useMemo(() => classificarABC(itens), [itens]);
+  const abcMap = useMemo(() => abcClassify(itens), [itens]);
 
-  // KPIs
   const kpis = useMemo(() => {
     const ativos = itens.filter(i => i.receita > 0);
-    const faturamento = ativos.reduce((s, i) => s + i.receita, 0);
-    const margem = ativos.reduce((s, i) => s + i.margem, 0);
-    const qtdTotal = ativos.reduce((s, i) => s + i.qtd, 0);
-    const margemPct = faturamento > 0 ? (margem / faturamento) * 100 : 0;
-    const semFicha = itens.filter(i => i.sem_ficha && i.receita > 0).length;
-    return { ativos: ativos.length, faturamento, margem, margemPct, qtdTotal, semFicha };
-  }, [itens]);
+    const fat = ativos.reduce((s, i) => s + i.receita, 0);
+    const marg = ativos.reduce((s, i) => s + i.margem, 0);
+    const qtd = ativos.reduce((s, i) => s + i.qtd, 0);
+    const semFicha = ativos.filter(i => i.sem_ficha).length;
+    return { n: ativos.length, fat, marg, margPct: fat > 0 ? (marg / fat) * 100 : 0, qtd, semFicha, totalPedidos };
+  }, [itens, totalPedidos]);
 
-  // Itens filtrados e ordenados
-  const itensFiltrados = useMemo(() => {
-    let lista = itens.filter(i =>
-      !busca || i.nome.toLowerCase().includes(busca.toLowerCase())
-    );
-    lista = [...lista].sort((a, b) => {
-      let va = a[ordenar.col] ?? 0;
-      let vb = b[ordenar.col] ?? 0;
-      if (ordenar.col === 'nome') { va = a.nome; vb = b.nome; }
-      if (ordenar.col === 'abc') { va = abcMapa[a.nome] || 'C'; vb = abcMapa[b.nome] || 'C'; }
-      if (typeof va === 'string') return ordenar.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
-      return ordenar.dir === 'asc' ? va - vb : vb - va;
-    });
-    return lista;
-  }, [itens, busca, ordenar, abcMapa]);
-
-  // ABC agrupado
-  const abcGrupos = useMemo(() => {
-    const grupos = { A: [], B: [], C: [] };
-    for (const item of itens.filter(i => i.receita > 0)) {
-      const cls = abcMapa[item.nome] || 'C';
-      grupos[cls].push(item);
-    }
-    for (const k of Object.keys(grupos)) grupos[k].sort((a, b) => b.receita - a.receita);
-    return grupos;
-  }, [itens, abcMapa]);
-
-  // Sugestões
+  // sugestões
   const sugestoes = useMemo(() => {
-    const lista = [];
     const ativos = itens.filter(i => i.receita > 0);
-    const faturamento = ativos.reduce((s, i) => s + i.receita, 0);
+    const list = [];
 
-    // CMV alto
-    const cmvAlto = ativos.filter(i => !i.sem_ficha && i.cmv_pct > 40).sort((a, b) => b.cmv_pct - a.cmv_pct);
-    if (cmvAlto.length > 0) lista.push({
-      tipo: 'alerta', icon: AlertTriangle, cor: 'text-red-500', bg: 'bg-red-50 border-red-200',
-      titulo: 'CMV Alto (acima de 40%)',
-      desc: `${cmvAlto.length} ${cmvAlto.length === 1 ? 'item consome' : 'itens consomem'} mais de 40% da receita em custo. Revise preços ou fornecedores.`,
-      itens: cmvAlto.slice(0, 5).map(i => ({ nome: i.nome, info: `CMV ${pct(i.cmv_pct)}` })),
-    });
-
-    // Sem ficha técnica
     const semFicha = ativos.filter(i => i.sem_ficha);
-    if (semFicha.length > 0) lista.push({
-      tipo: 'aviso', icon: Info, cor: 'text-amber-500', bg: 'bg-amber-50 border-amber-200',
-      titulo: 'Sem Ficha Técnica',
-      desc: `${semFicha.length} ${semFicha.length === 1 ? 'item vendido não tem' : 'itens vendidos não têm'} ficha técnica cadastrada. O CMV deles é zero e não reflete a realidade.`,
-      itens: semFicha.slice(0, 5).map(i => ({ nome: i.nome, info: brl(i.receita) + ' faturados' })),
+    if (semFicha.length) list.push({
+      id: 'sem-ficha', cor: 'amber', icon: AlertTriangle,
+      titulo: `${semFicha.length} produto${semFicha.length > 1 ? 's' : ''} sem custo cadastrado`,
+      desc: 'Sem a ficha técnica, você não sabe quanto ganha de verdade nesses itens.',
+      acao: 'Cadastre a ficha técnica em Cardápio → Fichas Técnicas.',
+      itens: semFicha.slice(0, 4),
     });
 
-    // Estrelas: classe A com margem > 30%
-    const estrelas = (abcGrupos.A || []).filter(i => i.margem_pct >= 30 && !i.sem_ficha);
-    if (estrelas.length > 0) lista.push({
-      tipo: 'destaque', icon: Star, cor: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-200',
-      titulo: 'Estrelas do Cardápio',
-      desc: `${estrelas.length} ${estrelas.length === 1 ? 'item combina' : 'itens combinam'} alto volume de vendas com boa margem. Priorize no marketing.`,
-      itens: estrelas.slice(0, 5).map(i => ({ nome: i.nome, info: `Margem ${pct(i.margem_pct)}` })),
+    const cmvAlto = ativos.filter(i => !i.sem_ficha && i.cmv_pct > 40).sort((a, b) => b.cmv_pct - a.cmv_pct);
+    if (cmvAlto.length) list.push({
+      id: 'cmv-alto', cor: 'red', icon: TrendingDown,
+      titulo: `${cmvAlto.length} produto${cmvAlto.length > 1 ? 's estão' : ' está'} consumindo mais de 40% em custo`,
+      desc: 'Para cada R$100 vendidos, mais de R$40 vai embora só em custo de ingredientes.',
+      acao: 'Revise o preço de venda ou negocie melhor com fornecedores.',
+      itens: cmvAlto.slice(0, 4),
     });
 
-    // Oportunidades: alto volume, margem baixa
-    const opor = ativos.filter(i => !i.sem_ficha && i.margem_pct < 30 && i.margem_pct >= 0 && i.qtd >= 5);
-    if (opor.length > 0) lista.push({
-      tipo: 'oportunidade', icon: Target, cor: 'text-sky-600', bg: 'bg-sky-50 border-sky-200',
-      titulo: 'Oportunidades de Margem',
-      desc: `${opor.length} ${opor.length === 1 ? 'item tem' : 'itens têm'} bom volume mas margem abaixo de 30%. Um pequeno ajuste de preço pode impactar muito o lucro.`,
-      itens: opor.slice(0, 5).map(i => ({ nome: i.nome, info: `${i.qtd}x | Margem ${pct(i.margem_pct)}` })),
+    const estrelas = ativos.filter(i => !i.sem_ficha && abcMap[i.nome] === 'A' && i.margem_pct >= 35);
+    if (estrelas.length) list.push({
+      id: 'estrelas', cor: 'green', icon: Star,
+      titulo: `${estrelas.length} produto${estrelas.length > 1 ? 's são' : ' é'} campeão de vendas e lucro`,
+      desc: 'Esses itens vendem muito e ainda têm boa margem. São o coração do seu negócio.',
+      acao: 'Destaque esses produtos no cardápio, stories e promoções.',
+      itens: estrelas.slice(0, 4),
     });
 
-    // Em queda: qtd caiu mais de 30%
-    const emQueda = ativos.filter(i => i.prev_qtd > 0 && tendencia(i.qtd, i.prev_qtd) < -30);
-    if (emQueda.length > 0) lista.push({
-      tipo: 'queda', icon: TrendingDown, cor: 'text-orange-500', bg: 'bg-orange-50 border-orange-200',
-      titulo: 'Em Queda Vs. Mês Anterior',
-      desc: `${emQueda.length} ${emQueda.length === 1 ? 'item caiu' : 'itens caíram'} mais de 30% em volume de vendas em relação ao mês passado.`,
-      itens: emQueda.slice(0, 5).map(i => ({ nome: i.nome, info: `${tendencia(i.qtd, i.prev_qtd).toFixed(0)}%` })),
+    const oport = ativos.filter(i => !i.sem_ficha && i.margem_pct < 30 && i.margem_pct >= 0 && i.qtd >= 5);
+    if (oport.length) list.push({
+      id: 'oport', cor: 'blue', icon: Target,
+      titulo: `${oport.length} produto${oport.length > 1 ? 's vendem' : ' vende'} bastante mas a margem é baixa`,
+      desc: 'Esses itens têm bom volume de pedidos, mas deixam pouco dinheiro no caixa.',
+      acao: 'Um aumento de R$2–5 no preço pode mudar muito o resultado final.',
+      itens: oport.slice(0, 4),
     });
 
-    // Em alta: qtd subiu mais de 30%
-    const emAlta = ativos.filter(i => i.prev_qtd > 0 && tendencia(i.qtd, i.prev_qtd) > 30);
-    if (emAlta.length > 0) lista.push({
-      tipo: 'alta', icon: TrendingUp, cor: 'text-teal-600', bg: 'bg-teal-50 border-teal-200',
-      titulo: 'Em Alta Vs. Mês Anterior',
-      desc: `${emAlta.length} ${emAlta.length === 1 ? 'item cresceu' : 'itens cresceram'} mais de 30% vs. mês passado. Garanta estoque!`,
-      itens: emAlta.slice(0, 5).map(i => ({ nome: i.nome, info: `+${tendencia(i.qtd, i.prev_qtd).toFixed(0)}%` })),
+    const sumidos = itens.filter(i => i.qtd === 0 && i.prev_qtd > 0);
+    if (sumidos.length) list.push({
+      id: 'sumidos', cor: 'slate', icon: Package,
+      titulo: `${sumidos.length} produto${sumidos.length > 1 ? 's' : ''} vendido${sumidos.length > 1 ? 's' : ''} no mês passado não teve${sumidos.length > 1 ? 'ram' : ''} venda`,
+      desc: 'Podem estar indisponíveis, escondidos no cardápio ou simplesmente esquecidos.',
+      acao: 'Verifique a disponibilidade e a visibilidade no cardápio online.',
+      itens: sumidos.slice(0, 4),
     });
 
-    // Sumiram: vendidos no mês anterior, zero neste
-    const sumiram = itens.filter(i => i.qtd === 0 && i.prev_qtd > 0);
-    if (sumiram.length > 0) lista.push({
-      tipo: 'alerta', icon: Package, cor: 'text-slate-500', bg: 'bg-slate-50 border-slate-200',
-      titulo: 'Pararam de Ser Vendidos',
-      desc: `${sumiram.length} ${sumiram.length === 1 ? 'item tinha' : 'itens tinham'} vendas no mês anterior e zerou neste mês. Verifique disponibilidade e visibilidade no cardápio.`,
-      itens: sumiram.slice(0, 5).map(i => ({ nome: i.nome, info: `Era ${i.prev_qtd}x no mês anterior` })),
-    });
+    return list;
+  }, [itens, abcMap]);
 
-    return lista;
-  }, [itens, abcGrupos]);
-
-  function toggleOrdem(col) {
-    setOrdenar(o => o.col === col ? { col, dir: o.dir === 'desc' ? 'asc' : 'desc' } : { col, dir: 'desc' });
+  function toggleOrd(col) {
+    setOrd(o => o.col === col ? { col, dir: o.dir === 'desc' ? 'asc' : 'desc' } : { col, dir: 'desc' });
   }
 
-  function SortIcon({ col }) {
-    if (ordenar.col !== col) return <ChevronDown size={12} className="text-slate-300" />;
-    return ordenar.dir === 'desc' ? <ChevronDown size={12} className="text-amber-500" /> : <ChevronUp size={12} className="text-amber-500" />;
-  }
+  const itensFiltrados = useMemo(() => {
+    let l = itens.filter(i => !busca || i.nome.toLowerCase().includes(busca.toLowerCase()));
+    return [...l].sort((a, b) => {
+      const va = a[ord.col] ?? 0, vb = b[ord.col] ?? 0;
+      if (typeof va === 'string') return ord.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+      return ord.dir === 'asc' ? va - vb : vb - va;
+    });
+  }, [itens, busca, ord]);
 
-  const abas = [
-    { id: 'ranking', label: 'Ranking', icon: BarChart2 },
-    { id: 'abc', label: 'Análise ABC', icon: Award },
-    { id: 'projec', label: 'Projeções', icon: TrendingUp },
-    { id: 'sug', label: 'Sugestões', icon: Lightbulb },
+  const abcGrupos = useMemo(() => {
+    const g = { A: [], B: [], C: [] };
+    for (const it of itens.filter(i => i.receita > 0)) {
+      (g[abcMap[it.nome] || 'C'] ??= []).push(it);
+    }
+    for (const k of 'ABC') g[k].sort((a, b) => b.receita - a.receita);
+    return g;
+  }, [itens, abcMap]);
+
+  const ABAS = [
+    { id: 'ranking', label: 'Produtos' },
+    { id: 'abc', label: 'Curva ABC' },
+    { id: 'projec', label: 'Projeção' },
+    { id: 'sug', label: 'Insights', badge: sugestoes.length },
   ];
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-5 pb-8">
 
       {/* Header */}
-      <div className="page-header">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="page-title">Relatório de Itens</h1>
-          <p className="page-subtitle capitalize">{mesLabel(mes)}</p>
+          <h1 className="text-2xl font-bold text-slate-900">Relatório de Produtos</h1>
+          <p className="text-sm text-slate-500 mt-0.5 capitalize">{mesLabel(mes)}</p>
         </div>
-        <input
-          type="month"
-          value={mes}
-          onChange={e => { setMes(e.target.value); setItemDetalhe(null); }}
-          className="input max-w-[160px]"
-        />
+        <input type="month" value={mes} onChange={e => { setMes(e.target.value); setAberto(null); }}
+          className="input max-w-[155px]" />
       </div>
 
-      {isLoading ? <PageLoading /> : (
+      {isLoading ? <div className="py-20"><PageLoading /></div> : (
         <>
           {/* KPIs */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <KpiCard icon={ShoppingBag} label="Itens Ativos" valor={kpis.ativos} sub={`${kpis.qtdTotal} unidades vendidas`} cor="text-sky-600" />
-            <KpiCard icon={BarChart2} label="Faturamento" valor={brl(kpis.faturamento)} sub={`${totalPedidos} pedidos`} cor="text-emerald-600" />
-            <KpiCard icon={TrendingUp} label="Margem Total" valor={brl(kpis.margem)} sub={`${pct(kpis.margemPct)} do faturamento`} cor={kpis.margem >= 0 ? 'text-teal-600' : 'text-red-500'} />
-            <KpiCard icon={AlertTriangle} label="Sem Ficha" valor={kpis.semFicha} sub="itens sem custo cadastrado" cor={kpis.semFicha > 0 ? 'text-amber-500' : 'text-slate-400'} />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <Kpi label="Produtos vendidos" val={kpis.n} sub={`${kpis.qtd} unidades · ${kpis.totalPedidos} pedidos`} icon={ShoppingCart} acor="#3b82f6" />
+            <Kpi label="Faturamento" val={brl(kpis.fat)} sub="receita total do período" icon={DollarSign} acor="#22c55e" />
+            <Kpi label="Margem de lucro" val={pct(kpis.margPct)} sub={brl(kpis.marg) + ' de lucro bruto'} icon={Percent} acor={kpis.margPct >= 30 ? '#22c55e' : kpis.margPct >= 15 ? '#f59e0b' : '#ef4444'} />
+            <Kpi label="Sem custo cadastrado" val={kpis.semFicha} sub="produtos com margem desconhecida" icon={AlertTriangle} acor={kpis.semFicha > 0 ? '#f59e0b' : '#94a3b8'} />
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
-            {abas.map(a => (
-              <button
-                key={a.id}
-                onClick={() => setAba(a.id)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${aba === a.id ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                <a.icon size={14} />
+          <div className="flex gap-0.5 bg-slate-100 p-1 rounded-xl w-fit">
+            {ABAS.map(a => (
+              <button key={a.id} onClick={() => setAba(a.id)}
+                className={`relative px-5 py-2 rounded-lg text-sm font-medium transition-all ${aba === a.id ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-800'}`}>
                 {a.label}
-                {a.id === 'sug' && sugestoes.length > 0 && (
-                  <span className="bg-amber-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center ml-0.5">
-                    {sugestoes.length}
+                {a.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                    {a.badge}
                   </span>
                 )}
               </button>
             ))}
           </div>
 
-          {/* ── Ranking ── */}
+          {/* ───── ABA RANKING ───── */}
           {aba === 'ranking' && (
-            <div className="card">
-              <div className="card-header">
-                <h2 className="font-semibold text-slate-800">Ranking de Itens</h2>
-                <div className="relative">
+            <div className="card overflow-hidden">
+              {/* barra de busca e ordenação */}
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
+                <div className="relative flex-1 max-w-xs">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    value={busca}
-                    onChange={e => setBusca(e.target.value)}
-                    placeholder="Buscar item..."
-                    className="input pl-8 pr-8 py-1.5 text-sm w-52"
-                  />
-                  {busca && <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X size={12} /></button>}
+                  <input value={busca} onChange={e => setBusca(e.target.value)}
+                    placeholder="Buscar produto..." className="input pl-9 pr-8 py-2 text-sm w-full" />
+                  {busca && <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><X size={12} /></button>}
                 </div>
+                <span className="text-xs text-slate-400">{itensFiltrados.length} produtos</span>
               </div>
+
+              {/* tabela */}
               <div className="overflow-x-auto">
-                <table className="table">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr>
-                      <th className="w-8">#</th>
-                      <Th col="nome" label="Item" ord={ordenar} toggle={toggleOrdem}><SortIcon col="nome" /></Th>
-                      <Th col="qtd" label="Qtd" ord={ordenar} toggle={toggleOrdem} right><SortIcon col="qtd" /></Th>
-                      <Th col="receita" label="Receita" ord={ordenar} toggle={toggleOrdem} right><SortIcon col="receita" /></Th>
-                      <Th col="preco_medio" label="Preço Médio" ord={ordenar} toggle={toggleOrdem} right><SortIcon col="preco_medio" /></Th>
-                      <Th col="custo_unit" label="Custo Unit." ord={ordenar} toggle={toggleOrdem} right><SortIcon col="custo_unit" /></Th>
-                      <Th col="margem" label="Margem R$" ord={ordenar} toggle={toggleOrdem} right><SortIcon col="margem" /></Th>
-                      <Th col="margem_pct" label="Margem %" ord={ordenar} toggle={toggleOrdem} right><SortIcon col="margem_pct" /></Th>
-                      <Th col="cmv_pct" label="CMV %" ord={ordenar} toggle={toggleOrdem} right><SortIcon col="cmv_pct" /></Th>
-                      <th className="text-right">Tend.</th>
-                      <Th col="abc" label="ABC" ord={ordenar} toggle={toggleOrdem}><SortIcon col="abc" /></Th>
+                    <tr className="border-b border-slate-100">
+                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide px-5 py-3 w-6">#</th>
+                      <ColH col="nome" label="Produto" ord={ord} toggle={toggleOrd} />
+                      <ColH col="qtd" label="Qtd" ord={ord} toggle={toggleOrd} right />
+                      <ColH col="receita" label="Receita" ord={ord} toggle={toggleOrd} right />
+                      <th className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wide px-4 py-3">Participação</th>
+                      <ColH col="margem_pct" label="Margem" ord={ord} toggle={toggleOrd} right />
+                      <th className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wide px-4 py-3">Vs. mês passado</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-slate-50">
                     {itensFiltrados.map((item, idx) => {
-                      const tend = tendencia(item.receita, item.prev_receita);
-                      const abc = abcMapa[item.nome] || (item.receita === 0 ? '—' : 'C');
+                      const fatTotal = kpis.fat;
+                      const partic = fatTotal > 0 ? (item.receita / fatTotal) * 100 : 0;
+                      const t = tend(item.receita, item.prev_receita);
+                      const abc = abcMap[item.nome];
+                      const isOpen = aberto === item.nome;
+
                       return (
-                        <tr key={item.nome} className={`cursor-pointer ${itemDetalhe === item.nome ? 'bg-amber-50' : ''}`} onClick={() => setItemDetalhe(item.nome === itemDetalhe ? null : item.nome)}>
-                          <td className="text-slate-400 text-xs">{idx + 1}</td>
-                          <td className="font-medium">
-                            <div className="flex items-center gap-2">
-                              {item.nome}
-                              {item.sem_ficha && <span className="text-xs text-amber-500 bg-amber-50 px-1 rounded">sem ficha</span>}
+                        <React.Fragment key={item.nome}>
+                          <tr
+                            onClick={() => setAberto(isOpen ? null : item.nome)}
+                            className={`cursor-pointer hover:bg-slate-50 transition-colors ${isOpen ? 'bg-blue-50/50' : ''}`}
+                          >
+                            <td className="px-5 py-3.5 text-slate-300 text-xs font-mono">{idx + 1}</td>
+                            <td className="px-5 py-3.5">
+                              <div className="flex items-center gap-2">
+                                {abc && (
+                                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                                    style={{ background: C[`abc${abc}`] }}>{abc}</span>
+                                )}
+                                <span className="font-medium text-slate-800">{item.nome}</span>
+                                {item.sem_ficha && (
+                                  <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                                    sem custo
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5 text-right text-slate-600 font-mono">{item.qtd}</td>
+                            <td className="px-4 py-3.5 text-right font-semibold font-mono text-slate-800">{brl(item.receita)}</td>
+                            <td className="px-4 py-3.5">
+                              <div className="flex items-center gap-2 justify-end">
+                                <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full bg-blue-400" style={{ width: `${Math.min(100, partic)}%` }} />
+                                </div>
+                                <span className="text-xs text-slate-500 w-8 text-right">{partic.toFixed(0)}%</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3.5 text-right">
+                              {item.sem_ficha
+                                ? <span className="text-slate-300 text-xs">—</span>
+                                : <MargCell v={item.margem_pct} />
+                              }
+                            </td>
+                            <td className="px-4 py-3.5 text-right">
+                              {item.prev_receita === 0
+                                ? <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">novo</span>
+                                : t === null ? null : <TendCell v={t} />
+                              }
+                            </td>
+                          </tr>
+
+                          {/* painel de histórico */}
+                          {isOpen && (
+                            <tr>
+                              <td colSpan={7} className="bg-slate-50 border-t border-slate-100 px-5 py-4">
+                                <div className="flex items-center justify-between mb-3">
+                                  <p className="text-sm font-semibold text-slate-700">Histórico de vendas — {item.nome}</p>
+                                  <div className="flex gap-4 text-xs text-slate-500">
+                                    <span>Preço médio: <strong>{brl(item.preco_medio)}</strong></span>
+                                    {!item.sem_ficha && <span>Custo unit.: <strong>{brl(item.custo_unit)}</strong></span>}
+                                    {!item.sem_ficha && <span>CMV: <strong>{pct(item.cmv_pct)}</strong></span>}
+                                  </div>
+                                </div>
+                                {historico.length === 0
+                                  ? <p className="text-xs text-slate-400 py-2">Carregando...</p>
+                                  : <MiniHistorico data={historico} />
+                                }
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ───── ABA ABC ───── */}
+          {aba === 'abc' && (
+            <div className="space-y-4">
+              {/* explicação */}
+              <div className="card p-5">
+                <h2 className="font-bold text-slate-800 text-base mb-1">O que é a Curva ABC?</h2>
+                <p className="text-sm text-slate-500">
+                  É uma forma de separar seus produtos por importância no faturamento.
+                  Os produtos <strong className="text-green-600">Classe A</strong> são os mais valiosos — geram 70% da receita, mas costumam ser poucos.
+                  <strong className="text-amber-500"> Classe B</strong> complementam bem.
+                  <strong className="text-slate-500"> Classe C</strong> têm pouca representatividade.
+                </p>
+
+                <div className="grid grid-cols-3 gap-4 mt-5">
+                  {[
+                    { cls: 'A', label: 'Foco total', desc: '70% da receita', cor: C.abcA, light: '#f0fdf4', border: '#bbf7d0' },
+                    { cls: 'B', label: 'Atenção moderada', desc: '20% da receita', cor: C.abcB, light: '#fffbeb', border: '#fde68a' },
+                    { cls: 'C', label: 'Monitorar', desc: '10% da receita', cor: C.abcC, light: '#f8fafc', border: '#e2e8f0' },
+                  ].map(g => {
+                    const grupo = abcGrupos[g.cls] || [];
+                    const fatGrupo = grupo.reduce((s, i) => s + i.receita, 0);
+                    const parcGrupo = kpis.fat > 0 ? (fatGrupo / kpis.fat) * 100 : 0;
+                    return (
+                      <div key={g.cls} className="rounded-2xl p-4 border" style={{ background: g.light, borderColor: g.border }}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ background: g.cor }}>{g.cls}</span>
+                          <div>
+                            <p className="font-semibold text-slate-800 text-sm">{g.label}</p>
+                            <p className="text-xs text-slate-500">{grupo.length} produtos · {parcGrupo.toFixed(0)}% da receita</p>
+                          </div>
+                        </div>
+                        <p className="text-lg font-bold text-slate-900 mb-3">{brl(fatGrupo)}</p>
+                        <div className="space-y-1.5">
+                          {grupo.slice(0, 6).map((it, i) => (
+                            <div key={it.nome} className="flex justify-between text-xs">
+                              <span className="text-slate-600 truncate">{i + 1}. {it.nome}</span>
+                              <span className="font-mono text-slate-500 ml-2 shrink-0">{brl(it.receita)}</span>
                             </div>
-                          </td>
-                          <td className="text-right">{item.qtd}</td>
-                          <td className="text-right font-mono">{brl(item.receita)}</td>
-                          <td className="text-right font-mono text-slate-500">{brl(item.preco_medio)}</td>
-                          <td className="text-right font-mono text-slate-500">{item.sem_ficha ? '—' : brl(item.custo_unit)}</td>
-                          <td className={`text-right font-mono ${item.margem >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{item.sem_ficha ? '—' : brl(item.margem)}</td>
-                          <td className="text-right">
-                            {item.sem_ficha ? '—' : (
-                              <MargBar pct={item.margem_pct} />
-                            )}
-                          </td>
-                          <td className="text-right">
-                            {item.sem_ficha ? <span className="text-amber-400 text-xs">?</span> : (
-                              <span className={item.cmv_pct > 40 ? 'text-red-500 font-semibold' : item.cmv_pct > 30 ? 'text-amber-500' : 'text-slate-600'}>
-                                {pct(item.cmv_pct)}
-                              </span>
-                            )}
-                          </td>
-                          <td className="text-right">
-                            {item.prev_receita === 0 ? <span className="text-xs text-slate-400">novo</span> : (
-                              <TendBadge pct={tend} />
-                            )}
-                          </td>
-                          <td>
-                            {abc !== '—' ? (
-                              <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: CORES_ABC[abc] + '22', color: CORES_ABC[abc] }}>{abc}</span>
-                            ) : <span className="text-xs text-slate-300">—</span>}
+                          ))}
+                          {grupo.length > 6 && <p className="text-xs text-slate-400 mt-1">+{grupo.length - 6} produtos</p>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* gráfico de barras pareto */}
+              <div className="card p-5">
+                <h3 className="font-semibold text-slate-700 mb-1">Receita por produto (do maior para o menor)</h3>
+                <p className="text-xs text-slate-400 mb-4">A linha tracejada mostra o acumulado de receita</p>
+                <AbcChart itens={itens} abcMap={abcMap} fatTotal={kpis.fat} />
+              </div>
+            </div>
+          )}
+
+          {/* ───── ABA PROJEÇÃO ───── */}
+          {aba === 'projec' && (
+            <div className="space-y-4">
+              <div className="card p-6">
+                {fatorProj === 1 ? (
+                  <p className="text-sm text-slate-500">Mês encerrado — exibindo dados realizados.</p>
+                ) : (
+                  <>
+                    <p className="text-slate-500 text-sm mb-2">
+                      Você está no dia {diasVenda} de {(() => { const [y, m] = mes.split('-').map(Number); return new Date(y, m, 0).getDate(); })()} com vendas este mês.
+                      Se o ritmo continuar...
+                    </p>
+                    <p className="text-3xl font-bold text-slate-900 mb-1">
+                      Você vai faturar <span className="text-emerald-600">{brl(kpis.fat * fatorProj)}</span> este mês
+                    </p>
+                    <p className="text-sm text-slate-500 mb-6">
+                      Já faturou <strong>{brl(kpis.fat)}</strong> · Margem projetada: <strong>{pct(kpis.margPct)}</strong> ({brl(kpis.marg * fatorProj)})
+                    </p>
+
+                    {/* barra de progresso do mês */}
+                    <div className="mb-6">
+                      <div className="flex justify-between text-xs text-slate-500 mb-1.5">
+                        <span>Progresso do mês</span>
+                        <span>{((diasVenda / (() => { const [y, m] = mes.split('-').map(Number); return new Date(y, m, 0).getDate(); })()) * 100).toFixed(0)}% dos dias passaram</span>
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500 rounded-full transition-all"
+                          style={{ width: `${(diasVenda / (() => { const [y, m] = mes.split('-').map(Number); return new Date(y, m, 0).getDate(); })()) * 100}%` }} />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* mini cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { l: 'Fat. realizado', v: brl(kpis.fat) },
+                    { l: 'Fat. projetado', v: brl(kpis.fat * fatorProj) },
+                    { l: 'Unidades projetadas', v: Math.round(kpis.qtd * fatorProj) },
+                    { l: 'Média por dia', v: brl(diasVenda > 0 ? kpis.fat / diasVenda : 0) },
+                  ].map(c => (
+                    <div key={c.l} className="bg-slate-50 rounded-xl p-3">
+                      <p className="text-xs text-slate-400 mb-1">{c.l}</p>
+                      <p className="font-bold text-slate-900">{c.v}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* tabela top 10 projetados */}
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-100">
+                  <h3 className="font-semibold text-slate-800">Top 10 produtos — projeção do mês</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Estimativa se o ritmo atual se mantiver até o fim do mês</p>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="text-left text-xs font-semibold text-slate-400 px-5 py-3">#</th>
+                      <th className="text-left text-xs font-semibold text-slate-400 px-4 py-3">Produto</th>
+                      <th className="text-right text-xs font-semibold text-slate-400 px-4 py-3">Realizado</th>
+                      <th className="text-right text-xs font-semibold text-slate-400 px-4 py-3">Projetado</th>
+                      <th className="text-right text-xs font-semibold text-slate-400 px-4 py-3">Qtd proj.</th>
+                      <th className="text-right text-xs font-semibold text-slate-400 px-4 py-3">Vs. mês ant.</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {[...itens].filter(i => i.receita > 0).sort((a, b) => b.receita - a.receita).slice(0, 10).map((it, i) => {
+                      const proj = it.receita * fatorProj;
+                      const t = tend(proj, it.prev_receita);
+                      return (
+                        <tr key={it.nome} className="hover:bg-slate-50">
+                          <td className="px-5 py-3 text-slate-300 text-xs font-mono">{i + 1}</td>
+                          <td className="px-4 py-3 font-medium text-slate-800">{it.nome}</td>
+                          <td className="px-4 py-3 text-right font-mono text-slate-400">{brl(it.receita)}</td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">{brl(proj)}</td>
+                          <td className="px-4 py-3 text-right text-slate-500">{Math.round(it.qtd * fatorProj)}</td>
+                          <td className="px-4 py-3 text-right">
+                            {it.prev_receita === 0
+                              ? <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">novo</span>
+                              : <TendCell v={t} />
+                            }
                           </td>
                         </tr>
                       );
@@ -327,177 +460,20 @@ export default function Relatorios() {
                   </tbody>
                 </table>
               </div>
-
-              {/* Detalhe inline */}
-              {itemDetalhe && (
-                <ItemDetalhe nome={itemDetalhe} historico={historico} onFechar={() => setItemDetalhe(null)} />
-              )}
             </div>
           )}
 
-          {/* ── Análise ABC ── */}
-          {aba === 'abc' && (
-            <div className="space-y-4">
-              <div className="card p-5">
-                <h2 className="font-semibold text-slate-800 mb-1">Curva ABC de Produtos</h2>
-                <p className="text-sm text-slate-500 mb-5">
-                  Classifica os itens pela contribuição no faturamento.
-                  <strong className="text-emerald-600"> A</strong>: primeiros 70% da receita &nbsp;·&nbsp;
-                  <strong className="text-amber-500"> B</strong>: 70–90% &nbsp;·&nbsp;
-                  <strong className="text-slate-500"> C</strong>: últimos 10%
-                </p>
-                <AbcChart itens={itens} abcMapa={abcMapa} />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {(['A', 'B', 'C']).map(cls => (
-                  <div key={cls} className="card p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-sm font-bold" style={{ background: CORES_ABC[cls] }}>{cls}</span>
-                      <div>
-                        <p className="font-semibold text-slate-800 text-sm">Classe {cls}</p>
-                        <p className="text-xs text-slate-400">{abcGrupos[cls]?.length || 0} itens · {brl(abcGrupos[cls]?.reduce((s, i) => s + i.receita, 0) || 0)}</p>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      {(abcGrupos[cls] || []).map((item, i) => (
-                        <div key={item.nome} className="flex items-center justify-between text-xs">
-                          <span className="text-slate-600 truncate max-w-[140px]">{i + 1}. {item.nome}</span>
-                          <span className="font-mono text-slate-500 ml-2 shrink-0">{brl(item.receita)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ── Projeções ── */}
-          {aba === 'projec' && (
-            <div className="space-y-4">
-              <div className="card p-5">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h2 className="font-semibold text-slate-800 mb-1">Projeção do Mês</h2>
-                    <p className="text-sm text-slate-500">
-                      Baseada no ritmo atual ({diasComVendas} dias com vendas) extrapolada para o mês completo.
-                      {projecao === 1 && ' (mês já encerrado — exibindo realizado)'}
-                    </p>
-                  </div>
-                  {projecao > 1 && (
-                    <span className="text-xs bg-sky-100 text-sky-700 px-3 py-1 rounded-full font-medium">
-                      Fator {projecao.toFixed(2)}×
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-                  {[
-                    { label: 'Fat. Projetado', valor: brl(kpis.faturamento * projecao), sub: `Realizado: ${brl(kpis.faturamento)}` },
-                    { label: 'Margem Projetada', valor: brl(kpis.margem * projecao), sub: pct(kpis.margemPct) },
-                    { label: 'Unid. Projetadas', valor: Math.round(kpis.qtdTotal * projecao), sub: `Realizadas: ${kpis.qtdTotal}` },
-                    { label: 'Ticket/Dia Est.', valor: brl(diasComVendas > 0 ? kpis.faturamento / diasComVendas : 0), sub: 'média por dia com vendas' },
-                  ].map(c => (
-                    <div key={c.label} className="bg-slate-50 rounded-xl p-3">
-                      <p className="text-xs text-slate-500 mb-1">{c.label}</p>
-                      <p className="font-bold text-slate-900">{c.valor}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{c.sub}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <h3 className="font-medium text-slate-700 text-sm mb-3">Top 10 — Receita Projetada</h3>
-                <div className="overflow-x-auto">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>Item</th>
-                        <th className="text-right">Realizado</th>
-                        <th className="text-right">Projetado</th>
-                        <th className="text-right">Vs. Mês Ant.</th>
-                        <th className="text-right">Qtd Proj.</th>
-                        <th className="text-right">Margem Proj.</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...itens].filter(i => i.receita > 0).sort((a, b) => b.receita - a.receita).slice(0, 10).map((item, i) => {
-                        const proj = item.receita * projecao;
-                        const tend = tendencia(proj, item.prev_receita);
-                        return (
-                          <tr key={item.nome}>
-                            <td className="text-slate-400 text-xs">{i + 1}</td>
-                            <td className="font-medium">{item.nome}</td>
-                            <td className="text-right font-mono text-slate-500">{brl(item.receita)}</td>
-                            <td className="text-right font-mono font-semibold">{brl(proj)}</td>
-                            <td className="text-right"><TendBadge pct={tend} /></td>
-                            <td className="text-right">{Math.round(item.qtd * projecao)}</td>
-                            <td className={`text-right font-mono ${item.margem >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                              {item.sem_ficha ? '—' : brl(item.margem * projecao)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Gráfico top 10 barras */}
-              <div className="card p-5">
-                <h3 className="font-medium text-slate-700 mb-4">Receita Realizada vs. Projetada — Top 10</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart
-                    data={[...itens].filter(i => i.receita > 0).sort((a, b) => b.receita - a.receita).slice(0, 10).map(i => ({
-                      nome: i.nome.length > 18 ? i.nome.slice(0, 18) + '…' : i.nome,
-                      Realizado: parseFloat(i.receita.toFixed(2)),
-                      Projetado: parseFloat((i.receita * projecao).toFixed(2)),
-                    }))}
-                    margin={{ top: 4, right: 10, bottom: 40, left: 10 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="nome" tick={{ fontSize: 10, fill: '#94a3b8' }} angle={-35} textAnchor="end" interval={0} />
-                    <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={v => `R$${(v / 1000).toFixed(1)}k`} />
-                    <Tooltip formatter={v => brl(v)} />
-                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar dataKey="Realizado" fill="#94a3b8" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="Projetado" fill="#e11d48" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          {/* ── Sugestões ── */}
+          {/* ───── ABA SUGESTÕES ───── */}
           {aba === 'sug' && (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {sugestoes.length === 0 ? (
-                <div className="card p-12 text-center text-slate-400">
-                  <Zap size={32} className="mx-auto mb-2 opacity-30" />
-                  <p>Nenhuma sugestão encontrada para este mês.</p>
+                <div className="card p-12 text-center">
+                  <CheckCircle size={36} className="text-emerald-400 mx-auto mb-3" />
+                  <p className="font-semibold text-slate-700">Tudo parece ok por aqui!</p>
+                  <p className="text-sm text-slate-400 mt-1">Nenhum alerta encontrado para este mês.</p>
                 </div>
-              ) : sugestoes.map((s, i) => (
-                <div key={i} className={`card border ${s.bg} p-5`}>
-                  <div className="flex items-start gap-3">
-                    <s.icon size={20} className={`${s.cor} mt-0.5 shrink-0`} />
-                    <div className="flex-1 min-w-0">
-                      <h3 className={`font-semibold ${s.cor} mb-1`}>{s.titulo}</h3>
-                      <p className="text-sm text-slate-600 mb-3">{s.desc}</p>
-                      {s.itens.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {s.itens.map(it => (
-                            <div key={it.nome} className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs">
-                              <span className="font-medium text-slate-700">{it.nome}</span>
-                              <span className="text-slate-400">·</span>
-                              <span className="text-slate-500">{it.info}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+              ) : sugestoes.map(s => (
+                <SugestaoCard key={s.id} s={s} />
               ))}
             </div>
           )}
@@ -507,109 +483,151 @@ export default function Relatorios() {
   );
 }
 
-// ── Sub-componentes ────────────────────────────────────────────────────────────
+// ── sub-componentes ────────────────────────────────────────────────────────────
 
-function KpiCard({ icon: Icon, label, valor, sub, cor }) {
+function Kpi({ label, val, sub, icon: Icon, acor }) {
   return (
     <div className="card p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <Icon size={16} className={cor} />
-        <span className="text-xs text-slate-500 font-medium">{label}</span>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{label}</span>
+        <Icon size={15} style={{ color: acor }} />
       </div>
-      <p className={`text-2xl font-bold ${cor}`}>{valor}</p>
-      <p className="text-xs text-slate-400 mt-1">{sub}</p>
+      <p className="text-2xl font-bold" style={{ color: acor }}>{val}</p>
+      <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">{sub}</p>
     </div>
   );
 }
 
-function Th({ col, label, ord, toggle, right, children }) {
+function ColH({ col, label, ord, toggle, right }) {
+  const ativo = ord.col === col;
   return (
-    <th
-      className={`cursor-pointer select-none hover:text-slate-700 ${right ? 'text-right' : ''}`}
-      onClick={() => toggle(col)}
-    >
-      <span className="inline-flex items-center gap-1">{label}{children}</span>
+    <th className={`text-xs font-semibold text-slate-400 uppercase tracking-wide px-4 py-3 cursor-pointer select-none hover:text-slate-600 ${right ? 'text-right' : 'text-left'}`}
+      onClick={() => toggle(col)}>
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {ativo
+          ? ord.dir === 'desc' ? <ChevronDown size={11} className="text-amber-500" /> : <ChevronUp size={11} className="text-amber-500" />
+          : <ChevronDown size={11} className="text-slate-200" />
+        }
+      </span>
     </th>
   );
 }
 
-function MargBar({ pct: p }) {
-  const clamped = Math.max(-100, Math.min(100, p));
-  const cor = p >= 40 ? '#10b981' : p >= 20 ? '#f59e0b' : p >= 0 ? '#ef4444' : '#dc2626';
+function MargCell({ v }) {
+  const cor = v >= 40 ? C.green : v >= 20 ? C.amber : C.red;
   return (
-    <div className="flex items-center gap-1.5 justify-end">
-      <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${Math.max(0, clamped)}%`, background: cor }} />
+    <div className="flex items-center gap-2 justify-end">
+      <div className="w-14 h-1 bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, v))}%`, background: cor }} />
       </div>
-      <span className="text-xs font-mono" style={{ color: cor }}>{pct(p)}</span>
+      <span className="text-xs font-semibold font-mono" style={{ color: cor }}>{pct(v)}</span>
     </div>
   );
 }
 
-function TendBadge({ pct: p }) {
-  if (Math.abs(p) < 5) return <span className="text-xs text-slate-400 flex items-center gap-0.5 justify-end"><Minus size={10} /> estável</span>;
-  if (p > 0) return <span className="text-xs text-emerald-600 flex items-center gap-0.5 justify-end"><ArrowUpRight size={11} />+{p.toFixed(0)}%</span>;
-  return <span className="text-xs text-red-500 flex items-center gap-0.5 justify-end"><ArrowDownRight size={11} />{p.toFixed(0)}%</span>;
+function TendCell({ v }) {
+  if (v === null || Math.abs(v) < 5) {
+    return <span className="inline-flex items-center gap-0.5 text-xs text-slate-400"><Minus size={10} /> estável</span>;
+  }
+  if (v > 0) {
+    return <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-600"><ArrowUpRight size={12} />+{v.toFixed(0)}%</span>;
+  }
+  return <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-red-500"><ArrowDownRight size={12} />{v.toFixed(0)}%</span>;
 }
 
-function AbcChart({ itens, abcMapa }) {
-  const ordenados = [...itens].filter(i => i.receita > 0).sort((a, b) => b.receita - a.receita);
-  const total = ordenados.reduce((s, i) => s + i.receita, 0);
+function MiniHistorico({ data }) {
+  return (
+    <div className="flex gap-6">
+      <ResponsiveContainer width="100%" height={120}>
+        <LineChart data={data.map(h => ({ mes: h.mes.slice(5) + '/' + h.mes.slice(2, 4), Qtd: h.qtd, Receita: +h.receita.toFixed(2) }))}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+          <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+          <YAxis yAxisId="l" tick={{ fontSize: 10, fill: '#94a3b8' }} width={28} />
+          <YAxis yAxisId="r" orientation="right" tick={{ fontSize: 10, fill: '#94a3b8' }} width={55} tickFormatter={v => brl(v)} />
+          <Tooltip formatter={(v, n) => n === 'Receita' ? brl(v) : v} />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Bar yAxisId="l" dataKey="Qtd" fill="#cbd5e1" radius={[2, 2, 0, 0]} />
+          <Line yAxisId="r" type="monotone" dataKey="Receita" stroke="#e11d48" strokeWidth={2} dot={{ r: 3 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+const COR_SUG = {
+  red: { bg: '#fff5f5', border: '#fecaca', icon: '#ef4444', badge: 'bg-red-100 text-red-600' },
+  amber: { bg: '#fffbeb', border: '#fde68a', icon: '#f59e0b', badge: 'bg-amber-100 text-amber-600' },
+  green: { bg: '#f0fdf4', border: '#bbf7d0', icon: '#16a34a', badge: 'bg-green-100 text-green-700' },
+  blue: { bg: '#eff6ff', border: '#bfdbfe', icon: '#2563eb', badge: 'bg-blue-100 text-blue-600' },
+  slate: { bg: '#f8fafc', border: '#e2e8f0', icon: '#64748b', badge: 'bg-slate-100 text-slate-600' },
+};
+
+function SugestaoCard({ s }) {
+  const [exp, setExp] = useState(true);
+  const c = COR_SUG[s.cor] || COR_SUG.slate;
+  return (
+    <div className="rounded-2xl border overflow-hidden" style={{ background: c.bg, borderColor: c.border }}>
+      <button className="w-full flex items-start gap-3 p-5 text-left" onClick={() => setExp(e => !e)}>
+        <s.icon size={20} style={{ color: c.icon, marginTop: 2, flexShrink: 0 }} />
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-slate-800">{s.titulo}</p>
+          <p className="text-sm text-slate-500 mt-0.5">{s.desc}</p>
+        </div>
+        {exp ? <ChevronUp size={16} className="text-slate-400 mt-1 shrink-0" /> : <ChevronDown size={16} className="text-slate-400 mt-1 shrink-0" />}
+      </button>
+
+      {exp && (
+        <div className="px-5 pb-5 -mt-1">
+          {/* produtos afetados */}
+          {s.itens.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {s.itens.map(it => (
+                <span key={it.nome} className={`text-xs font-medium px-2.5 py-1 rounded-full ${c.badge}`}>{it.nome}</span>
+              ))}
+            </div>
+          )}
+          {/* ação recomendada */}
+          <div className="flex items-start gap-2 bg-white/70 rounded-xl px-4 py-3">
+            <Zap size={13} style={{ color: c.icon, marginTop: 1, flexShrink: 0 }} />
+            <p className="text-xs text-slate-600"><strong>O que fazer:</strong> {s.acao}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AbcChart({ itens, abcMap, fatTotal }) {
+  const dados = [...itens]
+    .filter(i => i.receita > 0)
+    .sort((a, b) => b.receita - a.receita)
+    .map(it => ({
+      nome: it.nome.length > 16 ? it.nome.slice(0, 16) + '…' : it.nome,
+      receita: parseFloat(it.receita.toFixed(2)),
+      abc: abcMap[it.nome] || 'C',
+    }));
+
+  // linha de acumulado
   let acum = 0;
-  const dados = ordenados.map((item, i) => {
-    acum += item.receita;
-    return {
-      nome: item.nome.length > 15 ? item.nome.slice(0, 15) + '…' : item.nome,
-      receita: item.receita,
-      acumulado: total > 0 ? parseFloat(((acum / total) * 100).toFixed(1)) : 0,
-      abc: abcMapa[item.nome] || 'C',
-    };
+  const comAcum = dados.map(d => {
+    acum += d.receita;
+    return { ...d, acumulado: fatTotal > 0 ? parseFloat(((acum / fatTotal) * 100).toFixed(1)) : 0 };
   });
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={dados} margin={{ top: 4, right: 40, bottom: 50, left: 10 }}>
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={comAcum} margin={{ top: 4, right: 45, bottom: 55, left: 10 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
         <XAxis dataKey="nome" tick={{ fontSize: 9, fill: '#94a3b8' }} angle={-40} textAnchor="end" interval={0} />
-        <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={v => brl(v)} />
-        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={v => `${v}%`} domain={[0, 100]} />
-        <Tooltip formatter={(v, name) => name === 'Acumulado' ? `${v}%` : brl(v)} />
-        <Bar yAxisId="left" dataKey="receita" name="Receita" radius={[3, 3, 0, 0]}>
-          {dados.map((d, i) => <Cell key={i} fill={CORES_ABC[d.abc]} />)}
+        <YAxis yAxisId="l" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={v => brl(v)} width={60} />
+        <YAxis yAxisId="r" orientation="right" domain={[0, 100]} tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={v => `${v}%`} width={35} />
+        <Tooltip formatter={(v, n) => n === 'Acumulado' ? `${v}%` : brl(v)} />
+        <Bar yAxisId="l" dataKey="receita" name="Receita" radius={[3, 3, 0, 0]}>
+          {comAcum.map((d, i) => <Cell key={i} fill={C[`abc${d.abc}`]} />)}
         </Bar>
-        <Line yAxisId="right" type="monotone" dataKey="acumulado" name="Acumulado" stroke="#6366f1" strokeWidth={2} dot={false} />
+        <Line yAxisId="r" type="monotone" dataKey="acumulado" name="Acumulado" stroke="#6366f1" strokeWidth={2} dot={false} strokeDasharray="4 2" />
       </BarChart>
     </ResponsiveContainer>
-  );
-}
-
-function ItemDetalhe({ nome, historico, onFechar }) {
-  return (
-    <div className="border-t border-slate-100 p-5 bg-slate-50">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-slate-800">{nome} — Histórico</h3>
-        <button onClick={onFechar} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
-      </div>
-      {historico.length === 0 ? (
-        <p className="text-sm text-slate-400">Carregando histórico...</p>
-      ) : (
-        <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={historico.map(h => ({
-            mes: h.mes.slice(5) + '/' + h.mes.slice(2, 4),
-            Qtd: h.qtd,
-            Receita: parseFloat(h.receita.toFixed(2)),
-          }))}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-            <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-            <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={v => brl(v)} />
-            <Tooltip formatter={(v, name) => name === 'Receita' ? brl(v) : v} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar yAxisId="left" dataKey="Qtd" fill="#94a3b8" radius={[2, 2, 0, 0]} />
-            <Line yAxisId="right" type="monotone" dataKey="Receita" stroke="#e11d48" strokeWidth={2} dot={{ r: 3 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      )}
-    </div>
   );
 }
