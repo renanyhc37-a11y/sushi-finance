@@ -240,11 +240,18 @@ if (jaTemCategoria.n === 0) {
 
 // ── GET /api/cardapio ────────────────────────────────────────
 router.get('/', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store');
   const categorias = db.prepare('SELECT * FROM cardapio_categorias WHERE ativo = 1 ORDER BY ordem').all();
   res.json(categorias.map(cat => ({
     ...cat,
-    itens: db.prepare('SELECT * FROM cardapio_itens WHERE categoria_id = ? AND disponivel = 1 ORDER BY ordem').all(cat.id),
+    itens: db.prepare('SELECT id, categoria_id, nome, descricao, preco, emoji, disponivel, ordem, foto, is_sugestao, preco_promo, promo_tag, promo_ativa FROM cardapio_itens WHERE categoria_id = ? AND disponivel = 1 ORDER BY ordem').all(cat.id),
   })));
+});
+
+// ── GET /api/cardapio/debug-promo — diagnóstico (remover depois) ─
+router.get('/debug-promo', requireAuth, (req, res) => {
+  const itens = db.prepare('SELECT id, nome, preco, preco_promo, promo_tag, promo_ativa FROM cardapio_itens ORDER BY id').all();
+  res.json(itens);
 });
 
 // ══════════════════════════════════════════════════════════════

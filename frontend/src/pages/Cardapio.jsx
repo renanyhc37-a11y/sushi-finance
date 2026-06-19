@@ -544,7 +544,7 @@ function ItemModal({ item, onClose, carrinho, onConfirm }) {
             <div className="relative w-full shrink-0" style={{ height: 220 }}>
               <img src={item.foto} alt={item.nome} className="w-full h-full object-cover" />
               <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(17,17,17,0.9) 0%, transparent 60%)' }} />
-              {item.promo_ativa && item.promo_tag && (
+              {item.promo_ativa === 1 && item.promo_tag && (
                 <div className="absolute top-3 left-3">
                   <span className="inline-flex items-center text-[11px] font-black px-3 py-1.5 rounded-full text-white animate-pulse"
                     style={{ background: '#ef4444', boxShadow: '0 4px 14px rgba(239,68,68,0.55)', letterSpacing: '0.04em' }}>
@@ -560,7 +560,7 @@ function ItemModal({ item, onClose, carrinho, onConfirm }) {
             <div className="relative flex items-center justify-center shrink-0" style={{ height: 160, background: '#181818' }}>
               <div className="absolute inset-0" style={{ background: 'radial-gradient(circle at 50% 50%, rgba(var(--accent-rgb),0.1), transparent 70%)' }} />
               <span style={{ color: 'rgba(251,146,60,0.85)' }}><UtensilsCrossed size={64} strokeWidth={1.4} /></span>
-              {item.promo_ativa && item.promo_tag && (
+              {item.promo_ativa === 1 && item.promo_tag && (
                 <div className="absolute top-3 left-3">
                   <span className="inline-flex items-center text-[11px] font-black px-3 py-1.5 rounded-full text-white animate-pulse"
                     style={{ background: '#ef4444', boxShadow: '0 4px 14px rgba(239,68,68,0.55)', letterSpacing: '0.04em' }}>
@@ -580,7 +580,7 @@ function ItemModal({ item, onClose, carrinho, onConfirm }) {
             <div className="flex items-start justify-between gap-3">
               <h2 className="font-black text-white text-2xl leading-tight flex-1">{item.nome}</h2>
               <div className="shrink-0 mt-0.5 text-right">
-                {item.promo_ativa && item.preco_promo ? (
+                {item.promo_ativa === 1 && item.preco_promo ? (
                   <>
                     <span className="block text-sm line-through" style={{ color: '#71717a' }}>{brl(item.preco)}</span>
                     <span className="font-black text-2xl" style={{ color: '#10b981' }}>{brl(item.preco_promo)}</span>
@@ -791,9 +791,9 @@ export default function Cardapio() {
         .then(data => { setCategorias(data); if (data.length) setCatAtiva(id => id || data[0].id); })
         .catch(() => {});
     carregarCardapio();
-    const t = setInterval(carregarCardapio, 120_000); // atualiza a cada 2 min
+    const t = setInterval(carregarCardapio, 30_000); // atualiza a cada 30s
     // Atualiza ao voltar para a aba (operador salva no admin e muda de aba)
-    const onFocus = () => carregarCardapio();
+    const onFocus = () => { if (document.visibilityState === 'visible') carregarCardapio(); };
     document.addEventListener('visibilitychange', onFocus);
 
     fetch(`${BASE}/cardapio/horario`)
@@ -2127,7 +2127,7 @@ export default function Cardapio() {
                               </div>
                             )}
                             {/* Badge promocional */}
-                            {item.promo_ativa && item.promo_tag && qty === 0 && (
+                            {item.promo_ativa === 1 && item.promo_tag && (
                               <div className="absolute top-2 left-2">
                                 <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md text-white"
                                   style={{ background: '#ef4444', boxShadow: '0 2px 8px rgba(239,68,68,0.5)' }}>
@@ -2150,7 +2150,7 @@ export default function Cardapio() {
                               )}
                             </div>
                             <div className="flex items-center justify-between mt-3">
-                              {item.promo_ativa && item.preco_promo ? (
+                              {item.promo_ativa === 1 && item.preco_promo ? (
                                 <div>
                                   <span className="text-[10px] line-through block" style={{ color: '#52525b' }}>{brl(item.preco)}</span>
                                   <span className="font-black text-sm" style={{ color: '#10b981' }}>{brl(item.preco_promo)}</span>
@@ -2238,7 +2238,7 @@ export default function Cardapio() {
                               )}
                             </div>
                             <div className="flex items-center justify-between mt-2">
-                              {item.promo_ativa && item.preco_promo ? (
+                              {item.promo_ativa === 1 && item.preco_promo ? (
                                 <div>
                                   <span className="text-[10px] line-through block" style={{ color: '#52525b' }}>{brl(item.preco)}</span>
                                   <span className="font-black text-base" style={{ color: '#10b981' }}>{brl(item.preco_promo)}</span>
