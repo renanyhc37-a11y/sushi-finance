@@ -211,6 +211,7 @@
   --txt-strong:     #e8edf6;
   --txt:            #aab4c5;
   --txt-dim:        #5b6678;
+  --card-items-bg:  rgba(0,0,0,0.28);
   --txt-faint:      #3a4252;
   --accent:         #f97316;
   --accent-2:       #f59e0b;
@@ -228,18 +229,21 @@
 
 /* ── Tema claro: aplica quando NÃO há .dark no <html> ──────────── */
 html:not(.dark) {
-  --space-base:     #eef1f6;
+  --space-base:     #e8ecf2;
   --space-surface:  #ffffff;
-  --space-elev:     #f5f7fa;
-  --space-elev-2:   #eceff4;
-  --hairline:       rgba(15,23,42,0.09);
-  --hairline-soft:  rgba(15,23,42,0.05);
-  --hairline-strong:rgba(15,23,42,0.14);
-  --txt-strong:     #1e293b;
-  --txt:            #475569;
-  --txt-dim:        #8a97aa;
-  --txt-faint:      #b6c0cf;
-  --surface-glass:  rgba(255,255,255,0.82);
+  --space-elev:     #f4f6f9;
+  --space-elev-2:   #e8ecf2;
+  --hairline:       rgba(15,23,42,0.11);
+  --hairline-soft:  rgba(15,23,42,0.07);
+  --hairline-strong:rgba(15,23,42,0.18);
+  --txt-strong:     #0f172a;
+  --txt:            #334155;
+  --txt-dim:        #64748b;
+  --txt-faint:      #94a3b8;
+  --surface-glass:  rgba(255,255,255,0.88);
+  /* variáveis adaptadas para light mode nos cards PDV */
+  --card-items-bg:  rgba(15,23,42,0.05);
+  --card-accent-mult: 1;
 }
 
 /* ═══════════════════════════════════════════════════════════════

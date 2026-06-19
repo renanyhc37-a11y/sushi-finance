@@ -1887,7 +1887,7 @@ export default function PDV() {
           className="w-full text-left active:opacity-60 transition-opacity">
           {/* Faixa de destaque com número + pagamento + tempo */}
           <div className="flex items-center gap-2 px-3 py-2"
-            style={{ background: `${cfg.cor}18`, borderBottom: `1px solid ${cfg.cor}33` }}>
+            style={{ background: `${cfg.cor}28`, borderBottom: `1px solid ${cfg.cor}55` }}>
             <span className="text-xl font-black leading-none" style={{ color: cfg.cor }}>#{pedido.numero}</span>
             {eNovo && (
               <span className="text-[10px] font-black px-2 py-0.5 rounded-md animate-pulse"
@@ -1901,12 +1901,12 @@ export default function PDV() {
             )}
             <div className="ml-auto flex items-center gap-2">
               {pedido.forma_pagamento && (
-                <span className="text-xs font-bold flex items-center gap-1" style={{ color: `${cfg.cor}cc` }}>
+                <span className="text-xs font-bold flex items-center gap-1" style={{ color: cfg.cor }}>
                   {PgtoIcon && <PgtoIcon size={12} strokeWidth={1.75} />} {pgtoLabel}
                 </span>
               )}
               <span className="text-xs font-black flex items-center gap-1"
-                style={{ color: atraso && atraso.nivel !== 'ok' ? atraso.cor : `${cfg.cor}99` }}>
+                style={{ color: atraso && atraso.nivel !== 'ok' ? atraso.cor : `${cfg.cor}dd` }}>
                 {atraso && atraso.nivel !== 'ok' && <AlertTriangle size={11} strokeWidth={2.5} />}
                 {utcDate(pedido.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
               </span>
@@ -1918,19 +1918,19 @@ export default function PDV() {
               <p className="font-black text-base leading-tight" style={{ color: 'var(--txt-strong)' }}>{pedido.cliente_nome}</p>
               <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'var(--txt-dim)' }}>
                 {pedido.tipo_entrega === 'retirada'
-                  ? <><ShoppingBag size={11} strokeWidth={1.75} className="shrink-0" /><span className="font-semibold" style={{ color: '#60a5fa' }}>RETIRADA</span></>
+                  ? <><ShoppingBag size={11} strokeWidth={1.75} className="shrink-0" /><span className="font-semibold" style={{ color: cfg.cor }}>RETIRADA</span></>
                   : <><MapPin size={11} strokeWidth={1.75} className="shrink-0" /><span className="truncate max-w-[150px]">{pedido.cliente_endereco}</span></>
                 }
               </p>
             </div>
             <div className="flex flex-col items-end gap-1 shrink-0">
               {pedido.cliente_total_pedidos > 1 && (
-                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-0.5" style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24' }}>
+                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-0.5" style={{ background: 'rgba(245,158,11,0.25)', color: '#d97706', border: '1px solid rgba(245,158,11,0.4)' }}>
                   <Star size={9} strokeWidth={2} /> {pedido.cliente_total_pedidos}º pedido
                 </span>
               )}
               {pedido.cliente_total_pedidos === 1 && (
-                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80' }}>1º PEDIDO</span>
+                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(34,197,94,0.25)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.4)' }}>1º PEDIDO</span>
               )}
             </div>
           </div>
@@ -1948,23 +1948,23 @@ export default function PDV() {
             return (<>
               {obsTrunc && (
                 <div className="flex items-start gap-2 px-3 py-2 rounded-xl"
-                  style={{ background: 'rgba(245,158,11,0.1)', border: '1.5px solid rgba(245,158,11,0.35)' }}>
-                  <AlertTriangle size={14} strokeWidth={2} className="shrink-0 mt-0.5" style={{ color: '#fbbf24' }} />
-                  <p className="text-sm font-semibold leading-snug" style={{ color: '#fbbf24' }}>{obsTrunc}</p>
+                  style={{ background: 'rgba(245,158,11,0.18)', border: '1.5px solid rgba(245,158,11,0.55)' }}>
+                  <AlertTriangle size={14} strokeWidth={2} className="shrink-0 mt-0.5" style={{ color: '#d97706' }} />
+                  <p className="text-sm font-semibold leading-snug" style={{ color: '#92400e' }}>{obsTrunc}</p>
                 </div>
               )}
               {wppRecentes.length > 0 && (
                 <div className="px-3 py-2 rounded-xl"
-                  style={{ background: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.2)' }}>
-                  <p className="text-xs font-semibold mb-0.5" style={{ color: '#25d366' }}>📩 WhatsApp</p>
-                  {wppRecentes.map((m, i) => <p key={i} className="text-xs leading-snug" style={{ color: '#25d366', opacity: 0.85 }}>• {m.length > 70 ? m.slice(0, 70) + '…' : m}</p>)}
+                  style={{ background: 'rgba(37,211,102,0.15)', border: '1px solid rgba(37,211,102,0.4)' }}>
+                  <p className="text-xs font-semibold mb-0.5" style={{ color: '#15803d' }}>📩 WhatsApp</p>
+                  {wppRecentes.map((m, i) => <p key={i} className="text-xs leading-snug" style={{ color: '#166534' }}>• {m.length > 70 ? m.slice(0, 70) + '…' : m}</p>)}
                 </div>
               )}
             </>);
           })()}
 
           {/* Itens */}
-          <div className="rounded-xl px-2.5 py-2" style={{ background: 'rgba(0,0,0,0.25)' }}>
+          <div className="rounded-xl px-2.5 py-2" style={{ background: 'var(--card-items-bg)' }}>
             <div className="space-y-1.5">
               {(aberto ? pedido.itens : pedido.itens.slice(0, 3)).map(item => (
                 <div key={item.id} className="flex items-center gap-2">
@@ -1984,8 +1984,8 @@ export default function PDV() {
 
           {/* Total em destaque */}
           <div className="flex items-center justify-between px-3 py-2 rounded-xl"
-            style={{ background: `${cfg.cor}18`, border: `1px solid ${cfg.cor}33` }}>
-            <span className="text-xs font-semibold" style={{ color: cfg.cor }}>Total</span>
+            style={{ background: `${cfg.cor}22`, border: `1px solid ${cfg.cor}55` }}>
+            <span className="text-xs font-bold" style={{ color: cfg.cor }}>Total</span>
             <span className="text-lg font-black" style={{ color: 'var(--txt-strong)' }}>{brl(pedido.total)}</span>
           </div>
 
@@ -2001,13 +2001,13 @@ export default function PDV() {
               </div>
             ) : (
               <div className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl animate-pulse"
-                style={{ background: 'rgba(245,158,11,0.12)', border: '2px solid rgba(245,158,11,0.5)' }}>
-                <span className="text-xs font-black flex items-center gap-1.5" style={{ color: '#fbbf24' }}>
+                style={{ background: 'rgba(245,158,11,0.2)', border: '2px solid rgba(245,158,11,0.7)' }}>
+                <span className="text-xs font-black flex items-center gap-1.5" style={{ color: '#92400e' }}>
                   <AlertTriangle size={14} strokeWidth={2} /> CONFERIR PIX
                 </span>
                 <button onClick={() => confirmarPix(pedido)}
                   className="px-3 py-1.5 rounded-lg text-xs font-black shrink-0 transition-all active:scale-95"
-                  style={{ background: 'rgba(16,185,129,0.25)', color: '#34d399', border: '1px solid rgba(16,185,129,0.5)' }}>
+                  style={{ background: 'rgba(16,185,129,0.3)', color: '#065f46', border: '1px solid rgba(16,185,129,0.6)' }}>
                   ✓ Caiu
                 </button>
               </div>
@@ -2649,7 +2649,7 @@ export default function PDV() {
 
                   {/* Cabeçalho da coluna */}
                   <div className="px-3 py-3 shrink-0 flex items-center gap-2"
-                    style={{ borderBottom: `1px solid ${cfg.cor}22`, background: `${cfg.cor}08` }}>
+                    style={{ borderBottom: `1px solid ${cfg.cor}44`, background: `${cfg.cor}16` }}>
                     <span className="flex items-center" style={{ color: cfg.cor, animation: isNovo && lista.length > 0 ? 'bellRing 0.5s infinite alternate' : 'none' }}>
                       <cfg.Icon size={17} strokeWidth={1.75} />
                     </span>
