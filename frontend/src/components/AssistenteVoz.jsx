@@ -1,201 +1,95 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import toast from 'react-hot-toast';
-import { getToken } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { getToken } from '../hooks/useAuth';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 const authH = () => ({ Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' });
 
-// ── Voz ──────────────────────────────────────────────────────
 function falar(texto) {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(texto);
-  u.lang = 'pt-BR'; u.rate = 1.05; u.pitch = 1;
+  u.lang = 'pt-BR'; u.rate = 1.08; u.pitch = 0.92;
   const vozes = window.speechSynthesis.getVoices();
   u.voice = vozes.find(v => v.lang === 'pt-BR') || vozes.find(v => v.lang.startsWith('pt')) || null;
   window.speechSynthesis.speak(u);
 }
 
-// ── Normalização ─────────────────────────────────────────────
-function norm(t = '') {
-  return t.toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ').trim();
+// ── Waveform animada ─────────────────────────────────────────
+function Waveform({ ativa, cor = '#00d4ff' }) {
+  const bars = 20;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 32 }}>
+      {Array.from({ length: bars }).map((_, i) => (
+        <div key={i} style={{
+          width: 2,
+          borderRadius: 2,
+          background: cor,
+          opacity: ativa ? 0.85 : 0.2,
+          height: ativa ? undefined : 4,
+          animation: ativa ? `wave ${0.5 + (i % 5) * 0.12}s ${i * 0.04}s ease-in-out infinite alternate` : 'none',
+          minHeight: 4,
+          maxHeight: 28,
+          transition: 'opacity 0.3s',
+        }} />
+      ))}
+    </div>
+  );
 }
 
-// ── Extrai o ITEM da frase, removendo verbos e preposições ───
-// Ex: "adicione cebolinha na lista" → "cebolinha"
-// Ex: "coloca 2 tomates na lista de compras" → "tomates"
-function extrairItem(frase) {
-  const n = norm(frase);
-
-  // Padrões: verbo + [quantidade] + ITEM + [complemento de lista]
-  const padroes = [
-    // "adicione/coloca/bota X na lista (de compras)"
-    /(?:adicione?|adiciona|coloca?|bota?|inclui|inserir?|insere?|comprar?|compra|anota?|anotar?)\s+(?:\d+\s+)?(.+?)(?:\s+(?:na|na a|a|em|no|para a?)\s+lista(?:\s+de\s+compras?)?)?$/,
-    // "lista: X" ou "lista de compras: X"
-    /lista(?:\s+de\s+compras?)?\s*[:]\s*(.+)/,
-    // fallback: tudo depois do primeiro verbo de ação
-    /(?:adicione?|adiciona|coloca?|bota?|compra)\s+(.+)/,
-  ];
-
-  for (const regex of padroes) {
-    const m = n.match(regex);
-    if (m && m[1]) {
-      // Remove sufixos de lista que possam ter sobrado
-      let item = m[1]
-        .replace(/\b(na|no|a|em|para|à|ao)\b\s*(lista|compras?|mercado).*$/i, '')
-        .replace(/\b(lista|compras?)\b.*/i, '')
-        .trim();
-      if (item.length >= 2) return item;
-    }
-  }
-  return null;
+// ── Orb pulsante (botão flutuante) ───────────────────────────
+function OrbBtn({ escutando, processando, onClick }) {
+  const cor = escutando ? '#f43f5e' : '#00d4ff';
+  return (
+    <button
+      onClick={onClick}
+      title="Jarvis — Assistente de voz (J)"
+      style={{
+        position: 'fixed',
+        bottom: 24,
+        right: 24,
+        zIndex: 50,
+        width: 56,
+        height: 56,
+        borderRadius: '50%',
+        border: 'none',
+        cursor: 'pointer',
+        background: `radial-gradient(circle at 35% 35%, ${cor}cc, ${cor}44 60%, transparent)`,
+        boxShadow: escutando
+          ? `0 0 0 0 ${cor}44, 0 0 24px ${cor}88, 0 4px 24px rgba(0,0,0,0.5)`
+          : `0 0 0 0 ${cor}22, 0 0 16px ${cor}44, 0 4px 20px rgba(0,0,0,0.4)`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        animation: escutando ? 'orbPulse 1.2s ease-in-out infinite' : processando ? 'orbSpin 1.5s linear infinite' : 'orbIdle 3s ease-in-out infinite',
+        transition: 'box-shadow 0.3s, background 0.3s',
+      }}>
+      {/* Anel externo */}
+      <div style={{
+        position: 'absolute', inset: -6, borderRadius: '50%',
+        border: `1px solid ${cor}44`,
+        animation: 'ringExpand 2s ease-out infinite',
+      }} />
+      {/* Anel médio */}
+      <div style={{
+        position: 'absolute', inset: -12, borderRadius: '50%',
+        border: `1px solid ${cor}22`,
+        animation: 'ringExpand 2s 0.4s ease-out infinite',
+      }} />
+      {/* Ícone */}
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={cor} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        {processando
+          ? <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+          : escutando
+          ? <><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>
+          : <><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></>
+        }
+      </svg>
+    </button>
+  );
 }
 
-// ── Detecta intenção principal ───────────────────────────────
-function detectarIntencao(n) {
-  // Lista de compras — padrões amplos
-  if (/\b(adicione?|adiciona|coloca?|bota?|inclui|insere?|comprar?|compra|anotar?|anota?)\b/.test(n) &&
-      /\b(lista|compras?|mercado|feira)\b/.test(n)) return 'lista_add';
-
-  // Apenas verbo de ação sem mencionar lista — mas contexto de item de mercado
-  if (/\b(adicione?|adiciona)\b/.test(n) && !/\b(pdv|despesa|boleto|faturamento)\b/.test(n)) return 'lista_add';
-
-  // Navegação
-  if (/\b(abrir?|abre|ir|mostrar?|mostra|ver|veja)\b/.test(n)) {
-    if (/\bdashboard\b/.test(n)) return 'nav_dashboard';
-    if (/\bpdv\b|\bpedidos?\b/.test(n)) return 'nav_pdv';
-    if (/\bdespesas?\b/.test(n)) return 'nav_despesas';
-    if (/\blista\b/.test(n)) return 'nav_lista';
-    if (/\bfaturamento\b/.test(n)) return 'nav_faturamento';
-    if (/\bboletos?\b/.test(n)) return 'nav_boletos';
-    if (/\brelatorio\b/.test(n)) return 'nav_relatorios';
-    if (/\bwhatsapp\b/.test(n)) return 'nav_whatsapp';
-    if (/\bingredientes?\b/.test(n)) return 'nav_ingredientes';
-  }
-
-  // Consultas
-  if (/\bquantos?\b.*\bpedidos?\b|\bpedidos?.*\bhoje\b|\bresumo.*pedidos?\b/.test(n)) return 'info_pedidos';
-  if (/\bfaturamento\b|\bquanto\b.*\bfaturei\b|\bvendas?\b.*\bmes\b/.test(n)) return 'info_faturamento';
-  if (/\bboletos?\b.*\bvencendo\b|\bvencer\b|\bboletos?\b.*\bprazo\b/.test(n)) return 'info_boletos';
-
-  // Saudação
-  if (/\b(ola|oi|ola|bom\s*dia|boa\s*tarde|boa\s*noite|tudo\s*bem|e\s*ai)\b/.test(n)) return 'saudacao';
-
-  // Ajuda
-  if (/\b(ajuda|help|comandos|o\s*que\s*(voce|vc)\s*(faz|pode|sabe))\b/.test(n)) return 'ajuda';
-
-  return null;
-}
-
-// ── Engine de comandos ───────────────────────────────────────
-async function processarComando(textoOriginal, navigate, setHistorico) {
-  const n = norm(textoOriginal);
-  const intencao = detectarIntencao(n);
-
-  const log = (resposta, ok = true) => {
-    setHistorico(h => [{
-      texto: textoOriginal,
-      resposta,
-      ok,
-      hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    }, ...h].slice(0, 30));
-    falar(resposta);
-  };
-
-  // ── Lista de compras ─────────────────────────────────────
-  if (intencao === 'lista_add') {
-    const item = extrairItem(n);
-    if (!item) return log('Não entendi qual item adicionar. Tente: "Adicione cebolinha na lista".');
-
-    // Capitaliza primeira letra
-    const nomeFormatado = item.charAt(0).toUpperCase() + item.slice(1);
-
-    try {
-      const res = await fetch(`${BASE}/lista-compras`, {
-        method: 'POST',
-        headers: authH(),
-        body: JSON.stringify({ nome: nomeFormatado, quantidade: '1', unidade: 'un', categoria: 'Outros' }),
-      });
-      if (res.ok) return log(`${nomeFormatado} adicionado na lista de compras!`);
-      return log('Não consegui adicionar. Tente novamente.', false);
-    } catch { return log('Erro ao acessar a lista de compras.', false); }
-  }
-
-  // ── Navegação ────────────────────────────────────────────
-  const rotas = {
-    nav_dashboard:    ['/dashboard',    'Abrindo o dashboard.'],
-    nav_pdv:          ['/pdv',          'Abrindo o PDV.'],
-    nav_despesas:     ['/despesas',     'Abrindo as despesas.'],
-    nav_lista:        ['/lista-compras','Abrindo a lista de compras.'],
-    nav_faturamento:  ['/faturamento',  'Abrindo o faturamento.'],
-    nav_boletos:      ['/boletos',      'Abrindo os boletos.'],
-    nav_relatorios:   ['/relatorios',   'Abrindo os relatórios.'],
-    nav_whatsapp:     ['/whatsapp',     'Abrindo o WhatsApp.'],
-    nav_ingredientes: ['/ingredientes', 'Abrindo os ingredientes.'],
-  };
-  if (rotas[intencao]) {
-    const [rota, msg] = rotas[intencao];
-    navigate(rota);
-    return log(msg);
-  }
-
-  // ── Pedidos ──────────────────────────────────────────────
-  if (intencao === 'info_pedidos') {
-    try {
-      const res = await fetch(`${BASE}/pdv/resumo`, { headers: authH() });
-      const d = await res.json();
-      const ativos = (d.novo || 0) + (d.preparando || 0) + (d.pronto || 0);
-      if (ativos === 0) return log('Não há pedidos ativos no momento.');
-      return log(`Você tem ${ativos} pedido${ativos > 1 ? 's' : ''} ativo${ativos > 1 ? 's' : ''}: ${d.novo || 0} novo${d.novo !== 1 ? 's' : ''}, ${d.preparando || 0} em preparo e ${d.pronto || 0} pronto${d.pronto !== 1 ? 's' : ''}.`);
-    } catch { return log('Não consegui buscar os pedidos.', false); }
-  }
-
-  // ── Faturamento ──────────────────────────────────────────
-  if (intencao === 'info_faturamento') {
-    try {
-      const mes = new Date().toISOString().slice(0, 7);
-      const res = await fetch(`${BASE}/faturamento?mes=${mes}`, { headers: authH() });
-      const d = await res.json();
-      if (Array.isArray(d) && d.length > 0) {
-        const total = d.reduce((s, r) => s + (r.total || 0), 0);
-        return log(`O faturamento deste mês é de ${total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}.`);
-      }
-      return log('Ainda não há registros de faturamento este mês.');
-    } catch { return log('Não consegui buscar o faturamento.', false); }
-  }
-
-  // ── Boletos ──────────────────────────────────────────────
-  if (intencao === 'info_boletos') {
-    try {
-      const res = await fetch(`${BASE}/boletos`, { headers: authH() });
-      const d = await res.json();
-      const pendentes = (d || []).filter(b => b.status === 'pendente');
-      if (pendentes.length === 0) return log('Nenhum boleto pendente no momento.');
-      return log(`Você tem ${pendentes.length} boleto${pendentes.length > 1 ? 's' : ''} pendente${pendentes.length > 1 ? 's' : ''}.`);
-    } catch { return log('Não consegui buscar os boletos.', false); }
-  }
-
-  // ── Saudação ─────────────────────────────────────────────
-  if (intencao === 'saudacao') {
-    const h = new Date().getHours();
-    const s = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
-    return log(`${s}! Estou pronto para ajudar. O que você precisa?`);
-  }
-
-  // ── Ajuda ────────────────────────────────────────────────
-  if (intencao === 'ajuda') {
-    return log('Posso adicionar itens na lista de compras, abrir qualquer página do sistema, informar pedidos do dia, faturamento do mês e boletos pendentes.');
-  }
-
-  // ── Não entendeu ─────────────────────────────────────────
-  return log(`Não entendi o comando. Tente: "Adicione salmão na lista", "Abrir PDV" ou "Quantos pedidos hoje?".`, false);
-}
-
-// ── Componente ───────────────────────────────────────────────
+// ── Painel principal ─────────────────────────────────────────
 export default function AssistenteVoz() {
   const [aberto, setAberto] = useState(false);
   const [escutando, setEscutando] = useState(false);
@@ -204,12 +98,56 @@ export default function AssistenteVoz() {
   const [processando, setProcessando] = useState(false);
   const [suportado] = useState(() => 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
   const reconRef = useRef(null);
+  const histRef  = useRef(null);
   const navigate = useNavigate();
 
   const parar = useCallback(() => {
     reconRef.current?.stop();
     setEscutando(false);
   }, []);
+
+  const addLog = useCallback((texto, resposta, ok = true) => {
+    setHistorico(h => [{
+      texto, resposta, ok,
+      hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    }, ...h].slice(0, 40));
+    falar(resposta);
+  }, []);
+
+  const executarAcao = useCallback((dados) => {
+    const { acao, parametros } = dados;
+    if (acao === 'nav' && parametros?.pagina) {
+      setTimeout(() => navigate(parametros.pagina), 300);
+    }
+    if (acao === 'lista_add' && parametros?.item) {
+      const nome = parametros.item.charAt(0).toUpperCase() + parametros.item.slice(1);
+      fetch(`${BASE}/lista-compras`, {
+        method: 'POST', headers: authH(),
+        body: JSON.stringify({ nome, quantidade: '1', unidade: 'un', categoria: 'Outros' }),
+      }).catch(() => {});
+    }
+  }, [navigate]);
+
+  const processar = useCallback(async (textoOriginal) => {
+    setProcessando(true);
+    try {
+      const res = await fetch(`${BASE}/ia/agente`, {
+        method: 'POST', headers: authH(),
+        body: JSON.stringify({ comando: textoOriginal }),
+      });
+      if (res.ok) {
+        const dados = await res.json();
+        addLog(textoOriginal, dados.resposta_voz || 'Feito!', true);
+        executarAcao(dados);
+      } else {
+        addLog(textoOriginal, 'Não consegui processar. Tente novamente.', false);
+      }
+    } catch {
+      addLog(textoOriginal, 'Erro de conexão. Verifique o servidor.', false);
+    }
+    setTranscript('');
+    setProcessando(false);
+  }, [addLog, executarAcao]);
 
   const iniciarEscuta = useCallback(() => {
     if (!suportado || escutando || processando) return;
@@ -220,173 +158,288 @@ export default function AssistenteVoz() {
     rec.continuous = false;
     rec.interimResults = true;
     rec.maxAlternatives = 3;
-
     rec.onstart = () => setEscutando(true);
-    rec.onend = () => setEscutando(false);
-
+    rec.onend   = () => setEscutando(false);
     rec.onresult = async (e) => {
-      // Usa a alternativa mais confiável
-      const final = Array.from(e.results).filter(r => r.isFinal);
+      const final   = Array.from(e.results).filter(r => r.isFinal);
       const interims = Array.from(e.results).filter(r => !r.isFinal);
       const texto = (final.length > 0 ? final : interims).map(r => r[0].transcript).join(' ').trim();
       setTranscript(texto);
-
       if (e.results[e.results.length - 1].isFinal && texto) {
-        setProcessando(true);
-        await processarComando(texto, navigate, setHistorico);
-        setTranscript('');
-        setProcessando(false);
+        await processar(texto);
       }
     };
-
     rec.onerror = (e) => {
-      if (e.error !== 'no-speech') toast.error(`Microfone: ${e.error}`);
+      if (e.error !== 'no-speech') addLog('', `Microfone: ${e.error}`, false);
       setEscutando(false);
     };
-
     rec.start();
-  }, [suportado, escutando, processando, navigate]);
+  }, [suportado, escutando, processando, processar, addLog]);
+
+  // Tecla J para abrir/fechar, Espaço para escutar (quando aberto)
+  useEffect(() => {
+    const fn = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.key === 'j' || e.key === 'J') setAberto(v => !v);
+      if (e.key === ' ' && aberto && !escutando && !processando) { e.preventDefault(); iniciarEscuta(); }
+      if (e.key === 'Escape') { parar(); setAberto(false); }
+    };
+    const toggle = () => setAberto(v => !v);
+    window.addEventListener('keydown', fn);
+    window.addEventListener('assistente:toggle', toggle);
+    return () => { window.removeEventListener('keydown', fn); window.removeEventListener('assistente:toggle', toggle); };
+  }, [aberto, escutando, processando, iniciarEscuta, parar]);
 
   useEffect(() => {
-    const fnKey = (e) => { if (e.key === 'Escape') { parar(); setAberto(false); } };
-    const fnToggle = () => setAberto(v => !v);
-    window.addEventListener('keydown', fnKey);
-    window.addEventListener('assistente:toggle', fnToggle);
-    return () => {
-      window.removeEventListener('keydown', fnKey);
-      window.removeEventListener('assistente:toggle', fnToggle);
-    };
-  }, [parar]);
+    if (histRef.current) histRef.current.scrollTop = 0;
+  }, [historico]);
 
   if (!suportado) return null;
 
+  const cor = escutando ? '#f43f5e' : '#00d4ff';
+
   return (
     <>
+      <style>{`
+        @keyframes wave {
+          from { height: 4px; }
+          to   { height: 24px; }
+        }
+        @keyframes orbPulse {
+          0%,100% { box-shadow: 0 0 0 0 #f43f5e44, 0 0 24px #f43f5e88, 0 4px 24px rgba(0,0,0,.5); }
+          50%      { box-shadow: 0 0 0 8px #f43f5e00, 0 0 32px #f43f5eaa, 0 4px 24px rgba(0,0,0,.5); }
+        }
+        @keyframes orbIdle {
+          0%,100% { box-shadow: 0 0 16px #00d4ff44, 0 4px 20px rgba(0,0,0,.4); }
+          50%      { box-shadow: 0 0 28px #00d4ff66, 0 4px 20px rgba(0,0,0,.4); }
+        }
+        @keyframes orbSpin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+        @keyframes ringExpand {
+          0%   { opacity: 0.7; transform: scale(1); }
+          100% { opacity: 0;   transform: scale(1.5); }
+        }
+        @keyframes slideUp {
+          from { opacity:0; transform: translateY(16px) scale(0.97); }
+          to   { opacity:1; transform: translateY(0)    scale(1);    }
+        }
+        @keyframes scanLine {
+          0%   { top: 0%; }
+          100% { top: 100%; }
+        }
+      `}</style>
+
+      <OrbBtn escutando={escutando} processando={processando} onClick={() => setAberto(v => !v)} />
+
       {aberto && (
-        <div className="fixed top-16 left-4 lg:left-72 z-40 w-80 flex flex-col rounded-2xl overflow-hidden shadow-2xl"
-          style={{ background: '#0c0c0c', border: '1px solid #1a1a1a', maxHeight: 'calc(100vh - 80px)' }}>
+        <div style={{
+          position: 'fixed',
+          bottom: 92,
+          right: 16,
+          zIndex: 50,
+          width: 340,
+          maxHeight: 'calc(100vh - 120px)',
+          display: 'flex',
+          flexDirection: 'column',
+          borderRadius: 20,
+          overflow: 'hidden',
+          animation: 'slideUp 0.22s ease-out',
+          boxShadow: `0 0 0 1px #00d4ff18, 0 0 40px #00d4ff18, 0 24px 48px rgba(0,0,0,0.7)`,
+          background: 'rgba(4, 12, 22, 0.97)',
+          backdropFilter: 'blur(20px)',
+        }}>
+
+          {/* Linha de luz no topo */}
+          <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, #00d4ff 30%, #00d4ff 70%, transparent)', flexShrink: 0 }} />
 
           {/* Header */}
-          <div className="px-4 py-3 flex items-center justify-between shrink-0"
-            style={{ background: 'linear-gradient(135deg, #1a0e2e, #110a20)', borderBottom: '1px solid #1e1e1e' }}>
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base"
-                style={{ background: 'rgba(124,58,237,0.2)', border: '1px solid rgba(124,58,237,0.3)' }}>
-                🤖
+          <div style={{
+            padding: '14px 16px 12px',
+            borderBottom: '1px solid rgba(0,212,255,0.1)',
+            flexShrink: 0,
+            background: 'linear-gradient(180deg, rgba(0,212,255,0.05) 0%, transparent 100%)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 34, height: 34, borderRadius: 10,
+                  background: 'rgba(0,212,255,0.1)',
+                  border: '1px solid rgba(0,212,255,0.25)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00d4ff" strokeWidth="1.75" strokeLinecap="round">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+                  </svg>
+                </div>
+                <div>
+                  <p style={{ color: '#e0f7ff', fontWeight: 900, fontSize: 14, lineHeight: 1, letterSpacing: 1 }}>JARVIS</p>
+                  <p style={{ color: '#00d4ff', fontSize: 10, marginTop: 2, lineHeight: 1, opacity: 0.7 }}>
+                    {processando ? 'processando...' : escutando ? 'ouvindo...' : 'pronto · tecle J ou Espaço'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-black text-white leading-none">Assistente</p>
-                <p className="text-[10px] text-purple-400 mt-0.5 leading-none">Reconhecimento de voz · PT-BR</p>
-              </div>
+              <button onClick={() => { parar(); setAberto(false); }}
+                style={{
+                  width: 28, height: 28, borderRadius: 8, border: '1px solid rgba(255,255,255,0.08)',
+                  background: 'rgba(255,255,255,0.04)', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b',
+                }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
-            <button onClick={() => { parar(); setAberto(false); }}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-zinc-600 hover:text-zinc-400 transition-colors"
-              style={{ background: '#1a1a1a' }}>✕</button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {/* Área central — waveform + transcrição */}
+          <div style={{
+            padding: '16px 16px 12px',
+            borderBottom: '1px solid rgba(0,212,255,0.07)',
+            flexShrink: 0,
+          }}>
+            {/* Waveform */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+              <Waveform ativa={escutando} cor={cor} />
+            </div>
 
-            {/* Botão principal */}
-            <button onClick={escutando ? parar : iniciarEscuta} disabled={processando}
-              className="w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-bold text-white transition-all active:scale-95 disabled:opacity-50"
+            {/* Botão de escuta */}
+            <button
+              onClick={escutando ? parar : iniciarEscuta}
+              disabled={processando}
               style={{
+                width: '100%', padding: '11px 0',
+                borderRadius: 12, border: `1px solid ${cor}44`,
                 background: escutando
-                  ? 'linear-gradient(135deg, #ef4444, #dc2626)'
-                  : 'linear-gradient(135deg, #7c3aed, #6d28d9)',
-                boxShadow: escutando
-                  ? '0 4px 24px rgba(239,68,68,0.35)'
-                  : '0 4px 24px rgba(124,58,237,0.35)',
+                  ? 'linear-gradient(135deg, rgba(244,63,94,0.2), rgba(244,63,94,0.08))'
+                  : 'linear-gradient(135deg, rgba(0,212,255,0.15), rgba(0,212,255,0.05))',
+                color: cor, fontWeight: 800, fontSize: 13,
+                cursor: processando ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                opacity: processando ? 0.5 : 1,
+                transition: 'all 0.2s',
+                boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06)`,
               }}>
               {processando ? (
                 <>
-                  <span className="animate-spin text-lg">⟳</span>
-                  <span className="text-sm">Processando...</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'orbSpin 1s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                  Processando...
                 </>
               ) : escutando ? (
                 <>
-                  <span className="text-lg">⏹</span>
-                  <span className="text-sm">Parar de ouvir</span>
-                  <span className="flex gap-0.5 ml-1">
-                    {[1,2,3,4].map(i => (
-                      <span key={i} className="w-0.5 rounded-full bg-white/70"
-                        style={{ height: `${6 + i * 3}px`, animation: `eq 0.7s ${i*0.12}s infinite alternate` }} />
-                    ))}
-                  </span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                  Parar
                 </>
               ) : (
                 <>
-                  <span className="text-lg">🎙️</span>
-                  <span className="text-sm">Toque para falar</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+                  Falar comando
                 </>
               )}
             </button>
 
             {/* Transcrição ao vivo */}
             {(escutando || transcript) && (
-              <div className="px-3 py-2.5 rounded-xl" style={{ background: '#141414', border: '1px solid #222' }}>
-                <p className="text-[10px] text-zinc-600 mb-1 font-bold tracking-widest">OUVINDO</p>
-                <p className="text-sm text-zinc-300 italic leading-snug">
-                  {transcript || <span className="text-zinc-700">Aguardando sua voz...</span>}
+              <div style={{
+                marginTop: 10, padding: '8px 12px', borderRadius: 10,
+                background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.15)',
+              }}>
+                <p style={{ fontSize: 11, color: '#00d4ff', opacity: 0.6, fontWeight: 700, marginBottom: 3, letterSpacing: 1 }}>OUVINDO</p>
+                <p style={{ fontSize: 12, color: '#cbd5e1', fontStyle: 'italic', lineHeight: 1.4 }}>
+                  {transcript || <span style={{ color: '#334155' }}>Aguardando...</span>}
                 </p>
               </div>
             )}
+          </div>
 
-            {/* Histórico */}
-            {historico.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold tracking-widest text-zinc-700">HISTÓRICO</p>
+          {/* Histórico */}
+          <div ref={histRef} style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 16px' }}>
+            {historico.length === 0 ? (
+              <div>
+                <p style={{ fontSize: 10, color: '#1e3a4a', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>EXEMPLOS DE COMANDOS</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {[
+                    ['Quantos pedidos ativos?',          'Info'],
+                    ['Faturamento de hoje',               'Info'],
+                    ['Abre o PDV',                        'Navegar'],
+                    ['Pausa o Hot Roll no cardápio',      'Ação'],
+                    ['Cria um cupom de 10% chamado PROMO','Ação'],
+                    ['Adiciona salmão na lista',          'Lista'],
+                    ['Resumo do dia',                     'Info'],
+                    ['Boletos pendentes',                 'Info'],
+                  ].map(([cmd, tipo]) => (
+                    <button key={cmd}
+                      onClick={() => { if (!processando) processar(cmd); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '7px 10px', borderRadius: 9, border: '1px solid rgba(0,212,255,0.08)',
+                        background: 'rgba(0,212,255,0.03)', cursor: 'pointer', textAlign: 'left', gap: 8,
+                      }}>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>{cmd}</span>
+                      <span style={{
+                        fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
+                        color: tipo === 'Ação' ? '#f59e0b' : tipo === 'Navegar' ? '#a78bfa' : tipo === 'Lista' ? '#34d399' : '#00d4ff',
+                        flexShrink: 0,
+                      }}>{tipo}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <p style={{ fontSize: 10, color: '#1e3a4a', fontWeight: 700, letterSpacing: 1, marginBottom: 2 }}>HISTÓRICO</p>
                 {historico.map((h, i) => (
-                  <div key={i} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1a1a1a' }}>
-                    {/* Fala do usuário */}
-                    <div className="px-3 py-2 flex items-start gap-2" style={{ background: '#111' }}>
-                      <span className="text-xs shrink-0 mt-0.5">🎙️</span>
-                      <p className="text-xs text-zinc-500 italic flex-1">"{h.texto}"</p>
-                      <span className="text-[10px] text-zinc-700 shrink-0">{h.hora}</span>
+                  <div key={i} style={{
+                    borderRadius: 12, overflow: 'hidden',
+                    border: `1px solid ${h.ok ? 'rgba(0,212,255,0.1)' : 'rgba(244,63,94,0.15)'}`,
+                  }}>
+                    {/* Comando */}
+                    <div style={{
+                      padding: '7px 10px', display: 'flex', alignItems: 'flex-start', gap: 7,
+                      background: 'rgba(255,255,255,0.02)',
+                    }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" style={{ flexShrink: 0, marginTop: 1 }}>
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                      </svg>
+                      <p style={{ fontSize: 11, color: '#475569', fontStyle: 'italic', flex: 1, lineHeight: 1.4 }}>"{h.texto}"</p>
+                      <span style={{ fontSize: 10, color: '#1e3a4a', flexShrink: 0 }}>{h.hora}</span>
                     </div>
                     {/* Resposta */}
-                    <div className="px-3 py-2 flex items-start gap-2" style={{ background: '#0e0e0e' }}>
-                      <span className="text-xs shrink-0 mt-0.5">🤖</span>
-                      <p className="text-xs flex-1" style={{ color: h.ok === false ? '#f87171' : '#a78bfa' }}>
-                        {h.resposta}
-                      </p>
+                    <div style={{
+                      padding: '7px 10px', display: 'flex', alignItems: 'flex-start', gap: 7,
+                      background: 'rgba(0,0,0,0.2)',
+                      borderTop: '1px solid rgba(255,255,255,0.03)',
+                    }}>
+                      <div style={{
+                        width: 14, height: 14, borderRadius: 4, flexShrink: 0, marginTop: 0.5,
+                        background: 'rgba(0,212,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#00d4ff" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/></svg>
+                      </div>
+                      <p style={{ fontSize: 11, color: h.ok ? '#94a3b8' : '#f87171', flex: 1, lineHeight: 1.5 }}>{h.resposta}</p>
                     </div>
                   </div>
                 ))}
               </div>
             )}
+          </div>
 
-            {/* Dicas (só quando histórico vazio) */}
-            {historico.length === 0 && !escutando && (
-              <div>
-                <p className="text-[10px] font-bold tracking-widest text-zinc-700 mb-2">EXEMPLOS</p>
-                <div className="space-y-1.5">
-                  {[
-                    { cmd: '"Adicione cebolinha na lista"',  acao: '→ Lista de compras' },
-                    { cmd: '"Coloca salmão na lista"',       acao: '→ Lista de compras' },
-                    { cmd: '"Quantos pedidos hoje?"',        acao: '→ Resumo PDV'       },
-                    { cmd: '"Abre o dashboard"',             acao: '→ Navegação'        },
-                    { cmd: '"Faturamento do mês"',           acao: '→ Consulta'         },
-                    { cmd: '"Boletos pendentes"',            acao: '→ Consulta'         },
-                  ].map(({ cmd, acao }) => (
-                    <div key={cmd} className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl"
-                      style={{ background: '#111', border: '1px solid #1a1a1a' }}>
-                      <span className="text-xs text-zinc-400">{cmd}</span>
-                      <span className="text-[10px] text-purple-600 shrink-0">{acao}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+          {/* Footer */}
+          <div style={{
+            padding: '8px 16px', borderTop: '1px solid rgba(0,212,255,0.07)', flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span style={{ fontSize: 9, color: '#1e3a4a', fontWeight: 700, letterSpacing: 1 }}>PVAI · JARVIS v2</span>
+            {historico.length > 0 && (
+              <button onClick={() => setHistorico([])}
+                style={{ fontSize: 9, color: '#1e3a4a', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
+                LIMPAR
+              </button>
             )}
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes eq {
-          from { transform: scaleY(0.4); }
-          to   { transform: scaleY(1.4); }
-        }
-      `}</style>
     </>
   );
 }

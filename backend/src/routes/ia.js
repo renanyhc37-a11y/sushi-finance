@@ -416,4 +416,152 @@ Crie conteúdo EXTRAORDINÁRIO e IRRESISTÍVEL para um post que vai viralizar. R
   }
 });
 
+// ══════════════════════════════════════════════════════════════
+// AGENTE DE VOZ — Jarvis
+// ══════════════════════════════════════════════════════════════
+
+router.post('/agente', requireAuth, async (req, res) => {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const { comando } = req.body;
+  if (!comando?.trim()) return res.status(400).json({ erro: 'Comando vazio' });
+
+  // Coleta contexto em tempo real
+  let ctx = {};
+  try {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const mes  = new Date().toISOString().slice(0, 7);
+
+    ctx.pedidos_ativos = db.prepare(
+      `SELECT id, numero, cliente_nome, status, total FROM pdv_pedidos
+       WHERE status NOT IN ('entregue','cancelado') ORDER BY id DESC LIMIT 20`
+    ).all();
+
+    ctx.resumo_pedidos = db.prepare(
+      `SELECT status, COUNT(*) as qt FROM pdv_pedidos
+       WHERE DATE(created_at) = ? GROUP BY status`
+    ).all(hoje);
+
+    ctx.faturamento_hoje = db.prepare(
+      `SELECT COALESCE(SUM(total),0) as total, COUNT(*) as pedidos
+       FROM pdv_pedidos WHERE DATE(created_at) = ? AND status != 'cancelado'`
+    ).get(hoje);
+
+    ctx.faturamento_mes = db.prepare(
+      `SELECT COALESCE(SUM(total),0) as total, COUNT(*) as pedidos
+       FROM pdv_pedidos WHERE strftime('%Y-%m', created_at) = ? AND status != 'cancelado'`
+    ).get(mes);
+
+    ctx.boletos_pendentes = db.prepare(
+      `SELECT COUNT(*) as qt FROM boletos WHERE status='pendente'`
+    ).get()?.qt || 0;
+
+    ctx.itens_cardapio = db.prepare(
+      `SELECT i.id, i.nome, i.preco, i.disponivel, c.nome as categoria
+       FROM cardapio_itens i LEFT JOIN cardapio_categorias c ON c.id=i.categoria_id
+       ORDER BY c.nome, i.nome LIMIT 60`
+    ).all();
+
+    ctx.cupons_ativos = db.prepare(
+      `SELECT codigo, tipo, valor, usos_atuais, usos_maximos FROM cupons WHERE ativo=1`
+    ).all();
+  } catch (e) {
+    console.warn('[agente] contexto parcial:', e.message);
+  }
+
+  // Se não tiver API key, executa apenas comandos locais simples
+  if (!apiKey) {
+    return res.json({
+      resposta_voz: 'Chave de IA não configurada. Posso apenas navegar e consultar dados básicos.',
+      acao: 'info',
+      dados: ctx.faturamento_hoje,
+    });
+  }
+
+  try {
+    const client = new Anthropic({ apiKey });
+    const brl = v => `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
+
+    const systemPrompt = `Você é JARVIS, assistente de voz de um sistema de delivery de sushi. Responda em português brasileiro de forma direta, amigável e concisa (máx 2 frases para voz).
+
+## CONTEXTO ATUAL (${new Date().toLocaleString('pt-BR')}):
+
+PEDIDOS ATIVOS (${ctx.pedidos_ativos?.length || 0}):
+${ctx.pedidos_ativos?.map(p => `#${p.numero} ${p.cliente_nome} - ${p.status} - ${brl(p.total)}`).join('\n') || 'Nenhum'}
+
+RESUMO HOJE:
+${ctx.resumo_pedidos?.map(r => `${r.status}: ${r.qt}`).join(', ') || 'Sem dados'}
+Faturamento hoje: ${brl(ctx.faturamento_hoje?.total || 0)} (${ctx.faturamento_hoje?.pedidos || 0} pedidos)
+Faturamento mês: ${brl(ctx.faturamento_mes?.total || 0)} (${ctx.faturamento_mes?.pedidos || 0} pedidos)
+Boletos pendentes: ${ctx.boletos_pendentes}
+
+CARDÁPIO (${ctx.itens_cardapio?.length || 0} itens):
+${ctx.itens_cardapio?.map(i => `[${i.id}] ${i.nome} ${brl(i.preco)} ${i.disponivel ? '✓' : '✗PAUSADO'}`).join('\n') || 'Sem itens'}
+
+CUPONS ATIVOS: ${ctx.cupons_ativos?.map(c => `${c.codigo} (${c.tipo === 'percentual' ? c.valor + '%' : brl(c.valor)})`).join(', ') || 'Nenhum'}
+
+## AÇÕES DISPONÍVEIS:
+Retorne EXATAMENTE este JSON (sem markdown):
+{
+  "resposta_voz": "frase curta para falar em voz alta",
+  "acao": "nav|lista_add|pausar_item|ativar_item|criar_cupom|info|cancelar_pedido|nenhuma",
+  "parametros": {
+    // para nav: { "pagina": "/pdv" }
+    // para lista_add: { "item": "nome do item" }
+    // para pausar_item / ativar_item: { "item_id": 123, "nome": "Hot Roll" }
+    // para criar_cupom: { "codigo": "PROMO", "tipo": "percentual", "valor": 10, "minimo": 30 }
+    // para cancelar_pedido: { "pedido_id": 5, "numero": 42 }
+    // para info: {} (só resposta_voz)
+  }
+}
+
+Páginas disponíveis para nav: /dashboard, /pdv, /despesas, /lista-compras, /faturamento, /boletos, /relatorios, /whatsapp, /clientes, /cardapio-admin, /campanhas, /producao`;
+
+    const message = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 400,
+      messages: [{ role: 'user', content: `Comando: "${comando.trim()}"` }],
+      system: systemPrompt,
+    });
+
+    const texto = message.content[0].text.trim();
+    let dados;
+    try {
+      const match = texto.match(/\{[\s\S]*\}/);
+      dados = JSON.parse(match ? match[0] : texto);
+    } catch {
+      return res.json({ resposta_voz: 'Não entendi. Tente novamente.', acao: 'nenhuma', parametros: {} });
+    }
+
+    // Executa ações que precisam de backend
+    if (dados.acao === 'pausar_item' && dados.parametros?.item_id) {
+      try {
+        db.prepare('UPDATE cardapio_itens SET disponivel=0 WHERE id=?').run(dados.parametros.item_id);
+      } catch {}
+    }
+    if (dados.acao === 'ativar_item' && dados.parametros?.item_id) {
+      try {
+        db.prepare('UPDATE cardapio_itens SET disponivel=1 WHERE id=?').run(dados.parametros.item_id);
+      } catch {}
+    }
+    if (dados.acao === 'criar_cupom' && dados.parametros?.codigo) {
+      try {
+        const p = dados.parametros;
+        db.prepare(
+          `INSERT OR IGNORE INTO cupons (codigo, tipo, valor, minimo, usos_maximos) VALUES (?,?,?,?,0)`
+        ).run(p.codigo.toUpperCase(), p.tipo || 'percentual', Number(p.valor) || 10, Number(p.minimo) || 0);
+      } catch {}
+    }
+    if (dados.acao === 'cancelar_pedido' && dados.parametros?.pedido_id) {
+      try {
+        db.prepare(`UPDATE pdv_pedidos SET status='cancelado' WHERE id=?`).run(dados.parametros.pedido_id);
+      } catch {}
+    }
+
+    res.json(dados);
+  } catch (e) {
+    console.error('[agente] erro:', e.message);
+    res.status(500).json({ resposta_voz: 'Erro interno. Tente novamente.', acao: 'nenhuma', parametros: {} });
+  }
+});
+
 module.exports = router;
