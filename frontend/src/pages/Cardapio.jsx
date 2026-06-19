@@ -792,6 +792,9 @@ export default function Cardapio() {
         .catch(() => {});
     carregarCardapio();
     const t = setInterval(carregarCardapio, 120_000); // atualiza a cada 2 min
+    // Atualiza ao voltar para a aba (operador salva no admin e muda de aba)
+    const onFocus = () => carregarCardapio();
+    document.addEventListener('visibilitychange', onFocus);
 
     fetch(`${BASE}/cardapio/horario`)
       .then(r => r.json())
@@ -818,7 +821,7 @@ export default function Cardapio() {
         });
       })
       .catch(() => {});
-    return () => clearInterval(t);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onFocus); };
   }, []);
 
   const totalItens = carrinho.reduce((s, i) => s + i.qty, 0);
