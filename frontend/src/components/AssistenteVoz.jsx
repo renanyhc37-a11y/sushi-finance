@@ -16,7 +16,7 @@ function falar(texto) {
 }
 
 // ── Waveform animada ─────────────────────────────────────────
-function Waveform({ ativa, cor = '#00d4ff' }) {
+function Waveform({ ativa, cor = '#f97316' }) {
   const bars = 20;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 32 }}>
@@ -37,27 +37,32 @@ function Waveform({ ativa, cor = '#00d4ff' }) {
   );
 }
 
+// cores da marca
+const COR_IDLE     = '#f97316'; // laranja (accent)
+const COR_ESCUTA   = '#f43f5e'; // vermelho ao ouvir
+const COR_AZUL     = '#38bdf8'; // azul do sistema
+
 // ── Orb pulsante (botão flutuante) ───────────────────────────
 function OrbBtn({ escutando, processando, onClick }) {
-  const cor = escutando ? '#f43f5e' : '#00d4ff';
+  const cor = escutando ? COR_ESCUTA : COR_IDLE;
   return (
     <button
       onClick={onClick}
       title="NinjaContrlol — Assistente de voz (J)"
       style={{
         position: 'fixed',
-        bottom: 24,
-        right: 24,
+        bottom: 'max(88px, env(safe-area-inset-bottom, 0px) + 88px)',
+        right: 16,
         zIndex: 50,
-        width: 56,
-        height: 56,
+        width: 46,
+        height: 46,
         borderRadius: '50%',
         border: 'none',
         cursor: 'pointer',
-        background: `radial-gradient(circle at 35% 35%, ${cor}cc, ${cor}44 60%, transparent)`,
+        background: `radial-gradient(circle at 35% 35%, ${cor}dd, ${cor}55 60%, transparent)`,
         boxShadow: escutando
-          ? `0 0 0 0 ${cor}44, 0 0 24px ${cor}88, 0 4px 24px rgba(0,0,0,0.5)`
-          : `0 0 0 0 ${cor}22, 0 0 16px ${cor}44, 0 4px 20px rgba(0,0,0,0.4)`,
+          ? `0 0 0 0 ${cor}44, 0 0 20px ${cor}88, 0 3px 16px rgba(0,0,0,0.55)`
+          : `0 0 0 0 ${cor}22, 0 0 12px ${cor}55, 0 3px 14px rgba(0,0,0,0.45)`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -66,18 +71,18 @@ function OrbBtn({ escutando, processando, onClick }) {
       }}>
       {/* Anel externo */}
       <div style={{
-        position: 'absolute', inset: -6, borderRadius: '50%',
+        position: 'absolute', inset: -5, borderRadius: '50%',
         border: `1px solid ${cor}44`,
         animation: 'ringExpand 2s ease-out infinite',
       }} />
       {/* Anel médio */}
       <div style={{
-        position: 'absolute', inset: -12, borderRadius: '50%',
+        position: 'absolute', inset: -10, borderRadius: '50%',
         border: `1px solid ${cor}22`,
         animation: 'ringExpand 2s 0.4s ease-out infinite',
       }} />
       {/* Ícone */}
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={cor} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={cor} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         {processando
           ? <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
           : escutando
@@ -196,7 +201,7 @@ export default function AssistenteVoz() {
 
   if (!suportado) return null;
 
-  const cor = escutando ? '#f43f5e' : '#00d4ff';
+  const cor = escutando ? COR_ESCUTA : COR_AZUL;
 
   return (
     <>
@@ -206,12 +211,12 @@ export default function AssistenteVoz() {
           to   { height: 24px; }
         }
         @keyframes orbPulse {
-          0%,100% { box-shadow: 0 0 0 0 #f43f5e44, 0 0 24px #f43f5e88, 0 4px 24px rgba(0,0,0,.5); }
-          50%      { box-shadow: 0 0 0 8px #f43f5e00, 0 0 32px #f43f5eaa, 0 4px 24px rgba(0,0,0,.5); }
+          0%,100% { box-shadow: 0 0 0 0 #f43f5e44, 0 0 20px #f43f5e88, 0 3px 16px rgba(0,0,0,.55); }
+          50%      { box-shadow: 0 0 0 7px #f43f5e00, 0 0 28px #f43f5eaa, 0 3px 16px rgba(0,0,0,.55); }
         }
         @keyframes orbIdle {
-          0%,100% { box-shadow: 0 0 16px #00d4ff44, 0 4px 20px rgba(0,0,0,.4); }
-          50%      { box-shadow: 0 0 28px #00d4ff66, 0 4px 20px rgba(0,0,0,.4); }
+          0%,100% { box-shadow: 0 0 12px #f9731644, 0 3px 14px rgba(0,0,0,.45); }
+          50%      { box-shadow: 0 0 22px #f9731666, 0 3px 14px rgba(0,0,0,.45); }
         }
         @keyframes orbSpin {
           from { transform: rotate(0deg); }
@@ -236,7 +241,7 @@ export default function AssistenteVoz() {
       {aberto && (
         <div style={{
           position: 'fixed',
-          bottom: 92,
+          bottom: 144,
           right: 16,
           zIndex: 50,
           width: 340,
@@ -246,13 +251,13 @@ export default function AssistenteVoz() {
           borderRadius: 20,
           overflow: 'hidden',
           animation: 'slideUp 0.22s ease-out',
-          boxShadow: `0 0 0 1px #00d4ff18, 0 0 40px #00d4ff18, 0 24px 48px rgba(0,0,0,0.7)`,
+          boxShadow: `0 0 0 1px #f9731618, 0 0 40px #f9731618, 0 24px 48px rgba(0,0,0,0.7)`,
           background: 'rgba(4, 12, 22, 0.97)',
           backdropFilter: 'blur(20px)',
         }}>
 
           {/* Linha de luz no topo */}
-          <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, #00d4ff 30%, #00d4ff 70%, transparent)', flexShrink: 0 }} />
+          <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, #f97316 30%, #f97316 70%, transparent)', flexShrink: 0 }} />
 
           {/* Header */}
           <div style={{
@@ -269,14 +274,14 @@ export default function AssistenteVoz() {
                   border: '1px solid rgba(0,212,255,0.25)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00d4ff" strokeWidth="1.75" strokeLinecap="round">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="1.75" strokeLinecap="round">
                     <circle cx="12" cy="12" r="3"/>
                     <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
                   </svg>
                 </div>
                 <div>
                   <p style={{ color: '#e0f7ff', fontWeight: 900, fontSize: 14, lineHeight: 1, letterSpacing: 1 }}>NINJACONTRLOL</p>
-                  <p style={{ color: '#00d4ff', fontSize: 10, marginTop: 2, lineHeight: 1, opacity: 0.7 }}>
+                  <p style={{ color: '#f97316', fontSize: 10, marginTop: 2, lineHeight: 1, opacity: 0.7 }}>
                     {processando ? 'processando...' : escutando ? 'ouvindo...' : 'pronto · tecle J ou Espaço'}
                   </p>
                 </div>
@@ -344,7 +349,7 @@ export default function AssistenteVoz() {
                 marginTop: 10, padding: '8px 12px', borderRadius: 10,
                 background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.15)',
               }}>
-                <p style={{ fontSize: 11, color: '#00d4ff', opacity: 0.6, fontWeight: 700, marginBottom: 3, letterSpacing: 1 }}>OUVINDO</p>
+                <p style={{ fontSize: 11, color: '#f97316', opacity: 0.6, fontWeight: 700, marginBottom: 3, letterSpacing: 1 }}>OUVINDO</p>
                 <p style={{ fontSize: 12, color: '#cbd5e1', fontStyle: 'italic', lineHeight: 1.4 }}>
                   {transcript || <span style={{ color: '#334155' }}>Aguardando...</span>}
                 </p>
@@ -359,14 +364,15 @@ export default function AssistenteVoz() {
                 <p style={{ fontSize: 10, color: '#1e3a4a', fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>EXEMPLOS DE COMANDOS</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {[
-                    ['Quantos pedidos ativos?',          'Info'],
-                    ['Faturamento de hoje',               'Info'],
-                    ['Abre o PDV',                        'Navegar'],
-                    ['Pausa o Hot Roll no cardápio',      'Ação'],
-                    ['Cria um cupom de 10% chamado PROMO','Ação'],
-                    ['Adiciona salmão na lista',          'Lista'],
-                    ['Resumo do dia',                     'Info'],
-                    ['Boletos pendentes',                 'Info'],
+                    ['Quantos pedidos ativos?',                      'Info'],
+                    ['Faturamento de hoje',                           'Info'],
+                    ['Chegou salmão, 30kg, custou R$ 900',           'Insumo'],
+                    ['Chegou cream cheese, 5kg, custou R$ 150',      'Insumo'],
+                    ['Registra boleto da Cia do Salmão de R$ 500 vencendo em 7 dias', 'Boleto'],
+                    ['Pausa o Hot Roll no cardápio',                  'Ação'],
+                    ['Cria um cupom de 10% chamado PROMO',            'Ação'],
+                    ['Abre o PDV',                                    'Navegar'],
+                    ['Resumo do dia',                                 'Info'],
                   ].map(([cmd, tipo]) => (
                     <button key={cmd}
                       onClick={() => { if (!processando) processar(cmd); }}
@@ -378,7 +384,7 @@ export default function AssistenteVoz() {
                       <span style={{ fontSize: 11, color: '#64748b' }}>{cmd}</span>
                       <span style={{
                         fontSize: 9, fontWeight: 800, letterSpacing: 0.5,
-                        color: tipo === 'Ação' ? '#f59e0b' : tipo === 'Navegar' ? '#a78bfa' : tipo === 'Lista' ? '#34d399' : '#00d4ff',
+                        color: tipo === 'Ação' ? '#f97316' : tipo === 'Navegar' ? '#a78bfa' : tipo === 'Insumo' ? '#34d399' : tipo === 'Boleto' ? '#f43f5e' : '#38bdf8',
                         flexShrink: 0,
                       }}>{tipo}</span>
                     </button>
@@ -415,7 +421,7 @@ export default function AssistenteVoz() {
                         width: 14, height: 14, borderRadius: 4, flexShrink: 0, marginTop: 0.5,
                         background: 'rgba(0,212,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#00d4ff" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/></svg>
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/></svg>
                       </div>
                       <p style={{ fontSize: 11, color: h.ok ? '#94a3b8' : '#f87171', flex: 1, lineHeight: 1.5 }}>{h.resposta}</p>
                     </div>
