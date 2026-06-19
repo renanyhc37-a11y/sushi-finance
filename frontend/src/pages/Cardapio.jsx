@@ -7,7 +7,7 @@ import {
   Star, UtensilsCrossed, ShoppingCart, Settings, Pause, Circle, Leaf,
   Pencil, X, MessageSquare, Trash2, Check, CheckCircle2, Bike, Tag, MapPin,
   PartyPopper, Lightbulb, Smartphone, Banknote, CreditCard, User, ArrowLeft,
-  ArrowRight, Gift, Hand, ShoppingBag, Phone, Truck, Loader2, AlertTriangle, Clock,
+  ArrowRight, Gift, Hand, ShoppingBag, Phone, Truck, Loader2, AlertTriangle, Clock, Hash,
 } from 'lucide-react';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
@@ -730,7 +730,7 @@ export default function Cardapio() {
       return recentes;
     } catch { return []; }
   });
-  const [form, setForm] = useState({ nome: '', telefone: '', endereco: '', observacao: '', pagamento: '', troco_para: '', bairro: '', aniversario: '', agendar: false, agendado_para: '', tipo_entrega: 'entrega' });
+  const [form, setForm] = useState({ nome: '', telefone: '', endereco: '', numero: '', complemento: '', observacao: '', pagamento: '', troco_para: '', bairro: '', aniversario: '', agendar: false, agendado_para: '', tipo_entrega: 'entrega' });
   const [retiradaAtiva, setRetiradaAtiva] = useState(false);
   const [enderecoLoja, setEnderecoLoja] = useState('');
   const [pixData, setPixData] = useState(null); // { codigo, qr }
@@ -967,7 +967,8 @@ export default function Cardapio() {
   async function finalizarPedido(e) {
     e.preventDefault();
     if (!form.nome.trim()) return toast.error('Informe seu nome');
-    if (!ehRetirada && !form.endereco.trim()) return toast.error('Informe o endereço de entrega');
+    if (!ehRetirada && !form.endereco.trim()) return toast.error('Informe a rua de entrega');
+    if (!ehRetirada && !form.numero.trim()) return toast.error('Informe o número da residência');
     if (!form.pagamento) return toast.error('Selecione a forma de pagamento');
     setEnviando(true);
     try {
@@ -977,7 +978,7 @@ export default function Cardapio() {
         body: JSON.stringify({
           cliente_nome: form.nome,
           cliente_telefone: form.telefone,
-          cliente_endereco: ehRetirada ? '' : form.endereco,
+          cliente_endereco: ehRetirada ? '' : [form.endereco, form.numero, form.complemento].filter(Boolean).join(', '),
           tipo_entrega: form.tipo_entrega,
           observacao: form.observacao,
           forma_pagamento: form.pagamento,
@@ -1216,7 +1217,7 @@ export default function Cardapio() {
             </div>
           )}
 
-          <button onClick={() => { setPedidoFeito(null); setClienteEncontrado(null); setPixData(null); setForm({ nome:'', telefone:'', endereco:'', observacao:'', pagamento:'', troco_para:'', bairro:'', aniversario:'', agendar:false, agendado_para:'' }); setTela('menu'); }}
+          <button onClick={() => { setPedidoFeito(null); setClienteEncontrado(null); setPixData(null); setForm({ nome:'', telefone:'', endereco:'', numero:'', complemento:'', observacao:'', pagamento:'', troco_para:'', bairro:'', aniversario:'', agendar:false, agendado_para:'' }); setTela('menu'); }}
             className="w-full py-4 rounded-2xl font-bold text-white text-base active:scale-95 transition-transform"
             style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 8px 24px rgba(var(--accent-rgb),0.3)' }}>
             Fazer novo pedido
@@ -1589,7 +1590,11 @@ export default function Cardapio() {
                 <div className="p-4 space-y-3">
                   {[
                     { key: 'nome',     Icon: User,          label: 'Nome completo *',       placeholder: 'Ex: João Silva',          type: 'text' },
-                    ...(ehRetirada ? [] : [{ key: 'endereco', Icon: MapPin, label: 'Endereço de entrega *', placeholder: 'Rua, número, bairro...', type: 'text' }]),
+                    ...(ehRetirada ? [] : [
+                  { key: 'endereco',    Icon: MapPin,      label: 'Rua *',         placeholder: 'Nome da rua ou avenida',          type: 'text' },
+                  { key: 'numero',      Icon: Hash,        label: 'Número *',      placeholder: 'Ex: 123',                         type: 'text' },
+                  { key: 'complemento', Icon: MessageSquare, label: 'Complemento', placeholder: 'Apto, casa, bloco... (opcional)', type: 'text' },
+                ]),
                     { key: 'observacao',Icon: MessageSquare, label: 'Observações',           placeholder: 'Sem cebola...',           type: 'text' },
                   ].map(({ key, Icon, label, placeholder, type }) => (
                     <div key={key}>
