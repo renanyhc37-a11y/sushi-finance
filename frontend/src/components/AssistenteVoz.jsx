@@ -43,7 +43,7 @@ function OrbBtn({ escutando, processando, onClick }) {
   return (
     <button
       onClick={onClick}
-      title="Jarvis — Assistente de voz (J)"
+      title="NinjaControl — Assistente de voz (J)"
       style={{
         position: 'fixed',
         bottom: 24,
@@ -275,7 +275,7 @@ export default function AssistenteVoz() {
                   </svg>
                 </div>
                 <div>
-                  <p style={{ color: '#e0f7ff', fontWeight: 900, fontSize: 14, lineHeight: 1, letterSpacing: 1 }}>JARVIS</p>
+                  <p style={{ color: '#e0f7ff', fontWeight: 900, fontSize: 14, lineHeight: 1, letterSpacing: 1 }}>NINJACONTROL</p>
                   <p style={{ color: '#00d4ff', fontSize: 10, marginTop: 2, lineHeight: 1, opacity: 0.7 }}>
                     {processando ? 'processando...' : escutando ? 'ouvindo...' : 'pronto · tecle J ou Espaço'}
                   </p>
@@ -430,7 +430,7 @@ export default function AssistenteVoz() {
             padding: '8px 16px', borderTop: '1px solid rgba(0,212,255,0.07)', flexShrink: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
-            <span style={{ fontSize: 9, color: '#1e3a4a', fontWeight: 700, letterSpacing: 1 }}>PVAI · JARVIS v2</span>
+            <span style={{ fontSize: 9, color: '#1e3a4a', fontWeight: 700, letterSpacing: 1 }}>PVAI · NINJACONTROL v2</span>
             {historico.length > 0 && (
               <button onClick={() => setHistorico([])}
                 style={{ fontSize: 9, color: '#1e3a4a', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}>
