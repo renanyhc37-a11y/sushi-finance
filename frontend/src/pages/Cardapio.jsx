@@ -1607,7 +1607,29 @@ export default function Cardapio() {
                         onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
                     </div>
                   ))}
-                  <BairroSelector />
+                  {/* Bairro inline (evita re-mount por componente definido no render) */}
+                  {!ehRetirada && temBairros && (
+                    <div>
+                      <label className="text-xs text-zinc-600 font-medium flex items-center gap-1.5 mb-2">
+                        <MapPin size={13} strokeWidth={1.75} /> Bairro de entrega *
+                      </label>
+                      <input list="bairros-list" value={form.bairro}
+                        onChange={e => setForm(p => ({ ...p, bairro: e.target.value }))}
+                        placeholder="Digite ou selecione seu bairro"
+                        className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
+                        style={{ background: '#1a1a1a', border: `1px solid ${foraDeArea ? '#f87171' : 'rgba(255,255,255,0.08)'}` }} />
+                      <datalist id="bairros-list">
+                        {entrega.bairros.map(b => <option key={b.nome} value={b.nome} />)}
+                      </datalist>
+                      {foraDeArea ? (
+                        <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertTriangle size={12} strokeWidth={2} /> Não entregamos nesse bairro.</p>
+                      ) : form.bairro ? (
+                        <p className="text-xs mt-1.5" style={{ color: calcFrete() > 0 ? '#a78bfa' : '#4ade80' }}>
+                          Frete: {calcFrete() > 0 ? brl(calcFrete()) : 'Grátis'}{!bairroSel && entrega.aceita_fora && ' (taxa padrão)'}
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
                   <PagamentoSelector />
                   <ExtrasPedido />
                 </div>
