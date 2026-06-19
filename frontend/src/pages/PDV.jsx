@@ -1872,11 +1872,11 @@ export default function PDV() {
     return (
       <div key={pedido.id} className="rounded-2xl overflow-hidden transition-all duration-200"
         style={{
-          background: 'var(--space-elev)',
-          border: `2px solid ${eNovo ? '#3b82f6' : cfg.cor + '55'}`,
+          background: `linear-gradient(160deg, ${cfg.cor}12 0%, var(--space-elev) 55%)`,
+          border: `2px solid ${eNovo ? '#3b82f6' : cfg.cor + '66'}`,
           boxShadow: eNovo
-            ? '0 0 28px rgba(59,130,246,0.22), 0 2px 8px rgba(0,0,0,0.4)'
-            : `0 0 12px ${cfg.cor}18, 0 2px 8px rgba(0,0,0,0.35)`,
+            ? `0 0 28px rgba(59,130,246,0.22), 0 2px 8px rgba(0,0,0,0.15)`
+            : `0 0 14px ${cfg.cor}22, 0 2px 6px rgba(0,0,0,0.1)`,
         }}>
 
         {/* Barra colorida topo — mais grossa */}
