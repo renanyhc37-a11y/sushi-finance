@@ -221,6 +221,95 @@ router.get('/evolucao', (req, res) => {
   } catch (e) { console.error('evolucao:', e); res.status(500).json({ erro: e.message }); }
 });
 
+// ── Itens com comparação mês anterior ─────────────────────────────────────────
+router.get('/itens-comp', (req, res) => {
+  try {
+    const mes = getMes(req.query.mes);
+    const [ano, m] = mes.split('-').map(Number);
+    const prevDate = new Date(ano, m - 2, 1);
+    const mesPrev = prevDate.toISOString().slice(0, 7);
+
+    function enriquecer(vendas) {
+      return vendas.map(v => {
+        const r = _custoItemCardapio(v.nome);
+        const custo_unit = r?.c || 0;
+        const custo_total = custo_unit * v.qtd;
+        const preco_medio = v.qtd > 0 ? v.receita / v.qtd : 0;
+        const cmv_pct = preco_medio > 0 ? (custo_unit / preco_medio) * 100 : 0;
+        const margem = v.receita - custo_total;
+        const margem_pct = v.receita > 0 ? (margem / v.receita) * 100 : 0;
+        return {
+          nome: v.nome, qtd: v.qtd, receita: v.receita,
+          custo_unit: parseFloat(custo_unit.toFixed(2)),
+          custo_total: parseFloat(custo_total.toFixed(2)),
+          preco_medio: parseFloat(preco_medio.toFixed(2)),
+          cmv_pct: parseFloat(cmv_pct.toFixed(1)),
+          margem: parseFloat(margem.toFixed(2)),
+          margem_pct: parseFloat(margem_pct.toFixed(1)),
+          sem_ficha: !r || !r.tem_ficha,
+          custo_manual: !!r?.manual,
+        };
+      });
+    }
+
+    const atual = enriquecer(vendasDoMes(mes));
+    const prevMap = enriquecer(vendasDoMes(mesPrev)).reduce((acc, v) => {
+      acc[v.nome] = v; return acc;
+    }, {});
+
+    const diasRow = db.prepare(`
+      SELECT COUNT(DISTINCT date(created_at)) as dias
+      FROM pdv_pedidos WHERE substr(created_at,1,7)=? AND status!='cancelado'
+    `).get(mes);
+
+    const pedidosRow = db.prepare(`
+      SELECT COUNT(*) as total FROM pdv_pedidos
+      WHERE substr(created_at,1,7)=? AND status!='cancelado'
+    `).get(mes);
+
+    const itens = atual.map(item => ({
+      ...item,
+      prev_qtd: prevMap[item.nome]?.qtd || 0,
+      prev_receita: prevMap[item.nome]?.receita || 0,
+      prev_margem: prevMap[item.nome]?.margem || 0,
+    }));
+
+    // Itens vendidos no mês anterior mas não no atual
+    const zerados = Object.values(prevMap)
+      .filter(p => !atual.find(a => a.nome === p.nome))
+      .map(p => ({
+        nome: p.nome, qtd: 0, receita: 0, custo_unit: p.custo_unit,
+        custo_total: 0, preco_medio: p.preco_medio, cmv_pct: p.cmv_pct,
+        margem: 0, margem_pct: 0, sem_ficha: p.sem_ficha, custo_manual: p.custo_manual,
+        prev_qtd: p.qtd, prev_receita: p.receita, prev_margem: p.margem,
+      }));
+
+    res.json({
+      mes, mesPrev,
+      dias_com_vendas: diasRow.dias || 0,
+      total_pedidos: pedidosRow.total || 0,
+      itens: [...itens, ...zerados],
+    });
+  } catch (e) { console.error('itens-comp:', e); res.status(500).json({ erro: e.message }); }
+});
+
+// ── Histórico mensal de um item específico ─────────────────────────────────────
+router.get('/item-historico', (req, res) => {
+  try {
+    const nome = req.query.nome;
+    if (!nome) return res.status(400).json({ erro: 'nome obrigatório' });
+    const rows = db.prepare(`
+      SELECT substr(pp.created_at,1,7) as mes,
+             SUM(pi.quantidade) as qtd,
+             SUM(pi.quantidade * pi.valor_unitario) as receita
+      FROM pdv_itens pi JOIN pdv_pedidos pp ON pp.id = pi.pedido_id
+      WHERE pi.item_nome = ? AND pp.status != 'cancelado'
+      GROUP BY mes ORDER BY mes DESC LIMIT 6
+    `).all(nome);
+    res.json(rows.reverse());
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
 // Garante tabela config (pode ter sido criada pelo auth)
 db.exec(`CREATE TABLE IF NOT EXISTS config (chave TEXT PRIMARY KEY, valor TEXT NOT NULL)`);
 
