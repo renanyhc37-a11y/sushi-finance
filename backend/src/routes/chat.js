@@ -6,6 +6,10 @@ const wa = require('../services/whatsapp');
 
 const router = Router();
 
+// Migrations
+try { db.exec('ALTER TABLE wa_mensagens ADD COLUMN reply_to_id INTEGER'); } catch {}
+try { db.exec('ALTER TABLE wa_conversas ADD COLUMN fixada INTEGER DEFAULT 0'); } catch {}
+
 // GET /api/chat/conversas
 router.get('/conversas', (req, res) => {
   const { arquivadas = '0', busca = '' } = req.query;
@@ -24,7 +28,10 @@ router.get('/conversas', (req, res) => {
 // GET /api/chat/conversas/:id/mensagens
 router.get('/conversas/:id/mensagens', (req, res) => {
   const msgs = db.prepare(`
-    SELECT * FROM wa_mensagens WHERE conversa_id=? ORDER BY created_at ASC
+    SELECT m.*, r.corpo as reply_corpo, r.de_mim as reply_de_mim, r.tipo as reply_tipo
+    FROM wa_mensagens m
+    LEFT JOIN wa_mensagens r ON r.id = m.reply_to_id
+    WHERE m.conversa_id=? ORDER BY m.created_at ASC
   `).all(req.params.id);
 
   // Marca como lidas
@@ -38,7 +45,7 @@ router.get('/conversas/:id/mensagens', (req, res) => {
 
 // POST /api/chat/conversas/:id/responder
 router.post('/conversas/:id/responder', async (req, res) => {
-  const { corpo } = req.body;
+  const { corpo, reply_to_id } = req.body;
   if (!corpo?.trim()) return res.status(400).json({ erro: 'Mensagem vazia' });
 
   const conversa = db.prepare('SELECT * FROM wa_conversas WHERE id=?').get(req.params.id);
@@ -46,10 +53,34 @@ router.post('/conversas/:id/responder', async (req, res) => {
 
   try {
     await wa.enviarEsalvar(conversa, corpo.trim(), false);
-    const mensagem = db.prepare(
+    let mensagem = db.prepare(
       'SELECT * FROM wa_mensagens WHERE conversa_id=? AND de_mim=1 ORDER BY id DESC LIMIT 1'
     ).get(req.params.id);
+    if (reply_to_id && mensagem) {
+      db.prepare('UPDATE wa_mensagens SET reply_to_id=? WHERE id=?').run(reply_to_id, mensagem.id);
+      const quoted = db.prepare('SELECT corpo, de_mim, tipo FROM wa_mensagens WHERE id=?').get(reply_to_id);
+      mensagem = { ...mensagem, reply_to_id, reply_corpo: quoted?.corpo, reply_de_mim: quoted?.de_mim, reply_tipo: quoted?.tipo };
+    }
     res.json({ ok: true, mensagem });
+  } catch (e) {
+    res.status(500).json({ erro: e.message });
+  }
+});
+
+// POST /api/chat/conversas/iniciar — inicia nova conversa com número
+router.post('/conversas/iniciar', async (req, res) => {
+  const { telefone, corpo } = req.body;
+  if (!telefone?.trim() || !corpo?.trim()) return res.status(400).json({ erro: 'Telefone e mensagem obrigatórios' });
+  const tel = telefone.replace(/\D/g, '');
+  if (tel.length < 8) return res.status(400).json({ erro: 'Telefone inválido' });
+  let conversa = db.prepare('SELECT * FROM wa_conversas WHERE telefone=?').get(tel);
+  if (!conversa) {
+    const r = db.prepare("INSERT INTO wa_conversas(telefone,nome,ia_ativa,arquivada,ultima_em) VALUES(?,?,1,0,datetime('now'))").run(tel, tel);
+    conversa = db.prepare('SELECT * FROM wa_conversas WHERE id=?').get(r.lastInsertRowid);
+  }
+  try {
+    await wa.enviarEsalvar(conversa, corpo.trim(), false);
+    res.json({ ok: true, conversa });
   } catch (e) {
     res.status(500).json({ erro: e.message });
   }
@@ -113,15 +144,16 @@ router.post('/conversas/:id/ia-sugerir', async (req, res) => {
 
 // PATCH /api/chat/conversas/:id
 router.patch('/conversas/:id', (req, res) => {
-  const { ia_ativa, arquivada, nome, tags, assumida } = req.body;
   const conversa = db.prepare('SELECT * FROM wa_conversas WHERE id=?').get(req.params.id);
   if (!conversa) return res.status(404).json({ erro: 'Não encontrada' });
 
+  const { ia_ativa, arquivada, nome, tags, assumida, fixada } = req.body;
   if (ia_ativa !== undefined) db.prepare('UPDATE wa_conversas SET ia_ativa=? WHERE id=?').run(ia_ativa ? 1 : 0, conversa.id);
   if (arquivada !== undefined) db.prepare('UPDATE wa_conversas SET arquivada=? WHERE id=?').run(arquivada ? 1 : 0, conversa.id);
   if (nome !== undefined) db.prepare('UPDATE wa_conversas SET nome=? WHERE id=?').run(nome, conversa.id);
   if (tags !== undefined) db.prepare('UPDATE wa_conversas SET tags=? WHERE id=?').run(JSON.stringify(tags), conversa.id);
   if (assumida !== undefined) db.prepare('UPDATE wa_conversas SET assumida=?, assumida_em=datetime(\'now\'), ia_ativa=? WHERE id=?').run(assumida ? 1 : 0, assumida ? 0 : 1, conversa.id);
+  if (fixada !== undefined) db.prepare('UPDATE wa_conversas SET fixada=? WHERE id=?').run(fixada ? 1 : 0, conversa.id);
 
   res.json(db.prepare('SELECT * FROM wa_conversas WHERE id=?').get(conversa.id));
 });

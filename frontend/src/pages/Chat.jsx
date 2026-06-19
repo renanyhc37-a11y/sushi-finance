@@ -9,7 +9,8 @@ import {
   AlertTriangle, Mail, Users, DollarSign, User, Pencil, Save, Handshake,
   Smile, PartyPopper, Drama, ArrowLeft, Trash2, Eye, EyeOff, CheckCircle2,
   Tag, Folder, Clock, Circle, ChevronLeft, Image, FileText, Mic, Video,
-  Download, ZoomIn, Phone, MoreVertical, CheckCheck,
+  Download, ZoomIn, Phone, MoreVertical, CheckCheck, Reply, Copy, Pin,
+  PinOff, MessageSquarePlus, ChevronDown, Info,
 } from 'lucide-react';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
@@ -207,6 +208,35 @@ function playNotif() {
   } catch {}
 }
 
+// ── Formata texto WhatsApp (*bold*, _italic_, ~strike~) ───────
+function fmtWA(texto) {
+  if (!texto) return '';
+  return texto
+    .replace(/\*(.*?)\*/g, '<strong>$1</strong>')
+    .replace(/_(.*?)_/g, '<em>$1</em>')
+    .replace(/~(.*?)~/g, '<s>$1</s>');
+}
+
+// ── Cotação de mensagem respondida ────────────────────────────
+function ReplyQuote({ corpo, deMim, compact = false, onClick }) {
+  const bg = deMim ? 'rgba(0,168,132,0.15)' : 'rgba(255,255,255,0.07)';
+  const border = deMim ? WA.accent : WA.txtMeta;
+  return (
+    <div onClick={onClick} style={{
+      borderLeft: `3px solid ${border}`, background: bg, borderRadius: '0 6px 6px 0',
+      padding: compact ? '4px 8px' : '6px 10px', marginBottom: 4,
+      cursor: onClick ? 'pointer' : 'default', maxWidth: '100%',
+    }}>
+      <div style={{ fontSize: 11, color: border, fontWeight: 700, marginBottom: 2 }}>
+        {deMim ? 'Você' : 'Cliente'}
+      </div>
+      <div style={{ fontSize: 12, color: WA.txtSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: compact ? 200 : 280 }}>
+        {corpo || '📎 Mídia'}
+      </div>
+    </div>
+  );
+}
+
 // ── Estilo de input global ────────────────────────────────────
 const IS = { background: WA.input, border: 'none', outline: 'none', color: WA.txtPrimary, borderRadius: 8 };
 
@@ -243,16 +273,33 @@ export default function Chat() {
   const [filtroCategoria, setFiltroCategoria]   = useState('todas');
   const [lightbox, setLightbox]                 = useState(null);
   const [mostrarInfo, setMostrarInfo]           = useState(false);
+  const [replyTo, setReplyTo]                   = useState(null);
+  const [menuMsg, setMenuMsg]                   = useState(null);
+  const [scrollAtBottom, setScrollAtBottom]     = useState(true);
+  const [mostrarNovaConv, setMostrarNovaConv]   = useState(false);
+  const [novaConvTel, setNovaConvTel]           = useState('');
+  const [novaConvMsg, setNovaConvMsg]           = useState('');
+  const [iaDigitando, setIaDigitando]           = useState(false);
 
-  const fimRef   = useRef(null);
-  const inputRef = useRef(null);
+  const fimRef       = useRef(null);
+  const inputRef     = useRef(null);
+  const msgsAreaRef  = useRef(null);
   const convAtivaRef = useRef(null);
   convAtivaRef.current = convAtiva;
   const somAtivoRef = useRef(somAtivo);
   somAtivoRef.current = somAtivo;
   const carregarConversasRef = useRef(null);
 
-  useEffect(() => { fimRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
+  useEffect(() => {
+    if (scrollAtBottom) fimRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [mensagens, scrollAtBottom]);
+
+  function handleMsgsScroll() {
+    const el = msgsAreaRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+    setScrollAtBottom(atBottom);
+  }
 
   const carregarConversas = useCallback(async () => {
     const r = await fetch(`${BASE}/chat/conversas?arquivadas=${abaConv==='arquivadas'?1:0}&busca=${busca}`, { headers: authH() });
@@ -348,12 +395,12 @@ export default function Chat() {
   async function enviar(e) {
     e?.preventDefault();
     const corpo = texto.trim(); if (!corpo || !convAtiva) return;
-    setEnviando(true); setTexto(''); setSugestao('');
+    const replyId = replyTo?.id || null;
+    setEnviando(true); setTexto(''); setSugestao(''); setReplyTo(null); setScrollAtBottom(true);
     try {
-      const r = await fetch(`${BASE}/chat/conversas/${convAtiva.id}/responder`, { method: 'POST', headers: authJ(), body: JSON.stringify({ corpo }) });
+      const r = await fetch(`${BASE}/chat/conversas/${convAtiva.id}/responder`, { method: 'POST', headers: authJ(), body: JSON.stringify({ corpo, reply_to_id: replyId }) });
       if (!r.ok) { const d = await r.json(); throw new Error(d.erro || 'Erro'); }
       const data = await r.json();
-      // Adiciona imediatamente ao estado (sem depender só do socket)
       if (data.mensagem) {
         setMensagens(m => m.some(x => x.id === data.mensagem.id) ? m : [...m, data.mensagem]);
       }
@@ -363,14 +410,14 @@ export default function Chat() {
 
   async function pedirSugestao() {
     if (!convAtiva || buscandoSugestao) return;
-    setBuscandoSugestao(true); setSugestao('');
+    setBuscandoSugestao(true); setSugestao(''); setIaDigitando(true);
     try {
       const ultima = [...mensagens].reverse().find(m => m.de_mim === 0);
       const r = await fetch(`${BASE}/chat/conversas/${convAtiva.id}/ia-sugerir`, { method: 'POST', headers: authJ(), body: JSON.stringify({ mensagem_cliente: ultima?.corpo || '' }) });
       const d = await r.json();
       if (d.sugestao) setSugestao(d.sugestao); else toast.error(d.erro || 'Sem sugestão');
     } catch (err) { toast.error(err.message); }
-    setBuscandoSugestao(false);
+    setBuscandoSugestao(false); setIaDigitando(false);
   }
 
   async function toggleIA(conv) {
@@ -382,6 +429,19 @@ export default function Chat() {
     const assumida = !conv.assumida;
     const r = await fetch(`${BASE}/chat/conversas/${conv.id}`, { method: 'PATCH', headers: authJ(), body: JSON.stringify({ assumida }) });
     if (r.ok) { const u = await r.json(); setConversas(p => p.map(c => c.id === conv.id ? u : c)); setConvAtiva(u); toast.success(assumida ? '✋ Você assumiu a conversa' : '🤖 IA reativada'); }
+  }
+
+  async function fixar(conv) {
+    const r = await fetch(`${BASE}/chat/conversas/${conv.id}`, { method: 'PATCH', headers: authJ(), body: JSON.stringify({ fixada: !conv.fixada }) });
+    if (r.ok) { const u = await r.json(); setConversas(p => p.map(c => c.id === conv.id ? u : c)); if (convAtiva?.id === conv.id) setConvAtiva(u); }
+  }
+
+  async function iniciarConversa() {
+    if (!novaConvTel.trim() || !novaConvMsg.trim()) return toast.error('Preencha telefone e mensagem');
+    const r = await fetch(`${BASE}/chat/conversas/iniciar`, { method: 'POST', headers: authJ(), body: JSON.stringify({ telefone: novaConvTel, corpo: novaConvMsg }) });
+    const d = await r.json();
+    if (d.ok) { toast.success('Mensagem enviada!'); setMostrarNovaConv(false); setNovaConvTel(''); setNovaConvMsg(''); carregarConversas(); abrirConversa(d.conversa); }
+    else toast.error(d.erro || 'Erro ao enviar');
   }
 
   async function arquivar(conv) {
@@ -433,7 +493,9 @@ export default function Chat() {
 
   const statusColor = { pronto: WA.accent, aguardando_qr: '#f59e0b', conectando: '#3b82f6', desconectado: WA.txtMeta, erro: '#ef4444' }[waStatus] || WA.txtMeta;
   const statusLabel = { pronto: 'Conectado', aguardando_qr: 'Aguardando QR', conectando: 'Conectando...', desconectado: 'Desconectado', erro: 'Erro' }[waStatus] || waStatus;
-  const conversasFiltradas = conversas.filter(c => (c.nome || c.telefone || '').toLowerCase().includes(busca.toLowerCase()));
+  const conversasFiltradas = conversas
+    .filter(c => (c.nome || c.telefone || '').toLowerCase().includes(busca.toLowerCase()))
+    .sort((a, b) => (b.fixada || 0) - (a.fixada || 0));
 
   const navItems = [
     { id: 'chat',        Icon: MessageCircle, label: 'Chat' },
@@ -497,6 +559,10 @@ export default function Chat() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
+              <button onClick={() => setMostrarNovaConv(true)} title="Nova conversa"
+                style={{ width: 36, height: 36, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: WA.txtSecondary }}>
+                <MessageSquarePlus size={18} strokeWidth={1.75} />
+              </button>
               <button onClick={simularMensagem} title="Simular mensagem teste"
                 style={{ width: 36, height: 36, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: WA.txtSecondary }}>
                 <FlaskConical size={18} strokeWidth={1.75} />
@@ -541,16 +607,18 @@ export default function Chat() {
               const naoLidas = Number(conv.nao_lidas) > 0;
               return (
                 <div key={conv.id} onClick={() => abrirConversa(conv)}
+                  onContextMenu={e => { e.preventDefault(); fixar(conv); }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px',
                     cursor: 'pointer', borderBottom: `1px solid ${WA.border}`,
-                    background: ativa ? WA.active : naoLidas ? 'rgba(0,168,132,0.04)' : 'transparent',
+                    background: ativa ? WA.active : naoLidas ? 'rgba(0,168,132,0.04)' : conv.fixada ? 'rgba(255,255,255,0.02)' : 'transparent',
                     transition: 'background 0.1s',
                   }}>
                   <Avatar nome={conv.nome || conv.telefone} fotoUrl={conv.foto_url} size={48} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
-                      <span style={{ color: WA.txtPrimary, fontWeight: 600, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ color: WA.txtPrimary, fontWeight: 600, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {conv.fixada ? <Pin size={10} style={{ color: WA.accent, flexShrink: 0 }} /> : null}
                         {conv.nome || conv.telefone}
                       </span>
                       <span style={{ color: naoLidas ? WA.unread : WA.txtMeta, fontSize: 11, flexShrink: 0, marginLeft: 6 }}>
@@ -585,7 +653,8 @@ export default function Chat() {
       )}
 
       {/* ── Área principal ── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: WA.bg }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: WA.bg }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* ── CHAT VAZIO ── */}
         {aba === 'chat' && !convAtiva && (
@@ -666,10 +735,22 @@ export default function Chat() {
                   {convAtiva.assumida ? <><Hand size={13} /> Você</> : <><Bot size={13} /> IA</>}
                 </button>
 
+                {/* Fixar */}
+                <button onClick={() => fixar(convAtiva)} title={convAtiva.fixada ? 'Desafixar' : 'Fixar conversa'}
+                  style={{ width: 36, height: 36, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: convAtiva.fixada ? WA.accent : WA.txtSecondary }}>
+                  <Pin size={16} strokeWidth={1.75} />
+                </button>
+
                 {/* Arquivar */}
                 <button onClick={() => arquivar(convAtiva)} title={convAtiva.arquivada ? 'Restaurar' : 'Arquivar'}
                   style={{ width: 36, height: 36, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: WA.txtSecondary }}>
                   <Folder size={17} strokeWidth={1.75} />
+                </button>
+
+                {/* Info contato */}
+                <button onClick={() => setMostrarInfo(p => !p)} title="Informações do contato"
+                  style={{ width: 36, height: 36, borderRadius: '50%', background: mostrarInfo ? 'rgba(255,255,255,0.1)' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: mostrarInfo ? WA.accent : WA.txtSecondary }}>
+                  <Info size={17} strokeWidth={1.75} />
                 </button>
               </div>
             </div>
@@ -696,10 +777,10 @@ export default function Chat() {
             )}
 
             {/* Mensagens */}
-            <div style={{
-              flex: 1, overflowY: 'auto', padding: '12px 16px',
-              backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'300\' height=\'300\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Crect width=\'300\' height=\'300\' fill=\'%230b141a\'/%3E%3C/svg%3E")',
+            <div ref={msgsAreaRef} onScroll={handleMsgsScroll} style={{
+              flex: 1, overflowY: 'auto', padding: '12px 16px', position: 'relative',
               backgroundColor: '#0b141a',
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Ccircle cx='10' cy='10' r='1.2' fill='%23ffffff08'/%3E%3Ccircle cx='40' cy='10' r='1.2' fill='%23ffffff08'/%3E%3Ccircle cx='70' cy='10' r='1.2' fill='%23ffffff08'/%3E%3Ccircle cx='25' cy='25' r='1.2' fill='%23ffffff08'/%3E%3Ccircle cx='55' cy='25' r='1.2' fill='%23ffffff08'/%3E%3Ccircle cx='10' cy='40' r='1.2' fill='%23ffffff08'/%3E%3Ccircle cx='40' cy='40' r='1.2' fill='%23ffffff08'/%3E%3Ccircle cx='70' cy='40' r='1.2' fill='%23ffffff08'/%3E%3Ccircle cx='25' cy='55' r='1.2' fill='%23ffffff08'/%3E%3Ccircle cx='55' cy='55' r='1.2' fill='%23ffffff08'/%3E%3Ccircle cx='10' cy='70' r='1.2' fill='%23ffffff08'/%3E%3Ccircle cx='40' cy='70' r='1.2' fill='%23ffffff08'/%3E%3Ccircle cx='70' cy='70' r='1.2' fill='%23ffffff08'/%3E%3C/svg%3E")`,
             }}>
               {mensagens.length === 0 && (
                 <div style={{ textAlign: 'center', color: WA.txtMeta, fontSize: 13, marginTop: 40 }}>Nenhuma mensagem ainda</div>
@@ -710,8 +791,27 @@ export default function Chat() {
                 const minha = msg.de_mim === 1;
                 const temMidia = msg.tipo && msg.tipo !== 'texto' && msg.media_url;
                 const temTexto = msg.corpo && msg.corpo !== `[${msg.tipo}]` && msg.corpo.trim();
+                const comMenu = menuMsg === msg.id;
                 return (
-                  <div key={item.key} style={{ display: 'flex', justifyContent: minha ? 'flex-end' : 'flex-start', marginBottom: 4 }}>
+                  <div key={item.key}
+                    onMouseEnter={() => setMenuMsg(msg.id)}
+                    onMouseLeave={() => setMenuMsg(null)}
+                    style={{ display: 'flex', justifyContent: minha ? 'flex-end' : 'flex-start', marginBottom: 4, gap: 6, alignItems: 'flex-end' }}>
+
+                    {/* Ações hover (lado esquerdo para mensagem minha) */}
+                    {minha && comMenu && (
+                      <div style={{ display: 'flex', gap: 2, marginBottom: 8 }}>
+                        <button onClick={() => { setReplyTo(msg); setTimeout(() => inputRef.current?.focus(), 50); }} title="Responder"
+                          style={{ width: 28, height: 28, borderRadius: '50%', background: WA.header, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: WA.txtSecondary }}>
+                          <Reply size={14} />
+                        </button>
+                        <button onClick={() => navigator.clipboard.writeText(msg.corpo || '')} title="Copiar"
+                          style={{ width: 28, height: 28, borderRadius: '50%', background: WA.header, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: WA.txtSecondary }}>
+                          <Copy size={13} />
+                        </button>
+                      </div>
+                    )}
+
                     <div style={{
                       maxWidth: '65%', minWidth: 80,
                       background: minha ? WA.sent : WA.received,
@@ -720,11 +820,13 @@ export default function Chat() {
                       position: 'relative',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.35)',
                     }}>
+                      {msg.reply_corpo && (
+                        <ReplyQuote corpo={msg.reply_corpo} deMim={msg.reply_de_mim === 1} compact />
+                      )}
                       {temMidia && <MidiaBolha msg={msg} onImageClick={setLightbox} />}
                       {temTexto && (
-                        <div style={{ fontSize: 14, color: WA.txtPrimary, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', paddingBottom: 2, paddingRight: temMidia ? 0 : 40 }}>
-                          {msg.corpo}
-                        </div>
+                        <div style={{ fontSize: 14, color: WA.txtPrimary, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', paddingBottom: 2, paddingRight: temMidia ? 0 : 40 }}
+                          dangerouslySetInnerHTML={{ __html: fmtWA(msg.corpo) }} />
                       )}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 3, marginTop: temTexto ? 2 : 4, paddingRight: temMidia && !temTexto ? 6 : 0 }}>
                         {msg.ia === 1 && <span style={{ fontSize: 9, color: '#34d399', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 2 }}><Bot size={9} /> IA</span>}
@@ -732,11 +834,45 @@ export default function Chat() {
                         {minha && <CheckCheck size={14} style={{ color: WA.accent }} />}
                       </div>
                     </div>
+
+                    {/* Ações hover (lado direito para mensagem do cliente) */}
+                    {!minha && comMenu && (
+                      <div style={{ display: 'flex', gap: 2, marginBottom: 8 }}>
+                        <button onClick={() => { setReplyTo(msg); setTimeout(() => inputRef.current?.focus(), 50); }} title="Responder"
+                          style={{ width: 28, height: 28, borderRadius: '50%', background: WA.header, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: WA.txtSecondary }}>
+                          <Reply size={14} />
+                        </button>
+                        <button onClick={() => navigator.clipboard.writeText(msg.corpo || '')} title="Copiar"
+                          style={{ width: 28, height: 28, borderRadius: '50%', background: WA.header, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: WA.txtSecondary }}>
+                          <Copy size={13} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
+
+              {/* Indicador de digitando */}
+              {iaDigitando && (
+                <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 8 }}>
+                  <div style={{ background: WA.received, borderRadius: '12px 12px 12px 2px', padding: '12px 16px', boxShadow: '0 1px 2px rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 9, color: '#38bdf8', fontWeight: 700, marginRight: 4 }}>IA</span>
+                    {[0, 1, 2].map(i => (
+                      <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: WA.txtMeta, animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+                    ))}
+                  </div>
+                </div>
+              )}
               <div ref={fimRef} />
             </div>
+
+            {/* Botão scroll para baixo */}
+            {!scrollAtBottom && (
+              <button onClick={() => { setScrollAtBottom(true); fimRef.current?.scrollIntoView({ behavior: 'smooth' }); }}
+                style={{ position: 'absolute', bottom: 16, right: 16, zIndex: 10, width: 40, height: 40, borderRadius: '50%', background: WA.header, border: `1px solid ${WA.border}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: WA.txtSecondary, boxShadow: '0 2px 8px rgba(0,0,0,0.5)' }}>
+                <ChevronDown size={20} />
+              </button>
+            )}
 
             {/* Sugestão IA */}
             {sugestao && (
@@ -794,6 +930,19 @@ export default function Chat() {
                   height={380}
                   width={320}
                 />
+              </div>
+            )}
+
+            {/* Barra de reply */}
+            {replyTo && (
+              <div style={{ padding: '6px 12px', background: '#1a2832', borderTop: `1px solid ${WA.border}`, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <Reply size={14} style={{ color: WA.accent, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <ReplyQuote corpo={replyTo.corpo} deMim={replyTo.de_mim === 1} compact />
+                </div>
+                <button onClick={() => setReplyTo(null)} style={{ width: 28, height: 28, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: WA.txtMeta, flexShrink: 0 }}>
+                  <X size={15} />
+                </button>
               </div>
             )}
 
@@ -1084,14 +1233,101 @@ export default function Chat() {
             </div>
           </div>
         )}
-      </div>
+      </div>{/* fim div coluna principal */}
+
+      {/* ── PAINEL INFO CONTATO (lateral direita) ── */}
+      {aba === 'chat' && convAtiva && mostrarInfo && (
+        <div style={{ width: 300, flexShrink: 0, borderLeft: `1px solid ${WA.border}`, background: WA.sidebar, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '16px', background: WA.header, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ color: WA.txtPrimary, fontWeight: 700, fontSize: 15 }}>Informações</span>
+            <button onClick={() => setMostrarInfo(false)} style={{ width: 30, height: 30, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: WA.txtMeta }}><X size={16} /></button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 16px 16px' }}>
+            <Avatar nome={convAtiva.nome || convAtiva.telefone} fotoUrl={convAtiva.foto_url} size={80} />
+            <div style={{ marginTop: 12, textAlign: 'center' }}>
+              <div style={{ color: WA.txtPrimary, fontWeight: 700, fontSize: 18 }}>{convAtiva.nome || 'Sem nome'}</div>
+              <div style={{ color: WA.txtMeta, fontSize: 13, marginTop: 4 }}>+{convAtiva.telefone}</div>
+            </div>
+          </div>
+          <div style={{ padding: '0 16px 16px' }}>
+            {(() => { const tags = JSON.parse(convAtiva.tags || '[]'); return tags.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 10, color: WA.txtMeta, fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>ETIQUETAS</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {tags.map(t => { const tag = TAGS_OPCOES.find(x => x.id === t); return tag ? <span key={t} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 12, background: `${tag.color}20`, color: tag.color, fontWeight: 700 }}>{tag.label}</span> : null; })}
+                </div>
+              </div>
+            );})()}
+            <div style={{ borderRadius: 10, padding: '12px', background: WA.header, border: `1px solid ${WA.border}`, marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: WA.txtMeta, marginBottom: 6 }}>ATENDIMENTO</div>
+              <div style={{ fontSize: 13, color: WA.txtPrimary, display: 'flex', alignItems: 'center', gap: 6 }}>
+                {convAtiva.assumida ? <><Hand size={14} style={{ color: WA.accent }} /> Atendimento humano</> : <><Bot size={14} style={{ color: '#0ea5e9' }} /> IA ativa</>}
+              </div>
+            </div>
+            {pedidosCliente.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 10, color: WA.txtMeta, fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>PEDIDOS ({pedidosCliente.length})</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {pedidosCliente.slice(0, 5).map(p => (
+                    <div key={p.id} style={{ borderRadius: 8, padding: '8px 10px', background: WA.header, border: `1px solid ${WA.border}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: WA.txtPrimary }}>#{p.numero}</span>
+                        <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 6, background: p.status === 'entregue' ? '#16a34a20' : 'rgba(0,168,132,0.15)', color: p.status === 'entregue' ? '#22c55e' : WA.accent }}>{p.status}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: WA.txtMeta, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.itens || '—'}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#f59e0b', marginTop: 3 }}>R$ {Number(p.total || 0).toFixed(2)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+              <button onClick={() => arquivar(convAtiva)} style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: WA.input, color: WA.txtMeta, border: 'none', cursor: 'pointer' }}>
+                {convAtiva.arquivada ? 'Restaurar' : 'Arquivar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      </div>{/* fim div row area principal */}
+
+      {/* Modal nova conversa */}
+      {mostrarNovaConv && (
+        <div onClick={() => setMostrarNovaConv(false)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 380, background: WA.header, borderRadius: 16, padding: 24, border: `1px solid ${WA.border}`, boxShadow: '0 20px 60px rgba(0,0,0,0.7)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div style={{ color: WA.txtPrimary, fontWeight: 700, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <MessageSquarePlus size={18} style={{ color: WA.accent }} /> Nova conversa
+              </div>
+              <button onClick={() => setMostrarNovaConv(false)} style={{ width: 28, height: 28, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: WA.txtMeta }}><X size={15} /></button>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: WA.txtMeta, marginBottom: 6 }}>TELEFONE (com DDD)</div>
+              <input value={novaConvTel} onChange={e => setNovaConvTel(e.target.value)} placeholder="Ex: 44999887766"
+                style={{ ...IS, width: '100%', padding: '10px 12px', fontSize: 14, display: 'block' }} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: WA.txtMeta, marginBottom: 6 }}>PRIMEIRA MENSAGEM</div>
+              <textarea value={novaConvMsg} onChange={e => setNovaConvMsg(e.target.value)} placeholder="Olá! Tudo bem?" rows={3}
+                style={{ ...IS, width: '100%', padding: '10px 12px', fontSize: 14, resize: 'none', lineHeight: 1.5 }} />
+            </div>
+            <button onClick={iniciarConversa} style={{ width: '100%', padding: '12px', borderRadius: 10, fontWeight: 700, fontSize: 14, background: WA.accent, color: '#fff', border: 'none', cursor: 'pointer' }}>
+              Enviar mensagem
+            </button>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+        strong { font-weight: 700; }
+        em { font-style: italic; }
       `}</style>
     </div>
   );
