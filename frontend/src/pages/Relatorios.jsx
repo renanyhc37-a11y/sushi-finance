@@ -208,109 +208,118 @@ export default function Relatorios() {
 
           {/* ───── ABA RANKING ───── */}
           {aba === 'ranking' && (
-            <div className="card overflow-hidden">
-              {/* barra de busca e ordenação */}
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-                <div className="relative flex-1 max-w-xs">
+            <div className="space-y-3">
+              {/* busca + ordenação */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input value={busca} onChange={e => setBusca(e.target.value)}
-                    placeholder="Buscar produto..." className="input pl-9 pr-8 py-2 text-sm w-full" />
+                    placeholder="Buscar produto..." className="input pl-9 pr-8 py-2 text-sm w-60" />
                   {busca && <button onClick={() => setBusca('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><X size={12} /></button>}
                 </div>
-                <span className="text-xs text-slate-400">{itensFiltrados.length} produtos</span>
+                <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <span>Ordenar por:</span>
+                  {[
+                    { col: 'receita', label: 'Receita' },
+                    { col: 'qtd', label: 'Quantidade' },
+                    { col: 'margem_pct', label: 'Margem' },
+                    { col: 'nome', label: 'Nome' },
+                  ].map(o => (
+                    <button key={o.col} onClick={() => toggleOrd(o.col)}
+                      className={`px-3 py-1 rounded-full border transition-all ${ord.col === o.col ? 'bg-slate-800 text-white border-slate-800' : 'border-slate-200 text-slate-500 hover:border-slate-400'}`}>
+                      {o.label} {ord.col === o.col && (ord.dir === 'desc' ? '↓' : '↑')}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-slate-400 ml-auto">{itensFiltrados.length} produtos</span>
               </div>
 
-              {/* tabela */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100">
-                      <th className="text-left text-xs font-semibold text-slate-400 uppercase tracking-wide px-5 py-3 w-6">#</th>
-                      <ColH col="nome" label="Produto" ord={ord} toggle={toggleOrd} />
-                      <ColH col="qtd" label="Qtd" ord={ord} toggle={toggleOrd} right />
-                      <ColH col="receita" label="Receita" ord={ord} toggle={toggleOrd} right />
-                      <th className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wide px-4 py-3">Participação</th>
-                      <ColH col="margem_pct" label="Margem" ord={ord} toggle={toggleOrd} right />
-                      <th className="text-right text-xs font-semibold text-slate-400 uppercase tracking-wide px-4 py-3">Vs. mês passado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {itensFiltrados.map((item, idx) => {
-                      const fatTotal = kpis.fat;
-                      const partic = fatTotal > 0 ? (item.receita / fatTotal) * 100 : 0;
-                      const t = tend(item.receita, item.prev_receita);
-                      const abc = abcMap[item.nome];
-                      const isOpen = aberto === item.nome;
+              {/* cards grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {itensFiltrados.map((item, idx) => {
+                  const partic = kpis.fat > 0 ? (item.receita / kpis.fat) * 100 : 0;
+                  const t = tend(item.receita, item.prev_receita);
+                  const abc = abcMap[item.nome];
+                  const isOpen = aberto === item.nome;
+                  const margCor = item.margem_pct >= 40 ? '#22c55e' : item.margem_pct >= 20 ? '#f59e0b' : '#ef4444';
 
-                      return (
-                        <React.Fragment key={item.nome}>
-                          <tr
-                            onClick={() => setAberto(isOpen ? null : item.nome)}
-                            className={`cursor-pointer hover:bg-slate-50 transition-colors ${isOpen ? 'bg-blue-50/50' : ''}`}
-                          >
-                            <td className="px-5 py-3.5 text-slate-300 text-xs font-mono">{idx + 1}</td>
-                            <td className="px-5 py-3.5">
-                              <div className="flex items-center gap-2">
-                                {abc && (
-                                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                                    style={{ background: C[`abc${abc}`] }}>{abc}</span>
-                                )}
-                                <span className="font-medium text-slate-800">{item.nome}</span>
-                                {item.sem_ficha && (
-                                  <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                                    sem custo
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3.5 text-right text-slate-600 font-mono">{item.qtd}</td>
-                            <td className="px-4 py-3.5 text-right font-semibold font-mono text-slate-800">{brl(item.receita)}</td>
-                            <td className="px-4 py-3.5">
-                              <div className="flex items-center gap-2 justify-end">
-                                <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                  <div className="h-full rounded-full bg-blue-400" style={{ width: `${Math.min(100, partic)}%` }} />
-                                </div>
-                                <span className="text-xs text-slate-500 w-8 text-right">{partic.toFixed(0)}%</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3.5 text-right">
-                              {item.sem_ficha
-                                ? <span className="text-slate-300 text-xs">—</span>
-                                : <MargCell v={item.margem_pct} />
-                              }
-                            </td>
-                            <td className="px-4 py-3.5 text-right">
-                              {item.prev_receita === 0
-                                ? <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">novo</span>
-                                : t === null ? null : <TendCell v={t} />
-                              }
-                            </td>
-                          </tr>
+                  return (
+                    <div key={item.nome}
+                      onClick={() => setAberto(isOpen ? null : item.nome)}
+                      className={`card cursor-pointer hover:shadow-md transition-all border-2 ${isOpen ? 'border-blue-300' : 'border-transparent'}`}
+                    >
+                      {/* topo do card */}
+                      <div className="p-4 pb-3">
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-mono text-slate-300 shrink-0">#{idx + 1}</span>
+                            {abc && (
+                              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                                style={{ background: C[`abc${abc}`] }}>{abc}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {item.sem_ficha && (
+                              <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                                sem custo
+                              </span>
+                            )}
+                            {item.prev_receita === 0
+                              ? <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">novo</span>
+                              : t !== null && <TendBadge v={t} />
+                            }
+                          </div>
+                        </div>
+                        <p className="font-semibold text-slate-800 leading-tight mb-4" style={{ fontSize: 13 }}>{item.nome}</p>
 
-                          {/* painel de histórico */}
-                          {isOpen && (
-                            <tr>
-                              <td colSpan={7} className="bg-slate-50 border-t border-slate-100 px-5 py-4">
-                                <div className="flex items-center justify-between mb-3">
-                                  <p className="text-sm font-semibold text-slate-700">Histórico de vendas — {item.nome}</p>
-                                  <div className="flex gap-4 text-xs text-slate-500">
-                                    <span>Preço médio: <strong>{brl(item.preco_medio)}</strong></span>
-                                    {!item.sem_ficha && <span>Custo unit.: <strong>{brl(item.custo_unit)}</strong></span>}
-                                    {!item.sem_ficha && <span>CMV: <strong>{pct(item.cmv_pct)}</strong></span>}
-                                  </div>
-                                </div>
-                                {historico.length === 0
-                                  ? <p className="text-xs text-slate-400 py-2">Carregando...</p>
-                                  : <MiniHistorico data={historico} />
-                                }
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                        {/* métricas principais */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-slate-50 rounded-xl p-3">
+                            <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium mb-0.5">Receita</p>
+                            <p className="font-bold text-slate-900 text-base">{brl(item.receita)}</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">{item.qtd} unidades</p>
+                          </div>
+                          <div className="bg-slate-50 rounded-xl p-3">
+                            <p className="text-[10px] text-slate-400 uppercase tracking-wide font-medium mb-0.5">Margem</p>
+                            {item.sem_ficha
+                              ? <p className="font-bold text-amber-500 text-base">—</p>
+                              : <p className="font-bold text-base" style={{ color: margCor }}>{pct(item.margem_pct)}</p>
+                            }
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              {item.sem_ficha ? 'sem ficha técnica' : brl(item.margem) + ' de lucro'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* barra de participação */}
+                        <div className="mt-3">
+                          <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+                            <span>Participação no faturamento</span>
+                            <span className="font-medium">{partic.toFixed(1)}%</span>
+                          </div>
+                          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full bg-blue-400 transition-all" style={{ width: `${Math.min(100, partic)}%` }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* histórico expandido */}
+                      {isOpen && (
+                        <div className="border-t border-slate-100 p-4 bg-slate-50">
+                          <div className="flex gap-3 text-xs text-slate-500 mb-3 flex-wrap">
+                            <span>Preço médio: <strong className="text-slate-700">{brl(item.preco_medio)}</strong></span>
+                            {!item.sem_ficha && <span>Custo: <strong className="text-slate-700">{brl(item.custo_unit)}</strong></span>}
+                            {!item.sem_ficha && <span>CMV: <strong className="text-slate-700">{pct(item.cmv_pct)}</strong></span>}
+                          </div>
+                          {historico.length === 0
+                            ? <p className="text-xs text-slate-400">Carregando...</p>
+                            : <MiniHistorico data={historico} />
+                          }
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -534,6 +543,16 @@ function TendCell({ v }) {
     return <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-emerald-600"><ArrowUpRight size={12} />+{v.toFixed(0)}%</span>;
   }
   return <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-red-500"><ArrowDownRight size={12} />{v.toFixed(0)}%</span>;
+}
+
+function TendBadge({ v }) {
+  if (v === null || Math.abs(v) < 5) {
+    return <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full"><Minus size={9} /> estável</span>;
+  }
+  if (v > 0) {
+    return <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full"><ArrowUpRight size={10} />+{v.toFixed(0)}%</span>;
+  }
+  return <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full"><ArrowDownRight size={10} />{v.toFixed(0)}%</span>;
 }
 
 function MiniHistorico({ data }) {
