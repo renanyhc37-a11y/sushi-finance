@@ -42,23 +42,81 @@ const COR_IDLE     = '#f97316'; // laranja (accent)
 const COR_ESCUTA   = '#f43f5e'; // vermelho ao ouvir
 const COR_AZUL     = '#38bdf8'; // azul do sistema
 
-// ── Orb pulsante (botão flutuante) ───────────────────────────
+// ── Orb pulsante arrastável ───────────────────────────────────
+const ORB_SIZE = 46;
+const MARGIN   = 12;
+function defaultPos() {
+  const saved = localStorage.getItem('ninja_orb_pos');
+  if (saved) try { return JSON.parse(saved); } catch {}
+  return { right: 16, bottom: 88 };
+}
+
 function OrbBtn({ escutando, processando, onClick }) {
   const cor = escutando ? COR_ESCUTA : COR_IDLE;
+  const [pos, setPos] = React.useState(defaultPos);
+  const dragging = React.useRef(false);
+  const moved    = React.useRef(false);
+  const startRef = React.useRef({});
+
+  const savePos = (p) => {
+    setPos(p);
+    localStorage.setItem('ninja_orb_pos', JSON.stringify(p));
+  };
+
+  const onPointerDown = (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    dragging.current = true;
+    moved.current = false;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    startRef.current = {
+      clientX, clientY,
+      right:  pos.right,
+      bottom: pos.bottom,
+    };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+
+  const onPointerMove = (e) => {
+    if (!dragging.current) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const dx = clientX - startRef.current.clientX;
+    const dy = clientY - startRef.current.clientY;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
+    const newRight  = Math.max(MARGIN, Math.min(window.innerWidth  - ORB_SIZE - MARGIN, startRef.current.right  - dx));
+    const newBottom = Math.max(MARGIN, Math.min(window.innerHeight - ORB_SIZE - MARGIN, startRef.current.bottom + dy));
+    setPos({ right: newRight, bottom: newBottom });
+  };
+
+  const onPointerUp = (e) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    savePos(pos);
+    if (!moved.current) onClick(e);
+  };
+
   return (
     <button
-      onClick={onClick}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onTouchStart={onPointerDown}
+      onTouchMove={onPointerMove}
+      onTouchEnd={onPointerUp}
       title="NinjaContrlol — Assistente de voz (J)"
       style={{
         position: 'fixed',
-        bottom: 'max(88px, env(safe-area-inset-bottom, 0px) + 88px)',
-        right: 16,
+        bottom: pos.bottom,
+        right: pos.right,
         zIndex: 50,
-        width: 46,
-        height: 46,
+        width: ORB_SIZE,
+        height: ORB_SIZE,
         borderRadius: '50%',
         border: 'none',
-        cursor: 'pointer',
+        cursor: dragging.current ? 'grabbing' : 'grab',
+        touchAction: 'none',
+        userSelect: 'none',
         background: `radial-gradient(circle at 35% 35%, ${cor}dd, ${cor}55 60%, transparent)`,
         boxShadow: escutando
           ? `0 0 0 0 ${cor}44, 0 0 20px ${cor}88, 0 3px 16px rgba(0,0,0,0.55)`
