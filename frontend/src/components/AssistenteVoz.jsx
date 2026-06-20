@@ -65,27 +65,27 @@ function OrbBtn({ escutando, processando, onClick }) {
 
   const onPointerDown = (e) => {
     if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
     dragging.current = true;
     moved.current = false;
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
     startRef.current = {
-      clientX, clientY,
+      clientX: e.clientX,
+      clientY: e.clientY,
       right:  pos.right,
       bottom: pos.bottom,
     };
-    e.currentTarget.setPointerCapture?.(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
   };
 
   const onPointerMove = (e) => {
     if (!dragging.current) return;
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const dx = clientX - startRef.current.clientX;
-    const dy = clientY - startRef.current.clientY;
+    e.preventDefault();
+    const dx = e.clientX - startRef.current.clientX;
+    const dy = e.clientY - startRef.current.clientY;
     if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
+    // right aumenta ao arrastar pra esquerda (dx negativo), bottom aumenta ao arrastar pra cima (dy negativo)
     const newRight  = Math.max(MARGIN, Math.min(window.innerWidth  - ORB_SIZE - MARGIN, startRef.current.right  - dx));
-    const newBottom = Math.max(MARGIN, Math.min(window.innerHeight - ORB_SIZE - MARGIN, startRef.current.bottom + dy));
+    const newBottom = Math.max(MARGIN, Math.min(window.innerHeight - ORB_SIZE - MARGIN, startRef.current.bottom - dy));
     setPos({ right: newRight, bottom: newBottom });
   };
 
@@ -101,9 +101,7 @@ function OrbBtn({ escutando, processando, onClick }) {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onTouchStart={onPointerDown}
-      onTouchMove={onPointerMove}
-      onTouchEnd={onPointerUp}
+      onPointerCancel={onPointerUp}
       title="NinjaContrlol — Assistente de voz (J)"
       style={{
         position: 'fixed',
