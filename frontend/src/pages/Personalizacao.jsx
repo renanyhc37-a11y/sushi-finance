@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Star, Square, Rows3, Rows2, Check, Globe2, Orbit, Wind, Palette, RotateCcw } from 'lucide-react';
+import { Sparkles, Star, Square, Rows3, Rows2, Check, Globe2, Orbit, Wind, Palette, RotateCcw, MessageSquare, Plus, Trash2, Phone } from 'lucide-react';
 import { usePersonalizacao } from '../hooks/usePersonalizacao';
 import { aplicarCorDestaque, cachearCor, corValida, COR_PADRAO } from '../lib/tema';
 import { getToken } from '../hooks/useAuth';
+
+const BASE = import.meta.env.VITE_API_URL || '/api';
+const authH = () => ({ Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' });
 
 // Cores sugeridas (o operador também pode escolher qualquer cor no seletor).
 const PRESETS_COR = [
@@ -119,6 +122,112 @@ const DENSIDADES = [
   { id: 'compacto',    nome: 'Compacto',    desc: 'Aproveita melhor a tela',            icon: Rows3 },
 ];
 
+function SecaoRelatorio() {
+  const [numeros, setNumeros] = useState([]);
+  const [novo, setNovo] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    fetch(`${BASE}/ia/relatorio-admins`, { headers: authH() })
+      .then(r => r.json())
+      .then(d => setNumeros(d.numeros || []))
+      .catch(() => {});
+  }, []);
+
+  const salvar = async (lista) => {
+    setSalvando(true);
+    setMsg(null);
+    try {
+      const r = await fetch(`${BASE}/ia/relatorio-admins`, {
+        method: 'PUT', headers: authH(),
+        body: JSON.stringify({ numeros: lista }),
+      });
+      if (r.ok) { setNumeros(lista); setMsg({ ok: true, texto: 'Salvo!' }); }
+      else setMsg({ ok: false, texto: 'Erro ao salvar.' });
+    } catch { setMsg({ ok: false, texto: 'Erro de conexão.' }); }
+    setSalvando(false);
+    setTimeout(() => setMsg(null), 2500);
+  };
+
+  const adicionar = () => {
+    const tel = novo.replace(/\D/g, '');
+    if (!tel || tel.length < 10) return;
+    if (numeros.includes(tel)) { setNovo(''); return; }
+    salvar([...numeros, tel]);
+    setNovo('');
+  };
+
+  const remover = (tel) => salvar(numeros.filter(n => n !== tel));
+
+  return (
+    <Secao titulo="Relatório diário WhatsApp">
+      <div className="rounded-2xl p-4 space-y-3" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+        <div className="flex items-center gap-3 mb-1">
+          <span className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: '#052e16', border: '1px solid #16a34a' }}>
+            <MessageSquare size={19} strokeWidth={1.75} style={{ color: '#4ade80' }} />
+          </span>
+          <div className="flex-1">
+            <p className="text-[14px] font-semibold" style={{ color: 'var(--txt-strong)' }}>Admins que recebem o resumo</p>
+            <p className="text-[12px]" style={{ color: 'var(--txt-dim)' }}>Todo dia às 23h, se o WhatsApp estiver conectado, esses números recebem o relatório automático.</p>
+          </div>
+        </div>
+
+        {/* Lista de números cadastrados */}
+        {numeros.length > 0 && (
+          <div className="space-y-2">
+            {numeros.map(tel => (
+              <div key={tel} className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ background: 'var(--space-elev-2)', border: '1px solid var(--hairline)' }}>
+                <Phone size={14} strokeWidth={1.75} style={{ color: 'var(--txt-dim)' }} />
+                <span className="flex-1 text-[13px] font-mono" style={{ color: 'var(--txt)' }}>+{tel}</span>
+                <button onClick={() => remover(tel)} title="Remover"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
+                  style={{ background: '#450a0a', border: '1px solid #dc2626', color: '#fca5a5' }}>
+                  <Trash2 size={13} strokeWidth={2} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {numeros.length === 0 && (
+          <p className="text-[12px] px-1" style={{ color: 'var(--txt-dim)' }}>Nenhum número cadastrado. Adicione abaixo.</p>
+        )}
+
+        {/* Campo para adicionar */}
+        <div className="flex gap-2">
+          <div className="flex-1 flex items-center gap-2 px-3 rounded-xl" style={{ background: 'var(--space-elev-2)', border: '1px solid var(--hairline)' }}>
+            <span className="text-[12px] font-mono shrink-0" style={{ color: 'var(--txt-dim)' }}>+</span>
+            <input
+              type="tel"
+              placeholder="5544999998888 (com DDD e DDI)"
+              value={novo}
+              onChange={e => setNovo(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && adicionar()}
+              className="flex-1 bg-transparent py-2.5 text-[13px] font-mono outline-none"
+              style={{ color: 'var(--txt)' }}
+            />
+          </div>
+          <button onClick={adicionar} disabled={salvando}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold transition-all active:scale-95"
+            style={{ background: 'var(--accent-soft)', border: '1px solid rgba(var(--accent-rgb),0.4)', color: 'var(--accent)' }}>
+            <Plus size={15} strokeWidth={2.5} />
+            Adicionar
+          </button>
+        </div>
+
+        {msg && (
+          <p className="text-[12px] font-medium" style={{ color: msg.ok ? '#4ade80' : '#f87171' }}>{msg.texto}</p>
+        )}
+
+        <p className="text-[11px]" style={{ color: 'var(--txt-faint)' }}>
+          Formato: código do país + DDD + número (ex: 5544999998888). Sem espaços ou traços.
+        </p>
+      </div>
+    </Secao>
+  );
+}
+
 function Secao({ titulo, children }) {
   return (
     <div>
@@ -207,6 +316,9 @@ export default function Personalizacao() {
           })}
         </div>
       </Secao>
+
+      {/* Relatório diário WhatsApp */}
+      <SecaoRelatorio />
 
       <p className="text-[12px] flex items-center gap-2" style={{ color: 'var(--txt-faint)' }}>
         <Sparkles size={13} strokeWidth={1.75} /> A logo da sua loja pode ser enviada em Cardápio → Configurações e aparece na tela de login.

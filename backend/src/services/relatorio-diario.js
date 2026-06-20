@@ -10,8 +10,9 @@ const getCfg = chave => db.prepare('SELECT valor FROM config WHERE chave=?').get
 async function enviarRelatorio() {
   if (wa.getStatus().status !== 'pronto') return;
 
-  const adminTel = getCfg('whatsapp_admin');
-  if (!adminTel) return;
+  const raw = getCfg('whatsapp_admin') || '';
+  const adminTels = raw.split(',').map(s => s.trim()).filter(Boolean);
+  if (!adminTels.length) return;
 
   const hoje = (() => {
     const d = new Date(Date.now() - 3 * 60 * 60 * 1000);
@@ -49,8 +50,10 @@ async function enviarRelatorio() {
       `💵 Dinheiro: ${fmt(fat.dinheiro)}`,
     ].filter(l => l !== null).join('\n');
 
-    await wa.enviar(adminTel, msg);
-    console.log('[relatorio-diario] ✅ Enviado para', adminTel);
+    for (const tel of adminTels) {
+      await wa.enviar(tel, msg);
+      console.log('[relatorio-diario] ✅ Enviado para', tel);
+    }
   } catch (e) {
     console.warn('[relatorio-diario] Erro:', e.message);
   }

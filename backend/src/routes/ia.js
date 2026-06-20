@@ -715,4 +715,21 @@ REGRAS:
   }
 });
 
+// ── Admins do relatório diário WhatsApp ──────────────────────────────────────
+// GET /api/ia/relatorio-admins → { numeros: ['554499999', ...] }
+router.get('/relatorio-admins', requireAuth, (req, res) => {
+  const raw = db.prepare('SELECT valor FROM config WHERE chave=?').get('whatsapp_admin')?.valor || '';
+  const numeros = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
+  res.json({ numeros });
+});
+
+// PUT /api/ia/relatorio-admins → { numeros: ['554499999', ...] }
+router.put('/relatorio-admins', requireAuth, (req, res) => {
+  const { numeros } = req.body;
+  if (!Array.isArray(numeros)) return res.status(400).json({ erro: 'numeros deve ser array' });
+  const valor = numeros.map(s => String(s).trim()).filter(Boolean).join(',');
+  db.prepare('INSERT OR REPLACE INTO config (chave,valor) VALUES (?,?)').run('whatsapp_admin', valor);
+  res.json({ ok: true, numeros: valor ? valor.split(',') : [] });
+});
+
 module.exports = router;
