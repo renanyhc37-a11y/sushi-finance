@@ -74,10 +74,11 @@ router.get('/pedidos', (req, res) => {
     params.push(status);
   }
   if (data) {
-    q += ' AND date(created_at) = ?';
+    // created_at é UTC; converte para horário de Brasília (UTC-3) antes de comparar
+    q += " AND date(created_at, '-3 hours') = ?";
     params.push(data);
   } else {
-    q += " AND (date(created_at) = date('now') OR status IN ('novo','preparando','pronto'))";
+    q += " AND (date(created_at, '-3 hours') = date('now', '-3 hours') OR status IN ('novo','preparando','pronto'))";
   }
 
   q += ' ORDER BY created_at DESC';
@@ -235,7 +236,7 @@ router.get('/metricas-operacionais', (req, res) => {
 // GET /api/pdv/resumo
 router.get('/resumo', (req, res) => {
   const rows = db.prepare(
-    "SELECT status, COUNT(*) as total FROM pdv_pedidos WHERE date(created_at) = date('now') OR status IN ('novo','preparando','pronto') GROUP BY status"
+    "SELECT status, COUNT(*) as total FROM pdv_pedidos WHERE date(created_at, '-3 hours') = date('now', '-3 hours') OR status IN ('novo','preparando','pronto') GROUP BY status"
   ).all();
   const resumo = { novo: 0, preparando: 0, pronto: 0, entregue: 0, cancelado: 0 };
   rows.forEach(r => { if (resumo[r.status] !== undefined) resumo[r.status] = r.total; });
@@ -249,12 +250,12 @@ router.get('/stats', (req, res) => {
   try {
     // Faturamento e pedidos por dia (últimos N dias)
     const porDia = db.prepare(`
-      SELECT date(created_at) as dia,
+      SELECT date(created_at, '-3 hours') as dia,
              COUNT(*) as total_pedidos,
              COALESCE(SUM(total), 0) as faturamento
       FROM pdv_pedidos
       WHERE status != 'cancelado'
-        AND date(created_at) >= date('now', ? || ' days')
+        AND date(created_at, '-3 hours') >= date('now', '-3 hours', ? || ' days')
       GROUP BY dia ORDER BY dia ASC
     `).all(`-${dias}`);
 
@@ -263,7 +264,7 @@ router.get('/stats', (req, res) => {
       SELECT AVG(total) as ticket_medio, COUNT(*) as total_pedidos, SUM(total) as total_faturado
       FROM pdv_pedidos
       WHERE status != 'cancelado'
-        AND date(created_at) >= date('now', ? || ' days')
+        AND date(created_at, '-3 hours') >= date('now', '-3 hours', ? || ' days')
     `).get(`-${dias}`);
 
     // Comparativo período anterior
@@ -271,8 +272,8 @@ router.get('/stats', (req, res) => {
       SELECT COALESCE(SUM(total), 0) as total_faturado, COUNT(*) as total_pedidos
       FROM pdv_pedidos
       WHERE status != 'cancelado'
-        AND date(created_at) >= date('now', ? || ' days')
-        AND date(created_at) < date('now', ? || ' days')
+        AND date(created_at, '-3 hours') >= date('now', '-3 hours', ? || ' days')
+        AND date(created_at, '-3 hours') < date('now', '-3 hours', ? || ' days')
     `).get(`-${dias * 2}`, `-${dias}`);
 
     // Top 5 itens mais vendidos
@@ -281,7 +282,7 @@ router.get('/stats', (req, res) => {
       FROM pdv_itens i
       JOIN pdv_pedidos p ON p.id = i.pedido_id
       WHERE p.status != 'cancelado'
-        AND date(p.created_at) >= date('now', ? || ' days')
+        AND date(p.created_at, '-3 hours') >= date('now', '-3 hours', ? || ' days')
       GROUP BY i.item_nome ORDER BY total_qtd DESC LIMIT 5
     `).all(`-${dias}`);
 
@@ -290,7 +291,7 @@ router.get('/stats', (req, res) => {
       SELECT forma_pagamento, COUNT(*) as total, SUM(total) as valor
       FROM pdv_pedidos
       WHERE status != 'cancelado'
-        AND date(created_at) >= date('now', ? || ' days')
+        AND date(created_at, '-3 hours') >= date('now', '-3 hours', ? || ' days')
         AND forma_pagamento IS NOT NULL
       GROUP BY forma_pagamento ORDER BY total DESC
     `).all(`-${dias}`);
@@ -321,7 +322,7 @@ router.get('/relatorio', (req, res) => {
         GROUP_CONCAT(i.quantidade || 'x ' || i.item_nome, ' | ') as itens_resumo
       FROM pdv_pedidos p
       LEFT JOIN pdv_itens i ON i.pedido_id = p.id
-      WHERE date(p.created_at) BETWEEN ? AND ?
+      WHERE date(p.created_at, '-3 hours') BETWEEN ? AND ?
       GROUP BY p.id ORDER BY p.created_at DESC
     `).all(inicio, fim);
 
@@ -334,7 +335,7 @@ router.get('/relatorio', (req, res) => {
              COALESCE(SUM(CASE WHEN status != 'cancelado' AND forma_pagamento='dinheiro'     THEN total ELSE 0 END), 0) as total_dinheiro,
              COALESCE(SUM(CASE WHEN status != 'cancelado' AND forma_pagamento='cartao_cred'  THEN total ELSE 0 END), 0) as total_credito,
              COALESCE(SUM(CASE WHEN status != 'cancelado' AND forma_pagamento='cartao_deb'   THEN total ELSE 0 END), 0) as total_debito
-      FROM pdv_pedidos WHERE date(created_at) BETWEEN ? AND ?
+      FROM pdv_pedidos WHERE date(created_at, '-3 hours') BETWEEN ? AND ?
     `).get(inicio, fim);
 
     res.json({ pedidos, totais, inicio, fim });
@@ -429,7 +430,7 @@ router.get('/metricas-hoje', (req, res) => {
         COALESCE(SUM(CASE WHEN forma_pagamento='debito'   THEN total ELSE 0 END), 0) as debito,
         COUNT(CASE WHEN status='cancelado' THEN 1 END) as cancelados
       FROM pdv_pedidos
-      WHERE date(created_at, 'localtime') = date('now', 'localtime')
+      WHERE date(created_at, '-3 hours') = date('now', '-3 hours')
         AND status != 'cancelado'
     `).get();
     res.json(row);
