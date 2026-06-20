@@ -289,21 +289,24 @@ function iniciar() {
     setTimeout(() => iniciar(), 10000);
   });
 
-  // ── Receber mensagens ──────────────────────────────────────
+  // ── Receber mensagens (e mensagens enviadas pelo próprio celular) ──
   cliente.on('message', async (msg) => {
     try {
-      if (msg.isStatus || msg.from === 'status@broadcast') return;
-      const chatId = msg.from;
-      const telefone = chatId.replace('@c.us', '').replace('@lid', '').replace(/\D/g,'');
+      if (msg.isStatus || msg.from === 'status@broadcast' || msg.to === 'status@broadcast') return;
+
+      const fromMe = msg.fromMe === true;
+      // Para mensagens enviadas pelo celular do operador: o contato está em msg.to
+      const chatId = fromMe ? msg.to : msg.from;
+      if (!chatId) return;
+      const telefone = chatId.replace('@c.us', '').replace('@lid', '').replace(/\D/g, '');
+      if (!telefone) return;
+
       let corpo = msg.body || '';
       const contact = await msg.getContact().catch(() => null);
       const nome = contact?.pushname || contact?.name || telefone;
       const telefoneReal = (contact?.number || telefone).replace(/\D/g, '');
-
-      // Foto de perfil do contato
       const fotoUrl = await contact?.getProfilePicUrl().catch(() => null);
 
-      // Mídia (imagens, comprovantes, áudio, etc.)
       let mediaUrl = null;
       let tipo = 'texto';
       if (msg.hasMedia) {
@@ -328,9 +331,37 @@ function iniciar() {
         }
       }
 
-      await receberMensagem({ telefone, telefoneReal, nome, corpo, waId: msg.id?.id, chatId, fotoUrl, mediaUrl, tipo });
+      if (fromMe) {
+        // Mensagem enviada pelo operador do celular — salva como de_mim=1
+        db.prepare(`
+          INSERT INTO wa_conversas(telefone, nome, foto_url, ultima_mensagem, ultima_em, nao_lidas, chat_id)
+          VALUES(?,?,?,?,datetime('now'),0,?)
+          ON CONFLICT(telefone) DO UPDATE SET
+            nome = COALESCE(excluded.nome, nome),
+            foto_url = COALESCE(excluded.foto_url, foto_url),
+            ultima_mensagem = excluded.ultima_mensagem,
+            ultima_em = excluded.ultima_em,
+            chat_id = COALESCE(excluded.chat_id, chat_id)
+        `).run(telefone, nome, fotoUrl || null, corpo, chatId);
+
+        const conversa = db.prepare('SELECT * FROM wa_conversas WHERE telefone=?').get(telefone);
+        // Evita duplicata com mensagem que o sistema já enviou
+        if (msg.id?.id) {
+          const jaExiste = db.prepare('SELECT id FROM wa_mensagens WHERE conversa_id=? AND wa_id=?').get(conversa.id, msg.id.id);
+          if (jaExiste) return;
+        }
+        const row = db.prepare(`
+          INSERT INTO wa_mensagens(conversa_id, wa_id, de, corpo, tipo, de_mim, ia, lida, media_url)
+          VALUES(?,?,?,?,?,1,0,1,?)
+        `).run(conversa.id, msg.id?.id || null, 'eu', corpo, tipo, mediaUrl || null);
+        db.prepare(`UPDATE wa_conversas SET ultima_mensagem=?, ultima_em=datetime('now') WHERE id=?`).run(corpo, conversa.id);
+        const mensagem = { id: row.lastInsertRowid, conversa_id: conversa.id, de: 'eu', corpo, tipo, media_url: mediaUrl || null, de_mim: 1, ia: 0, created_at: new Date().toISOString() };
+        if (io) { io.emit('wa:mensagem', { conversa, mensagem }); io.emit('wa:conversas_atualizar'); }
+      } else {
+        await receberMensagem({ telefone, telefoneReal, nome, corpo, waId: msg.id?.id, chatId, fotoUrl, mediaUrl, tipo });
+      }
     } catch (err) {
-      console.error('[WhatsApp] Erro ao processar mensagem recebida:', err.message);
+      console.error('[WhatsApp] Erro ao processar mensagem:', err.message);
     }
   });
 

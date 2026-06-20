@@ -44,13 +44,20 @@ const TAGS_OPCOES = [
   { id: 'novo',       label: 'Novo',       color: '#0ea5e9' },
 ];
 
+// SQLite retorna '2026-06-19 23:30:00' sem fuso (UTC). JS sem o 'Z' interpreta
+// como local, exibindo 3h a mais no Brasil (UTC-3). Normalizamos para UTC.
+function parseUTC(dt) {
+  if (!dt) return new Date(NaN);
+  if (dt.includes('T')) return new Date(dt); // já tem fuso (ISO)
+  return new Date(dt.replace(' ', 'T') + 'Z'); // SQLite → UTC
+}
 function formatHora(dt) {
   if (!dt) return '';
-  return new Date(dt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return parseUTC(dt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 function formatData(dt) {
   if (!dt) return '';
-  const d = new Date(dt);
+  const d = parseUTC(dt);
   const hoje = new Date();
   const diff = Math.floor((hoje - d) / 86400000);
   if (diff === 0) return formatHora(dt);
@@ -60,7 +67,7 @@ function formatData(dt) {
 }
 function formatDataMsg(dt) {
   if (!dt) return '';
-  const d = new Date(dt);
+  const d = parseUTC(dt);
   const hoje = new Date();
   const diff = Math.floor((hoje - d) / 86400000);
   if (diff === 0) return 'Hoje';
@@ -324,7 +331,8 @@ export default function Chat() {
         return arr.sort((a, b) => new Date(b.ultima_em) - new Date(a.ultima_em));
       });
       if (convAtivaRef.current?.id === conversa.id) {
-        setMensagens(m => [...m, mensagem]);
+        // dedup: não adiciona se já existe pelo id real ou pelo id temporário (optimistic)
+        setMensagens(m => m.some(x => x.id === mensagem.id || x._tmpId === mensagem.id) ? m.map(x => x._tmpId === mensagem.id ? { ...mensagem } : x) : [...m, mensagem]);
         setConvAtiva(p => ({ ...p, ...conversa, nao_lidas: 0 }));
       } else if (mensagem.de_mim === 0 && somAtivoRef.current) {
         playNotif();
@@ -396,15 +404,19 @@ export default function Chat() {
     e?.preventDefault();
     const corpo = texto.trim(); if (!corpo || !convAtiva) return;
     const replyId = replyTo?.id || null;
+    const tmpId = `tmp_${Date.now()}`;
+    const msgOtimista = { id: tmpId, _tmpId: tmpId, corpo, de_mim: 1, created_at: new Date().toISOString(), reply_to_id: replyId };
+    setMensagens(m => [...m, msgOtimista]);
     setEnviando(true); setTexto(''); setSugestao(''); setReplyTo(null); setScrollAtBottom(true);
     try {
       const r = await fetch(`${BASE}/chat/conversas/${convAtiva.id}/responder`, { method: 'POST', headers: authJ(), body: JSON.stringify({ corpo, reply_to_id: replyId }) });
       if (!r.ok) { const d = await r.json(); throw new Error(d.erro || 'Erro'); }
       const data = await r.json();
       if (data.mensagem) {
-        setMensagens(m => m.some(x => x.id === data.mensagem.id) ? m : [...m, data.mensagem]);
+        // substitui a mensagem otimista pela real
+        setMensagens(m => m.map(x => x._tmpId === tmpId ? data.mensagem : x).filter((x, i, arr) => x._tmpId === tmpId ? false : !arr.slice(0, i).some(y => y.id === x.id)));
       }
-    } catch (err) { toast.error(err.message); setTexto(corpo); }
+    } catch (err) { toast.error(err.message); setTexto(corpo); setMensagens(m => m.filter(x => x._tmpId !== tmpId)); }
     setEnviando(false);
   }
 
