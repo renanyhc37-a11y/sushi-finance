@@ -1881,85 +1881,82 @@ export default function Cardapio() {
 
       {/* ── Header ── */}
       <header className="sticky top-0 z-20"
-        style={{ background: 'rgba(7,7,7,0.93)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+        style={{ background: 'rgba(4,4,10,0.97)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="max-w-2xl mx-auto px-4">
           <div className="flex items-center justify-between py-3.5 gap-3">
 
-            {/* Logo with open/closed badge */}
+            {/* Logo + nome + status */}
             <div className="flex items-center gap-3">
-              <div className="relative">
-                <img src="/logo.png" alt="Logo" className="h-12 w-12 object-contain rounded-xl"
+              <div className="relative shrink-0">
+                <img src="/logo.png" alt="Logo" className="h-11 w-11 object-contain rounded-2xl"
                   style={{ display: 'block' }}
                   onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
-                <div className="w-12 h-12 rounded-xl items-center justify-center shrink-0 text-white"
+                <div className="w-11 h-11 rounded-2xl items-center justify-center shrink-0 text-white"
                   style={{ display: 'none', background: 'linear-gradient(135deg, var(--accent), var(--accent-2))' }}>
-                  <UtensilsCrossed size={24} strokeWidth={1.75} />
+                  <UtensilsCrossed size={22} strokeWidth={1.75} />
                 </div>
               </div>
               <div>
-                <p className="font-black text-white text-base leading-none">{nomeRestaurante}</p>
-                {/* Open/closed badge */}
+                <p className="font-black text-white text-[17px] leading-none tracking-tight">{nomeRestaurante}</p>
                 {horarioStatus ? (
-                  <div className="flex items-center gap-1.5 mt-0.5">
+                  <div className="flex items-center gap-1.5 mt-1">
                     <div className="w-1.5 h-1.5 rounded-full shrink-0"
-                      style={{ background: horarioStatus.aberta ? '#22c55e' : '#ef4444', boxShadow: `0 0 6px ${horarioStatus.aberta ? '#22c55e' : '#ef4444'}` }} />
-                    <span className="text-[10px] font-semibold" style={{ color: horarioStatus.aberta ? '#22c55e' : '#ef4444' }}>
-                      {horarioStatus.aberta ? 'Aberto' : 'Fechado'}
+                      style={{ background: horarioStatus.aberta ? '#22c55e' : '#ef4444', boxShadow: `0 0 5px ${horarioStatus.aberta ? '#22c55e88' : '#ef444488'}` }} />
+                    <span className="text-[11px] font-semibold" style={{ color: horarioStatus.aberta ? '#4ade80' : '#f87171' }}>
+                      {horarioStatus.aberta ? 'Aberto agora' : 'Fechado'}
                     </span>
                   </div>
                 ) : (
-                  <p className="text-[10px] text-zinc-700 mt-0.5">Delivery</p>
+                  <p className="text-[11px] text-zinc-700 mt-0.5">Delivery</p>
                 )}
               </div>
             </div>
 
             <div className="flex items-center gap-2 ml-auto">
-              {/* Botão admin — só aparece se estiver logado */}
               {getToken() && (
                 <a href="/cardapio-admin"
-                  className="w-9 h-9 flex items-center justify-center rounded-xl text-sm transition-all active:scale-90"
+                  className="w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-90"
                   title="Gerenciar cardápio"
-                  style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)', color: '#888' }}>
-                  <Settings size={17} strokeWidth={1.75} />
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: '#71717a' }}>
+                  <Settings size={16} strokeWidth={1.75} />
                 </a>
               )}
 
-              {/* Botão carrinho — pill com glassmorphism */}
               <button onClick={() => setTela('carrinho')}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-full font-bold text-sm transition-all active:scale-95"
                 style={{
                   background: totalItens > 0
                     ? 'linear-gradient(135deg, var(--accent), var(--accent-2))'
-                    : 'rgba(255,255,255,0.05)',
-                  color: totalItens > 0 ? '#fff' : '#555',
-                  border: totalItens > 0 ? 'none' : '1px solid rgba(255,255,255,0.08)',
-                  backdropFilter: totalItens > 0 ? 'none' : 'blur(12px)',
+                    : 'rgba(255,255,255,0.06)',
+                  color: totalItens > 0 ? '#fff' : '#71717a',
+                  border: totalItens > 0 ? 'none' : '1px solid rgba(255,255,255,0.09)',
                   boxShadow: totalItens > 0 ? '0 4px 20px rgba(var(--accent-rgb),0.4)' : 'none',
                 }}>
                 <ShoppingCart size={16} strokeWidth={1.85} />
                 {totalItens > 0 ? (
-                  <><span className="font-black">{totalItens}</span><span className="hidden sm:inline font-semibold">· {brl(totalValor)}</span></>
+                  <><span className="font-black">{totalItens}</span><span className="hidden sm:inline font-semibold"> · {brl(totalValor)}</span></>
                 ) : (
-                  <span className="text-zinc-600 text-xs">Carrinho</span>
+                  <span className="text-[13px]">Carrinho</span>
                 )}
               </button>
             </div>
           </div>
 
-          {/* Category tabs — pill style */}
-          <div ref={tabsRef} className="flex gap-2 overflow-x-auto pb-3 scrollbar-hide">
+          {/* Category tabs */}
+          <div ref={tabsRef} className="flex gap-1.5 overflow-x-auto pb-3 scrollbar-hide">
             {categorias.map(cat => {
               const CatI = iconeCategoria(cat.nome);
+              const ativo = catAtiva === cat.id;
               return (
               <button key={cat.id} data-cat={cat.id} onClick={() => scrollToCat(cat.id)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all shrink-0 active:scale-95"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-semibold whitespace-nowrap transition-all shrink-0 active:scale-95"
                 style={{
-                  background: catAtiva === cat.id ? 'linear-gradient(135deg, var(--accent), var(--accent-2))' : 'transparent',
-                  color: catAtiva === cat.id ? '#fff' : '#71717a',
-                  border: catAtiva === cat.id ? 'none' : '1px solid rgba(255,255,255,0.06)',
-                  boxShadow: catAtiva === cat.id ? '0 4px 12px rgba(var(--accent-rgb),0.3)' : 'none',
+                  background: ativo ? 'linear-gradient(135deg, var(--accent), var(--accent-2))' : 'rgba(255,255,255,0.06)',
+                  color: ativo ? '#fff' : '#a1a1aa',
+                  border: ativo ? 'none' : '1px solid rgba(255,255,255,0.08)',
+                  boxShadow: ativo ? '0 3px 12px rgba(var(--accent-rgb),0.35)' : 'none',
                 }}>
-                <CatI size={15} strokeWidth={1.75} /> {cat.nome}
+                <CatI size={14} strokeWidth={1.75} /> {cat.nome}
               </button>
             );})}
           </div>
@@ -2063,44 +2060,42 @@ export default function Cardapio() {
         {/* Âncora para scroll "Ver cardápio" */}
         <div ref={menuRef} />
 
-        {/* Info strip — glass cards */}
+        {/* Info strip — unified premium card */}
         <div className="max-w-2xl mx-auto px-4 mb-8">
-          <div className="grid grid-cols-3 gap-2.5">
-            {/* Entrega */}
-            <div className="flex flex-col items-center py-3 rounded-2xl gap-0.5"
-              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(8px)' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-              <span className="text-xs font-black text-white mt-0.5">{infoStrip.entrega}</span>
-              <span className="text-[10px] text-zinc-600">Entrega</span>
-            </div>
-
-            {/* Frete */}
-            <div className="flex flex-col items-center py-3 rounded-2xl gap-0.5"
-              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(8px)' }}>
-              <span className="text-white"><Bike size={18} strokeWidth={1.75} /></span>
-              <span className="text-xs font-black text-white mt-0.5">{infoStrip.frete}</span>
-              <span className="text-[10px] text-zinc-600">Frete</span>
-            </div>
-
-            {/* Nota — clicável se tiver URL do Google */}
-            {googleReviewsUrl ? (
-              <a href={googleReviewsUrl} target="_blank" rel="noreferrer"
-                className="flex flex-col items-center py-3 rounded-2xl gap-0.5 no-underline transition-all active:scale-95"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(8px)', textDecoration: 'none' }}>
-                <span className="text-amber-400"><Star size={18} strokeWidth={1.75} fill="currentColor" /></span>
-                <span className="text-xs font-black text-white mt-0.5">{infoStrip.nota}</span>
-                <span className="text-[10px]" style={{ color: '#4285F4' }}>Google</span>
-              </a>
-            ) : (
-              <div className="flex flex-col items-center py-3 rounded-2xl gap-0.5"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(8px)' }}>
-                <span className="text-amber-400"><Star size={18} strokeWidth={1.75} fill="currentColor" /></span>
-                <span className="text-xs font-black text-white mt-0.5">{infoStrip.nota}</span>
-                <span className="text-[10px] text-zinc-600">Nota</span>
+          <div className="rounded-2xl overflow-hidden"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <div className="grid grid-cols-3 divide-x" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+              {/* Entrega */}
+              <div className="flex flex-col items-center py-4 gap-1">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#a1a1aa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span className="text-[13px] font-black text-white">{infoStrip.entrega}</span>
+                <span className="text-[10px] font-medium" style={{ color: '#52525b' }}>Entrega</span>
               </div>
-            )}
+              {/* Frete */}
+              <div className="flex flex-col items-center py-4 gap-1" style={{ borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
+                <Bike size={17} strokeWidth={1.75} style={{ color: '#a1a1aa' }} />
+                <span className="text-[13px] font-black text-white">{infoStrip.frete}</span>
+                <span className="text-[10px] font-medium" style={{ color: '#52525b' }}>Frete</span>
+              </div>
+              {/* Nota */}
+              {googleReviewsUrl ? (
+                <a href={googleReviewsUrl} target="_blank" rel="noreferrer"
+                  className="flex flex-col items-center py-4 gap-1 no-underline active:opacity-70 transition-opacity"
+                  style={{ borderLeft: '1px solid rgba(255,255,255,0.05)', textDecoration: 'none' }}>
+                  <Star size={17} strokeWidth={1.75} fill="#fbbf24" style={{ color: '#fbbf24' }} />
+                  <span className="text-[13px] font-black text-white">{infoStrip.nota}</span>
+                  <span className="text-[10px] font-medium" style={{ color: '#4285F4' }}>Google ↗</span>
+                </a>
+              ) : (
+                <div className="flex flex-col items-center py-4 gap-1" style={{ borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
+                  <Star size={17} strokeWidth={1.75} fill="#fbbf24" style={{ color: '#fbbf24' }} />
+                  <span className="text-[13px] font-black text-white">{infoStrip.nota}</span>
+                  <span className="text-[10px] font-medium" style={{ color: '#52525b' }}>Nota</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -2140,22 +2135,22 @@ export default function Cardapio() {
             return (
               <section key={cat.id} ref={el => catRefs.current[cat.id] = el}>
 
-                {/* Section header — accent bar + icon circle */}
-                <div className="flex items-center gap-3 mb-5">
-                  {/* Orange accent bar */}
-                  <div className="w-1 h-8 rounded-full shrink-0"
-                    style={{ background: 'linear-gradient(180deg, var(--accent), var(--accent-2))' }} />
-                  {/* Icon circle */}
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ background: 'rgba(var(--accent-rgb),0.1)', border: '1px solid rgba(var(--accent-rgb),0.15)', color: '#fb923c' }}>
-                    <CatI size={19} strokeWidth={1.75} />
-                  </div>
-                  <div>
-                    <h2 className="font-black text-white text-xl leading-none">{cat.nome}</h2>
-                    <p className="text-xs text-zinc-600 mt-0.5">
+                {/* Section header — clean premium */}
+                <div className="mb-6">
+                  <div className="flex items-end justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                        style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)' }}>
+                        <CatI size={17} strokeWidth={1.75} />
+                      </div>
+                      <h2 className="font-black text-white text-[22px] leading-none tracking-tight">{cat.nome}</h2>
+                    </div>
+                    <span className="text-[11px] font-bold mb-0.5 shrink-0"
+                      style={{ color: '#52525b' }}>
                       {cat.itens.length} {cat.itens.length === 1 ? 'opção' : 'opções'}
-                    </p>
+                    </span>
                   </div>
+                  <div className="mt-3" style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
                 </div>
 
                 {/* Grid — 2 cols when category has photos, list when not */}
@@ -2168,16 +2163,16 @@ export default function Cardapio() {
                       return (
                         <div key={item.id}
                           onClick={() => setItemModal(item)}
-                          className="rounded-2xl overflow-hidden transition-all duration-200 flex flex-col cursor-pointer"
+                          className="rounded-2xl overflow-hidden transition-all duration-200 flex flex-col cursor-pointer active:scale-[0.97]"
                           style={{
-                            background: '#111',
-                            border: `1px solid ${qty > 0 ? 'rgba(var(--accent-rgb),0.5)' : 'rgba(255,255,255,0.06)'}`,
-                            boxShadow: qty > 0 ? '0 0 20px rgba(var(--accent-rgb),0.12)' : 'none',
+                            background: qty > 0 ? '#161616' : '#111',
+                            border: `1px solid ${qty > 0 ? 'rgba(var(--accent-rgb),0.4)' : 'rgba(255,255,255,0.07)'}`,
+                            boxShadow: qty > 0 ? '0 4px 24px rgba(var(--accent-rgb),0.15)' : '0 2px 8px rgba(0,0,0,0.4)',
                           }}>
 
-                          {/* Photo area — 130px */}
+                          {/* Photo area — 165px */}
                           <div className="relative overflow-hidden shrink-0"
-                            style={{ height: 130, borderRadius: '16px 16px 0 0', background: '#1a1a1a' }}>
+                            style={{ height: 165, borderRadius: '16px 16px 0 0', background: '#181818' }}>
                             {item.foto ? (
                               <img src={item.foto} alt={item.nome}
                                 className="w-full h-full object-cover"
@@ -2213,13 +2208,12 @@ export default function Cardapio() {
                           </div>
 
                           {/* Info below photo */}
-                          <div className="p-3 flex flex-col flex-1 justify-between">
+                          <div className="p-3.5 flex flex-col flex-1 justify-between">
                             <div>
-                              <p className="font-bold text-white text-sm leading-tight">{item.nome}</p>
+                              <p className="font-black text-white text-[15px] leading-tight">{item.nome}</p>
                               {item.descricao && (
-                                <p className="text-xs text-zinc-500 mt-0.5 leading-snug line-clamp-1">{item.descricao}</p>
+                                <p className="text-[12px] mt-1 leading-snug line-clamp-2" style={{ color: '#71717a' }}>{item.descricao}</p>
                               )}
-                              {/* Obs adicionada */}
                               {itemCart?.obs && (
                                 <p className="text-[10px] mt-1 truncate" style={{ color: 'var(--accent)' }}><Pencil size={10} strokeWidth={1.75} className="inline mr-0.5 align-middle" />{itemCart.obs}</p>
                               )}
@@ -2228,27 +2222,27 @@ export default function Cardapio() {
                               {item.promo_ativa === 1 && item.preco_promo ? (
                                 <div>
                                   <span className="text-[10px] line-through block" style={{ color: '#52525b' }}>{brl(item.preco)}</span>
-                                  <span className="font-black text-sm" style={{ color: '#10b981' }}>{brl(item.preco_promo)}</span>
+                                  <span className="font-black text-[15px]" style={{ color: '#10b981' }}>{brl(item.preco_promo)}</span>
                                 </div>
                               ) : (
-                                <p className="font-black text-base" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</p>
+                                <p className="font-black text-[15px]" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</p>
                               )}
                               {qty === 0 ? (
                                 <button
                                   onClick={e => { e.stopPropagation(); setItemModal(item); }}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl font-black text-white text-xs active:scale-90 transition-transform"
-                                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 4px 12px rgba(var(--accent-rgb),0.3)' }}>
+                                  className="w-9 h-9 rounded-full flex items-center justify-center font-black text-white text-xl active:scale-90 transition-transform shrink-0"
+                                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 4px 14px rgba(var(--accent-rgb),0.4)' }}>
                                   +
                                 </button>
                               ) : (
                                 <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                                   <button onClick={() => removeItem(item.id)}
-                                    className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-white active:scale-90 transition-transform"
-                                    style={{ background: '#1e1e1e' }}>−</button>
+                                    className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-white active:scale-90 transition-transform"
+                                    style={{ background: '#222', border: '1px solid rgba(255,255,255,0.1)' }}>−</button>
                                   <span className="w-5 text-center font-black text-white text-sm">{qty}</span>
                                   <button onClick={() => addItem(item)}
-                                    className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-white active:scale-90 transition-transform"
-                                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))' }}>+</button>
+                                    className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-white active:scale-90 transition-transform"
+                                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 3px 10px rgba(var(--accent-rgb),0.35)' }}>+</button>
                                 </div>
                               )}
                             </div>
@@ -2258,86 +2252,78 @@ export default function Cardapio() {
                     })}
                   </div>
                 ) : (
-                  /* Enhanced horizontal list for categories without photos */
-                  <div className="space-y-2.5">
-                    {cat.itens.map(item => {
+                  /* Lista premium — sem foto */
+                  <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
+                    {cat.itens.map((item, idx) => {
                       const qty = getQty(item.id);
                       const isAnim = animItem === item.id;
                       const itemCart = carrinho.find(c => c.id === item.id);
+                      const isLast = idx === cat.itens.length - 1;
 
                       return (
                         <div key={item.id}
                           onClick={() => setItemModal(item)}
-                          className="flex rounded-2xl overflow-hidden transition-all duration-200 cursor-pointer"
+                          className="flex items-center cursor-pointer active:opacity-80 transition-all"
                           style={{
-                            background: qty > 0 ? '#131313' : '#0f0f0f',
-                            border: `1px solid ${qty > 0 ? 'rgba(var(--accent-rgb),0.3)' : 'rgba(255,255,255,0.05)'}`,
-                            boxShadow: qty > 0 ? '0 0 20px rgba(var(--accent-rgb),0.08)' : 'none',
+                            background: qty > 0 ? 'rgba(var(--accent-rgb),0.06)' : idx % 2 === 0 ? '#111' : '#0e0e0e',
+                            borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.05)',
+                            minHeight: 80,
                           }}>
 
-                          {/* Emoji area */}
-                          <div
-                            className="shrink-0 flex items-center justify-center relative overflow-hidden"
-                            style={{ width: 76, minHeight: 80 }}>
-                            <div className="absolute inset-0"
-                              style={{
-                                background: qty > 0
-                                  ? 'radial-gradient(circle at 40% 40%, rgba(var(--accent-rgb),0.12), transparent)'
-                                  : 'radial-gradient(circle at 40% 40%, rgba(255,255,255,0.02), transparent)',
-                              }} />
-                            <span
-                              className="relative z-10 transition-transform duration-300"
-                              style={{ color: 'rgba(251,146,60,0.85)', transform: isAnim ? 'scale(1.3) rotate(-8deg)' : 'scale(1) rotate(0deg)' }}>
-                              <CatI size={32} strokeWidth={1.5} />
+                          {/* Ícone */}
+                          <div className="shrink-0 flex items-center justify-center"
+                            style={{ width: 72, minHeight: 80, background: 'rgba(255,255,255,0.02)', borderRight: '1px solid rgba(255,255,255,0.04)' }}>
+                            <span className="transition-transform duration-300"
+                              style={{ color: qty > 0 ? 'var(--accent)' : 'rgba(161,161,170,0.5)', transform: isAnim ? 'scale(1.3) rotate(-8deg)' : 'scale(1)' }}>
+                              {item.foto
+                                ? <img src={item.foto} alt={item.nome} className="w-12 h-12 object-cover rounded-xl" />
+                                : <CatI size={28} strokeWidth={1.5} />
+                              }
                             </span>
                           </div>
 
                           {/* Info */}
-                          <div className="flex-1 px-3 py-3.5 flex flex-col justify-between min-w-0">
-                            <div>
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <p className="font-bold text-white text-sm leading-tight">{item.nome}</p>
-                                {item.promo_ativa && item.promo_tag && (
-                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md text-white shrink-0"
-                                    style={{ background: '#ef4444' }}>
-                                    {item.promo_tag}
-                                  </span>
-                                )}
-                              </div>
-                              {item.descricao && (
-                                <p className="text-xs text-zinc-600 mt-0.5 leading-snug line-clamp-1">{item.descricao}</p>
-                              )}
-                              {/* Obs adicionada */}
-                              {itemCart?.obs && (
-                                <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--accent)' }}><Pencil size={10} strokeWidth={1.75} className="inline mr-0.5 align-middle" />{itemCart.obs}</p>
+                          <div className="flex-1 px-4 py-3 flex flex-col justify-center min-w-0">
+                            <div className="flex items-start gap-2">
+                              <p className="font-black text-white text-[15px] leading-tight flex-1">{item.nome}</p>
+                              {item.promo_ativa && item.promo_tag && (
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md text-white shrink-0 mt-0.5"
+                                  style={{ background: '#ef4444' }}>
+                                  {item.promo_tag}
+                                </span>
                               )}
                             </div>
+                            {item.descricao && (
+                              <p className="text-[12px] mt-1 leading-snug line-clamp-1" style={{ color: '#71717a' }}>{item.descricao}</p>
+                            )}
+                            {itemCart?.obs && (
+                              <p className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--accent)' }}><Pencil size={10} strokeWidth={1.75} className="inline mr-0.5 align-middle" />{itemCart.obs}</p>
+                            )}
                             <div className="flex items-center justify-between mt-2">
                               {item.promo_ativa === 1 && item.preco_promo ? (
                                 <div>
-                                  <span className="text-[10px] line-through block" style={{ color: '#52525b' }}>{brl(item.preco)}</span>
-                                  <span className="font-black text-base" style={{ color: '#10b981' }}>{brl(item.preco_promo)}</span>
+                                  <span className="text-[10px] line-through" style={{ color: '#52525b' }}>{brl(item.preco)} </span>
+                                  <span className="font-black text-[15px]" style={{ color: '#10b981' }}>{brl(item.preco_promo)}</span>
                                 </div>
                               ) : (
-                                <p className="font-black text-base" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</p>
+                                <p className="font-black text-[15px]" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</p>
                               )}
-
                               {qty === 0 ? (
                                 <button
                                   onClick={e => { e.stopPropagation(); setItemModal(item); }}
-                                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl font-black text-white text-xs active:scale-90 transition-transform"
-                                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 4px 12px rgba(var(--accent-rgb),0.35)' }}>
-                                  + Adicionar
+                                  className="w-9 h-9 rounded-full flex items-center justify-center font-black text-white text-xl active:scale-90 transition-transform shrink-0"
+                                  style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 4px 14px rgba(var(--accent-rgb),0.4)' }}>
+                                  +
                                 </button>
                               ) : (
-                                <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                                   <button onClick={() => removeItem(item.id)}
-                                    className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-white active:scale-90 transition-transform"
-                                    style={{ background: '#1e1e1e' }}>−</button>
+                                    className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-white active:scale-90 transition-transform"
+                                    style={{ background: '#222', border: '1px solid rgba(255,255,255,0.1)' }}>−</button>
                                   <span className="w-5 text-center font-black text-white text-sm">{qty}</span>
                                   <button onClick={() => addItem(item)}
-                                    className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-white active:scale-90 transition-transform"
-                                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))' }}>+</button>
+                                    className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-white active:scale-90 transition-transform"
+                                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 3px 10px rgba(var(--accent-rgb),0.35)' }}>+</button>
                                 </div>
                               )}
                             </div>
@@ -2368,36 +2354,27 @@ export default function Cardapio() {
         </div>
       )}
 
-      {/* FAB carrinho — glassmorphism */}
+      {/* FAB carrinho */}
       {totalItens > 0 && (
-        <div className="fixed bottom-6 z-30"
-          style={{ left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 32px)', maxWidth: 672 }}>
+        <div className="fixed bottom-5 z-30"
+          style={{ left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 24px)', maxWidth: 520 }}>
           <button onClick={() => setTela('carrinho')}
-            className="w-full py-3.5 px-5 rounded-2xl flex items-center justify-between active:scale-[0.98] transition-transform"
+            className="w-full py-4 px-5 rounded-2xl flex items-center justify-between active:scale-[0.98] transition-transform"
             style={{
-              background: 'rgba(var(--accent-rgb),0.95)',
-              backdropFilter: 'blur(20px)',
-              boxShadow: '0 -2px 40px rgba(var(--accent-rgb),0.4), 0 8px 40px rgba(var(--accent-rgb),0.5)',
+              background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%)',
+              boxShadow: '0 8px 40px rgba(var(--accent-rgb),0.55), 0 2px 12px rgba(0,0,0,0.6)',
             }}>
-            {/* Left: bag icon with count badge */}
             <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white"
-                  style={{ background: 'rgba(255,255,255,0.2)' }}>
-                  <ShoppingBag size={18} strokeWidth={1.75} />
-                </div>
-                <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center font-black text-xs"
-                  style={{ background: '#fff', color: 'var(--accent)' }}>
-                  {totalItens}
-                </div>
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center"
+                style={{ background: 'rgba(0,0,0,0.2)' }}>
+                <ShoppingBag size={17} strokeWidth={1.75} color="#fff" />
               </div>
-              {/* Item summary */}
-              <span className="text-white font-bold text-sm">
-                {totalItens === 1 ? '1 item' : `${totalItens} itens`} · Ver carrinho
+              <span className="text-white font-bold text-[14px]">
+                {totalItens === 1 ? '1 item' : `${totalItens} itens`}
               </span>
+              <span className="text-white/60 text-[13px]">· Ver carrinho</span>
             </div>
-            {/* Right: total */}
-            <span className="text-white font-black text-base">{brl(totalValor)}</span>
+            <span className="text-white font-black text-[16px]">{brl(totalValor)}</span>
           </button>
         </div>
       )}
