@@ -241,4 +241,7 @@ httpServer.listen(PORT, async () => {
 
   // Cupom automático de aniversário (envio via WhatsApp)
   try { require('./services/aniversarios').iniciarAniversarios(); } catch (e) { console.error('[aniversário] não iniciado:', e.message); }
+
+  // Relatório diário às 23h BRT (via WhatsApp para o admin)
+  try { require('./services/relatorio-diario').iniciarRelatorioDiario(); } catch (e) { console.error('[relatorio-diario] não iniciado:', e.message); }
 });

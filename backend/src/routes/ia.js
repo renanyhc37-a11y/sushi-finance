@@ -417,122 +417,209 @@ Crie conteúdo EXTRAORDINÁRIO e IRRESISTÍVEL para um post que vai viralizar. R
 });
 
 // ══════════════════════════════════════════════════════════════
-// AGENTE DE VOZ — Jarvis
+// AGENTE DE VOZ — NinjaContrlol v3
 // ══════════════════════════════════════════════════════════════
 
 router.post('/agente', requireAuth, async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  const { comando } = req.body;
+  const { comando, historico_conversa = [] } = req.body;
   if (!comando?.trim()) return res.status(400).json({ erro: 'Comando vazio' });
 
-  // Coleta contexto em tempo real
+  // ── Coleta contexto em tempo real ───────────────────────────
   let ctx = {};
   try {
-    const hoje = new Date().toISOString().slice(0, 10);
-    const mes  = new Date().toISOString().slice(0, 7);
+    const agora = new Date();
+    // Brasília = UTC-3
+    const agoraBR = new Date(agora.getTime() - 3 * 60 * 60 * 1000);
+    const hoje = agoraBR.toISOString().slice(0, 10);
+    const mes  = agoraBR.toISOString().slice(0, 7);
+    const ontem = new Date(agoraBR.getTime() - 86400000).toISOString().slice(0, 10);
 
     ctx.pedidos_ativos = db.prepare(
-      `SELECT id, numero, cliente_nome, status, total FROM pdv_pedidos
-       WHERE status NOT IN ('entregue','cancelado') ORDER BY id DESC LIMIT 20`
+      `SELECT id, numero, cliente_nome, status, total, bairro, tipo_entrega, created_at
+       FROM pdv_pedidos WHERE status NOT IN ('entregue','cancelado') ORDER BY id DESC LIMIT 30`
     ).all();
 
-    ctx.resumo_pedidos = db.prepare(
-      `SELECT status, COUNT(*) as qt FROM pdv_pedidos WHERE DATE(created_at) = ? GROUP BY status`
-    ).all(hoje);
-
     ctx.faturamento_hoje = db.prepare(
-      `SELECT COALESCE(SUM(total),0) as total, COUNT(*) as pedidos
-       FROM pdv_pedidos WHERE DATE(created_at) = ? AND status != 'cancelado'`
+      `SELECT COALESCE(SUM(total),0) as total, COUNT(*) as pedidos,
+              COALESCE(AVG(total),0) as ticket_medio,
+              COALESCE(SUM(CASE WHEN forma_pagamento='pix' THEN total ELSE 0 END),0) as pix,
+              COALESCE(SUM(CASE WHEN forma_pagamento='dinheiro' THEN total ELSE 0 END),0) as dinheiro,
+              COALESCE(SUM(CASE WHEN forma_pagamento LIKE 'cartao%' THEN total ELSE 0 END),0) as cartao,
+              COUNT(CASE WHEN status='cancelado' THEN 1 END) as cancelados
+       FROM pdv_pedidos WHERE date(created_at,'-3 hours') = ?`
     ).get(hoje);
+
+    ctx.faturamento_ontem = db.prepare(
+      `SELECT COALESCE(SUM(total),0) as total, COUNT(*) as pedidos
+       FROM pdv_pedidos WHERE date(created_at,'-3 hours') = ? AND status != 'cancelado'`
+    ).get(ontem);
 
     ctx.faturamento_mes = db.prepare(
       `SELECT COALESCE(SUM(total),0) as total, COUNT(*) as pedidos
-       FROM pdv_pedidos WHERE strftime('%Y-%m', created_at) = ? AND status != 'cancelado'`
+       FROM pdv_pedidos WHERE strftime('%Y-%m', datetime(created_at,'-3 hours')) = ? AND status != 'cancelado'`
     ).get(mes);
 
     ctx.boletos_pendentes = db.prepare(
       `SELECT id, fornecedor, descricao, data_vencimento,
         (SELECT COALESCE(SUM(quantidade*valor_unitario),0) FROM boleto_itens WHERE boleto_id=boletos.id) as valor
-       FROM boletos WHERE status='pendente' ORDER BY data_vencimento ASC LIMIT 10`
+       FROM boletos WHERE status='pendente' ORDER BY data_vencimento ASC LIMIT 15`
     ).all();
+
+    ctx.boletos_vencendo = ctx.boletos_pendentes.filter(b => {
+      const diff = (new Date(b.data_vencimento) - agoraBR) / 86400000;
+      return diff <= 3;
+    });
 
     ctx.itens_cardapio = db.prepare(
       `SELECT i.id, i.nome, i.preco, i.disponivel, c.nome as categoria
        FROM cardapio_itens i LEFT JOIN cardapio_categorias c ON c.id=i.categoria_id
-       ORDER BY c.nome, i.nome LIMIT 60`
+       ORDER BY c.nome, i.nome LIMIT 80`
     ).all();
 
-    ctx.cupons_ativos = db.prepare(
-      `SELECT codigo, tipo, valor FROM cupons WHERE ativo=1`
+    ctx.cupons = db.prepare(
+      `SELECT id, codigo, tipo, valor, ativo, usos_atuais, usos_maximos, validade
+       FROM cupons ORDER BY ativo DESC, created_at DESC LIMIT 20`
     ).all();
 
     ctx.insumo_catalogo = db.prepare(
       `SELECT slug, nome, unidade FROM insumo_catalogo WHERE ativo=1 ORDER BY ordem`
     ).all();
+
+    // Últimas entradas de insumo para contexto de estoque
+    ctx.ultimas_entradas = db.prepare(
+      `SELECT e.insumo, c.nome, SUM(e.peso_util) as total, MAX(e.data) as ultima_compra
+       FROM insumo_entrada e LEFT JOIN insumo_catalogo c ON c.slug = e.insumo
+       WHERE e.data >= date('now','-30 days')
+       GROUP BY e.insumo ORDER BY ultima_compra DESC LIMIT 10`
+    ).all();
+
+    // Top clientes
+    ctx.top_clientes = db.prepare(
+      `SELECT cliente_nome, cliente_telefone, COUNT(*) as pedidos, SUM(total) as gasto
+       FROM pdv_pedidos WHERE status != 'cancelado'
+       GROUP BY cliente_telefone ORDER BY gasto DESC LIMIT 5`
+    ).all();
+
+    // Itens mais vendidos hoje
+    ctx.top_hoje = db.prepare(
+      `SELECT i.item_nome, SUM(i.quantidade) as qt
+       FROM pdv_itens i JOIN pdv_pedidos p ON p.id=i.pedido_id
+       WHERE date(p.created_at,'-3 hours') = ? AND p.status != 'cancelado'
+       GROUP BY i.item_nome ORDER BY qt DESC LIMIT 5`
+    ).all(hoje);
+
+    // Config da loja (horário, bairros, frete)
+    ctx.config_loja = db.prepare(
+      `SELECT chave, valor FROM config WHERE chave IN ('loja_aberta','horario','nome_restaurante','frete_gratis_acima')`
+    ).all().reduce((a, r) => { a[r.chave] = r.valor; return a; }, {});
+
   } catch (e) {
     console.warn('[agente] contexto parcial:', e.message);
   }
 
   if (!apiKey) {
-    return res.json({
-      resposta_voz: 'Chave de IA não configurada.',
-      acao: 'info', parametros: {},
-    });
+    return res.json({ resposta_voz: 'Chave de IA não configurada.', acao: 'info', parametros: {} });
   }
 
   try {
     const client = new Anthropic({ apiKey });
-    const brl = v => `R$ ${Number(v).toFixed(2).replace('.', ',')}`;
-    const hoje = new Date().toISOString().slice(0, 10);
+    const brl = v => `R$ ${Number(v||0).toFixed(2).replace('.', ',')}`;
+    const agora = new Date();
+    const agoraBR = new Date(agora.getTime() - 3 * 60 * 60 * 1000);
+    const hoje = agoraBR.toISOString().slice(0, 10);
+    const horaAtual = agoraBR.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    const systemPrompt = `Você é NinjaContrlol, assistente de voz de um sistema de delivery de sushi. Responda em português brasileiro, direto e conciso (máx 2 frases para falar em voz alta).
+    const variacaoHoje = ctx.faturamento_ontem?.total > 0
+      ? ((ctx.faturamento_hoje?.total - ctx.faturamento_ontem?.total) / ctx.faturamento_ontem?.total * 100).toFixed(0)
+      : null;
 
-## CONTEXTO ATUAL (${new Date().toLocaleString('pt-BR')}):
+    const systemPrompt = `Você é NinjaContrlol — o parceiro digital do delivery ${ctx.config_loja?.nome_restaurante || '37 Sushi'}. Você é ágil, inteligente, proativo e fala como um sócio de confiança, não como um robô. Responda SEMPRE em português brasileiro, de forma direta e calorosa (máx 2 frases para falar em voz alta). Quando registrar algo, confirme brevemente o que foi feito.
 
-PEDIDOS ATIVOS: ${ctx.pedidos_ativos?.length || 0}
-${ctx.pedidos_ativos?.map(p => `  #${p.numero} ${p.cliente_nome} - ${p.status} - ${brl(p.total)}`).join('\n') || '  Nenhum'}
+## SITUAÇÃO ATUAL — ${horaAtual} de ${hoje}:
 
-HOJE: ${brl(ctx.faturamento_hoje?.total || 0)} / ${ctx.faturamento_hoje?.pedidos || 0} pedidos
-MÊS: ${brl(ctx.faturamento_mes?.total || 0)} / ${ctx.faturamento_mes?.pedidos || 0} pedidos
+### OPERAÇÃO
+Pedidos em aberto: ${ctx.pedidos_ativos?.length || 0}
+${ctx.pedidos_ativos?.map(p => `  #${p.numero} ${p.cliente_nome} [${p.status}] ${brl(p.total)} ${p.tipo_entrega==='retirada'?'🏪retirada':'🛵'+p.bairro||''}`).join('\n') || '  Nenhum pedido ativo'}
 
-BOLETOS PENDENTES (${ctx.boletos_pendentes?.length || 0}):
-${ctx.boletos_pendentes?.map(b => `  ${b.fornecedor} - ${brl(b.valor)} - vence ${b.data_vencimento}`).join('\n') || '  Nenhum'}
+### FATURAMENTO
+Hoje: ${brl(ctx.faturamento_hoje?.total)} (${ctx.faturamento_hoje?.pedidos||0} pedidos, ticket médio ${brl(ctx.faturamento_hoje?.ticket_medio)})${variacaoHoje ? ` | ${variacaoHoje > 0 ? '📈+' : '📉'}${variacaoHoje}% vs ontem` : ''}
+Ontem: ${brl(ctx.faturamento_ontem?.total)} (${ctx.faturamento_ontem?.pedidos||0} pedidos)
+Mês: ${brl(ctx.faturamento_mes?.total)} (${ctx.faturamento_mes?.pedidos||0} pedidos)
+Formas hoje: PIX ${brl(ctx.faturamento_hoje?.pix)} | Dinheiro ${brl(ctx.faturamento_hoje?.dinheiro)} | Cartão ${brl(ctx.faturamento_hoje?.cartao)}
 
-CARDÁPIO (${ctx.itens_cardapio?.length || 0} itens):
-${ctx.itens_cardapio?.map(i => `  [${i.id}] ${i.nome} ${brl(i.preco)} ${i.disponivel ? '' : '⛔PAUSADO'}`).join('\n') || '  Sem itens'}
+### TOP VENDIDOS HOJE
+${ctx.top_hoje?.map(t => `  ${t.qt}x ${t.item_nome}`).join('\n') || '  Sem vendas hoje'}
 
-INSUMOS DISPONÍVEIS (slugs para registro de entrada):
+### TOP CLIENTES (geral)
+${ctx.top_clientes?.map(c => `  ${c.cliente_nome} — ${c.pedidos} pedidos — ${brl(c.gasto)}`).join('\n') || '  Sem dados'}
+
+### BOLETOS PENDENTES (${ctx.boletos_pendentes?.length||0})${ctx.boletos_vencendo?.length ? ` ⚠️ ${ctx.boletos_vencendo.length} vencendo em até 3 dias!` : ''}
+${ctx.boletos_pendentes?.map(b => `  [${b.id}] ${b.fornecedor} ${brl(b.valor)} vence ${b.data_vencimento}${new Date(b.data_vencimento)<agoraBR?' ⚠️VENCIDO':''}`).join('\n') || '  Nenhum'}
+
+### CARDÁPIO (${ctx.itens_cardapio?.length||0} itens)
+${ctx.itens_cardapio?.map(i => `  [${i.id}] ${i.nome} ${brl(i.preco)} ${i.disponivel?'✅':'⛔PAUSADO'}`).join('\n') || '  Sem itens'}
+
+### CUPONS (${ctx.cupons?.length||0})
+${ctx.cupons?.map(c => `  [${c.id}] ${c.codigo} ${c.tipo}=${c.valor}${c.tipo==='percentual'?'%':' reais'} ${c.ativo?'✅':'⛔desativado'} usos:${c.usos_atuais}/${c.usos_maximos||'∞'} validade:${c.validade||'sem limite'}`).join('\n') || '  Nenhum'}
+
+### INSUMOS DISPONÍVEIS PARA REGISTRO
 ${ctx.insumo_catalogo?.map(i => `  ${i.slug} = ${i.nome} (${i.unidade})`).join('\n') || '  Sem catálogo'}
 
-CUPONS ATIVOS: ${ctx.cupons_ativos?.map(c => c.codigo).join(', ') || 'Nenhum'}
+### ESTOQUE RECENTE (últimos 30 dias)
+${ctx.ultimas_entradas?.map(e => `  ${e.nome||e.insumo}: ${e.total} kg/un total, última compra ${e.ultima_compra}`).join('\n') || '  Sem entradas'}
 
-## AÇÕES DISPONÍVEIS — retorne EXATAMENTE este JSON (sem markdown):
+## AÇÕES DISPONÍVEIS
+Retorne EXATAMENTE este JSON (sem markdown, sem explicações):
 {
-  "resposta_voz": "frase curta para falar em voz alta",
-  "acao": "nav|lista_add|pausar_item|ativar_item|criar_cupom|info|cancelar_pedido|registrar_insumo|registrar_boleto|nenhuma",
-  "parametros": {}
+  "resposta_voz": "frase curta e amigável (máx 2 frases)",
+  "acao": "uma das ações abaixo ou nenhuma",
+  "parametros": {},
+  "tag": "categoria da ação para o frontend"
 }
 
-PARÂMETROS POR AÇÃO:
-- nav: { "pagina": "/pdv" }
-- lista_add: { "item": "cebolinha" }
-- pausar_item: { "item_id": 12, "nome": "Hot Roll" }
-- ativar_item: { "item_id": 12, "nome": "Hot Roll" }
-- criar_cupom: { "codigo": "PROMO10", "tipo": "percentual", "valor": 10, "minimo": 30 }
-- cancelar_pedido: { "pedido_id": 5, "numero": 42 }
-- registrar_insumo: { "insumo": "salmao", "quantidade": 30, "valor_total": 900, "fornecedor": "Cia do Salmão" }
-  (use o slug correto do catálogo acima; para insumos simples: quantidade = peso/qtd na unidade do item)
-- registrar_boleto: { "fornecedor": "Atacado X", "descricao": "Compra de insumos", "valor_total": 500, "data_vencimento": "${hoje}", "dias_vencimento": 7 }
-  (se o usuário disser "vence em 7 dias" calcule a data; se disser "dia 30" use o mês atual)
-- info: (só resposta_voz com os dados do contexto)
+AÇÕES E PARÂMETROS:
+nav             → { "pagina": "/pdv" }
+lista_add       → { "item": "cebolinha" }
+pausar_item     → { "item_id": 12, "nome": "Hot Roll" }
+ativar_item     → { "item_id": 12, "nome": "Hot Roll" }
+alterar_preco   → { "item_id": 12, "nome": "Hot Roll", "novo_preco": 29.90 }
+criar_cupom     → { "codigo": "PROMO10", "tipo": "percentual", "valor": 10, "minimo": 30, "usos_maximos": 0, "validade": null }
+desativar_cupom → { "cupom_id": 3, "codigo": "PROMO10" }
+ativar_cupom    → { "cupom_id": 3, "codigo": "PROMO10" }
+cancelar_pedido → { "pedido_id": 5, "numero": 42 }
+avancar_pedido  → { "pedido_id": 5, "numero": 42, "novo_status": "pronto" }  (statuses: espera→preparando→pronto→entregue)
+registrar_insumo → { "insumo": "salmao", "quantidade": 30, "valor_total": 900, "fornecedor": "Cia do Salmão" }
+registrar_boleto → { "fornecedor": "Atacado X", "descricao": "Compra de insumos", "valor_total": 500, "data_vencimento": "${hoje}", "dias_vencimento": null }
+pagar_boleto    → { "boleto_id": 3, "fornecedor": "Atacado X" }
+toggle_loja     → { "abrir": true }  (true=abrir, false=fechar)
+info            → (só resposta_voz com análise dos dados)
+nenhuma         → (quando não há ação, apenas conversa)
 
-Páginas para nav: /dashboard, /pdv, /despesas, /lista-compras, /faturamento, /boletos, /relatorios, /whatsapp, /clientes, /cardapio-admin, /campanhas, /producao, /insumos`;
+REGRAS:
+- Para "vence em X dias": calcule data_vencimento como ${hoje} + X dias
+- Para "dia 30": use ${hoje.slice(0,8)}30 (mesmo mês)
+- Para "mês que vem dia 10": use próximo mês
+- Para alterar preço, SEMPRE confirme o novo valor antes de executar na resposta_voz
+- Quando há boletos vencendo, mencione proativamente se relevante
+- Se o usuário pedir "resumo" ou "como tá o dia", dê análise completa com comparativo
+- Para nav, use: /dashboard, /pdv, /despesas, /lista-compras, /faturamento, /boletos, /relatorios, /whatsapp, /clientes, /cardapio-admin, /campanhas, /producao, /insumos, /cashback, /metricas
+- tag deve ser: "Insumo" | "Boleto" | "Ação" | "Navegar" | "Info" | "Pedido" | "Cardápio" | "Cupom"`;
+
+    // Monta histórico de conversa para contexto (últimas 5 trocas)
+    const mensagens = [];
+    const hist = (historico_conversa || []).slice(-5);
+    for (const h of hist) {
+      mensagens.push({ role: 'user', content: h.texto });
+      mensagens.push({ role: 'assistant', content: h.resposta_raw || h.resposta });
+    }
+    mensagens.push({ role: 'user', content: comando.trim() });
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 500,
-      messages: [{ role: 'user', content: `Comando: "${comando.trim()}"` }],
-      system: systemPrompt,
+      max_tokens: 600,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+      messages: mensagens,
     });
 
     const texto = message.content[0].text.trim();
@@ -541,10 +628,10 @@ Páginas para nav: /dashboard, /pdv, /despesas, /lista-compras, /faturamento, /b
       const match = texto.match(/\{[\s\S]*\}/);
       dados = JSON.parse(match ? match[0] : texto);
     } catch {
-      return res.json({ resposta_voz: 'Não entendi. Tente novamente.', acao: 'nenhuma', parametros: {} });
+      return res.json({ resposta_voz: 'Não entendi bem. Pode repetir de outro jeito?', acao: 'nenhuma', parametros: {}, tag: 'Info' });
     }
 
-    // ── Executa ações que precisam do backend ────────────────
+    // ── Executa ações no banco ───────────────────────────────
     const p = dados.parametros || {};
 
     if (dados.acao === 'pausar_item' && p.item_id) {
@@ -553,51 +640,78 @@ Páginas para nav: /dashboard, /pdv, /despesas, /lista-compras, /faturamento, /b
     if (dados.acao === 'ativar_item' && p.item_id) {
       try { db.prepare('UPDATE cardapio_itens SET disponivel=1 WHERE id=?').run(p.item_id); } catch {}
     }
+    if (dados.acao === 'alterar_preco' && p.item_id && p.novo_preco) {
+      try { db.prepare('UPDATE cardapio_itens SET preco=? WHERE id=?').run(Number(p.novo_preco), p.item_id); } catch {}
+    }
     if (dados.acao === 'criar_cupom' && p.codigo) {
       try {
-        db.prepare(`INSERT OR IGNORE INTO cupons (codigo,tipo,valor,minimo,usos_maximos) VALUES (?,?,?,?,0)`)
-          .run(p.codigo.toUpperCase(), p.tipo || 'percentual', Number(p.valor) || 10, Number(p.minimo) || 0);
+        db.prepare(`INSERT OR IGNORE INTO cupons (codigo,tipo,valor,minimo,usos_maximos,validade,ativo) VALUES (?,?,?,?,?,?,1)`)
+          .run(p.codigo.toUpperCase(), p.tipo || 'percentual', Number(p.valor)||10, Number(p.minimo)||0, Number(p.usos_maximos)||0, p.validade||null);
       } catch {}
+    }
+    if (dados.acao === 'desativar_cupom' && p.cupom_id) {
+      try { db.prepare('UPDATE cupons SET ativo=0 WHERE id=?').run(p.cupom_id); } catch {}
+    }
+    if (dados.acao === 'ativar_cupom' && p.cupom_id) {
+      try { db.prepare('UPDATE cupons SET ativo=1 WHERE id=?').run(p.cupom_id); } catch {}
     }
     if (dados.acao === 'cancelar_pedido' && p.pedido_id) {
       try { db.prepare(`UPDATE pdv_pedidos SET status='cancelado' WHERE id=?`).run(p.pedido_id); } catch {}
     }
+    if (dados.acao === 'avancar_pedido' && p.pedido_id && p.novo_status) {
+      const statusValidos = ['espera','preparando','pronto','entregue'];
+      if (statusValidos.includes(p.novo_status)) {
+        try { db.prepare(`UPDATE pdv_pedidos SET status=? WHERE id=?`).run(p.novo_status, p.pedido_id); } catch {}
+      }
+    }
     if (dados.acao === 'registrar_insumo' && p.insumo && p.valor_total) {
       try {
-        const item = db.prepare('SELECT * FROM insumo_catalogo WHERE slug=?').get(p.insumo);
+        const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+        let item = db.prepare('SELECT * FROM insumo_catalogo WHERE slug=?').get(p.insumo);
+        if (!item) {
+          const catalogo = db.prepare('SELECT * FROM insumo_catalogo WHERE ativo=1').all();
+          const termo = norm(p.insumo);
+          item = catalogo.find(c => norm(c.slug) === termo || norm(c.nome) === termo)
+            || catalogo.find(c => norm(c.slug).includes(termo) || termo.includes(norm(c.slug)))
+            || catalogo.find(c => norm(c.nome).includes(termo) || termo.includes(norm(c.nome)));
+        }
         if (item) {
-          const qtd = Number(p.quantidade) || 1;
+          const qtd = Number(p.quantidade)||1;
           const val = Number(p.valor_total);
-          db.prepare(`
-            INSERT INTO insumo_entrada (data, insumo, peso_util, valor_total, custo_kg, fornecedor)
-            VALUES (date('now'), ?, ?, ?, ?, ?)
-          `).run(item.slug, qtd, val, qtd > 0 ? val / qtd : 0, p.fornecedor || null);
+          db.prepare(`INSERT INTO insumo_entrada (data, insumo, peso_util, valor_total, custo_kg, fornecedor) VALUES (date('now','-3 hours'), ?, ?, ?, ?, ?)`)
+            .run(item.slug, qtd, val, qtd > 0 ? val/qtd : 0, p.fornecedor||null);
         }
       } catch (e) { console.warn('[agente] registrar_insumo:', e.message); }
     }
     if (dados.acao === 'registrar_boleto' && p.fornecedor) {
       try {
         let venc = p.data_vencimento;
-        if (!venc && p.dias_vencimento) {
-          const d = new Date(); d.setDate(d.getDate() + Number(p.dias_vencimento));
+        if ((!venc || venc === hoje) && p.dias_vencimento) {
+          const d = new Date(agoraBR); d.setDate(d.getDate() + Number(p.dias_vencimento));
           venc = d.toISOString().slice(0, 10);
         }
-        if (!venc) venc = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-        const r = db.prepare(
-          `INSERT INTO boletos (fornecedor, descricao, data_chegada, data_vencimento) VALUES (?,?,date('now'),?)`
-        ).run(p.fornecedor, p.descricao || 'Registrado pelo NinjaContrlol', venc);
+        if (!venc) { const d = new Date(agoraBR); d.setDate(d.getDate()+7); venc = d.toISOString().slice(0,10); }
+        const r = db.prepare(`INSERT INTO boletos (fornecedor, descricao, data_chegada, data_vencimento) VALUES (?,?,date('now','-3 hours'),?)`)
+          .run(p.fornecedor, p.descricao||'Registrado pelo NinjaContrlol', venc);
         if (p.valor_total && r.lastInsertRowid) {
-          db.prepare(
-            `INSERT INTO boleto_itens (boleto_id, descricao, quantidade, valor_unitario) VALUES (?,?,1,?)`
-          ).run(r.lastInsertRowid, p.descricao || p.fornecedor, Number(p.valor_total));
+          db.prepare(`INSERT INTO boleto_itens (boleto_id, descricao, quantidade, valor_unitario) VALUES (?,?,1,?)`)
+            .run(r.lastInsertRowid, p.descricao||p.fornecedor, Number(p.valor_total));
         }
       } catch (e) { console.warn('[agente] registrar_boleto:', e.message); }
     }
+    if (dados.acao === 'pagar_boleto' && p.boleto_id) {
+      try { db.prepare(`UPDATE boletos SET status='pago', data_pagamento=date('now','-3 hours') WHERE id=?`).run(p.boleto_id); } catch {}
+    }
+    if (dados.acao === 'toggle_loja') {
+      try { db.prepare(`INSERT OR REPLACE INTO config (chave, valor) VALUES ('loja_aberta', ?)`).run(p.abrir ? '1' : '0'); } catch {}
+    }
 
+    // Salva resposta raw para histórico de conversa
+    dados.resposta_raw = texto;
     res.json(dados);
   } catch (e) {
     console.error('[agente] erro:', e.message);
-    res.status(500).json({ resposta_voz: 'Erro interno. Tente novamente.', acao: 'nenhuma', parametros: {} });
+    res.status(500).json({ resposta_voz: 'Erro interno. Tente novamente.', acao: 'nenhuma', parametros: {}, tag: 'Info' });
   }
 });
 

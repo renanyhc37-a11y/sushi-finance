@@ -484,6 +484,37 @@ function AvisoSenhaPadrao() {
   );
 }
 
+function AlertaBoletos() {
+  const alertas = useBoletoAlert();
+  const [dismissed, setDismissed] = useState(false);
+  if (!alertas.length || dismissed) return null;
+  const vencidos = alertas.filter(b => {
+    const dias = Math.ceil((new Date(b.data_vencimento + 'T12:00:00') - new Date()) / 86400000);
+    return dias < 0;
+  });
+  const hoje = alertas.filter(b => {
+    const dias = Math.ceil((new Date(b.data_vencimento + 'T12:00:00') - new Date()) / 86400000);
+    return dias === 0;
+  });
+  const resumo = vencidos.length
+    ? `${vencidos.length} boleto(s) vencido(s)!`
+    : hoje.length
+    ? `${hoje.length} boleto(s) vence(m) HOJE!`
+    : `${alertas.length} boleto(s) vence(m) em até 3 dias`;
+  return (
+    <div style={{
+      background: vencidos.length ? '#450a0a' : hoje.length ? '#431407' : '#1c1400',
+      borderBottom: `1px solid ${vencidos.length ? '#dc2626' : hoje.length ? '#f97316' : '#ca8a04'}`,
+      color: vencidos.length ? '#fca5a5' : hoje.length ? '#fdba74' : '#fde68a',
+      padding: '6px 16px', fontSize: 12, fontWeight: 600,
+      display: 'flex', alignItems: 'center', gap: 8,
+    }}>
+      <span style={{ flex: 1 }}>🧾 {resumo} — <button onClick={() => window.location.href = '/boletos'} style={{ color: 'inherit', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', font: 'inherit' }}>ver boletos</button></span>
+      <button onClick={() => setDismissed(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', opacity: 0.6, fontSize: 16, lineHeight: 1 }}>✕</button>
+    </div>
+  );
+}
+
 function Layout({ logout }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dark, toggleTheme] = useTheme();
@@ -550,6 +581,7 @@ function Layout({ logout }) {
           <div className="h-px w-full shrink-0" style={{ background: 'linear-gradient(90deg, var(--accent), var(--accent-2), transparent)', opacity: 0.5 }} />
 
           <AvisoSenhaPadrao />
+          <AlertaBoletos />
 
           <main className="main-conteudo flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6" style={{ background: 'transparent' }}>
             <React.Suspense fallback={<div className="p-10 text-center text-sm" style={{ color: 'var(--txt-muted, #71717a)' }}>Carregando…</div>}>

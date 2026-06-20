@@ -1912,6 +1912,7 @@ export default function PDV() {
                 style={{ color: atraso && atraso.nivel !== 'ok' ? atraso.cor : 'var(--txt-dim)' }}>
                 {atraso && atraso.nivel !== 'ok' && <AlertTriangle size={10} strokeWidth={2.5} />}
                 {utcDate(pedido.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                {atraso && <span style={{ marginLeft: 2, opacity: 0.75 }}>· {atraso.min}min</span>}
               </span>
             </div>
           </div>
