@@ -1661,7 +1661,7 @@ export default function PDV() {
     es.addEventListener('impresso_atualizado', () => carregar(true));
     es.onerror = () => {};
 
-    const iv1 = setInterval(() => carregar(true), 30000);
+    const iv1 = setInterval(() => carregar(true), 10000);
     const iv2 = setInterval(() => setTick(t => t + 1), 10000);
 
     return () => { es.close(); clearInterval(iv1); clearInterval(iv2); };
