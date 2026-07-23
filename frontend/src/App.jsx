@@ -5,7 +5,7 @@ import {
   Megaphone, Percent, Image as ImageIcon, Wallet, TrendingDown, Receipt,
   TrendingUp, FileBarChart, ClipboardList, Beef, FileText, Fish, Upload, Boxes,
   Smartphone, ConciergeBell, Bot, StickyNote, Sun, Moon, Palette, KeyRound,
-  LogOut, Menu, ChevronDown, Circle, Calculator, ChefHat, Pin, Plus, Check, ArrowDownUp, PieChart, Coins,
+  LogOut, Menu, ChevronDown, Circle, Calculator, ChefHat, Pin, Plus, Check, ArrowDownUp, PieChart, Coins, Truck,
 } from 'lucide-react';
 import { useTheme } from './hooks/useTheme';
 import { useBoletoAlert } from './hooks/useBoletoAlert';
@@ -110,6 +110,7 @@ const NAV_GRUPOS = [
     itens: [
       { to: '/ingredientes',     icon: Beef,       label: 'Ingredientes'    },
       { to: '/fichas',           icon: FileText,   label: 'Fichas Técnicas' },
+      { to: '/fornecedores',     icon: Truck,      label: 'Fornecedores'    },
       { to: '/rendimento',       icon: Fish,       label: 'Rendimento'      },
       { to: '/insumos',          icon: Boxes,      label: 'Insumos'         },
       { to: '/importar-cardapio', icon: Upload,     label: 'Importar Cardápio'  },
@@ -231,73 +232,52 @@ function AtalhosTopo() {
   );
 }
 
+// Barra lateral: todos os grupos sempre abertos, links direto (sem painel central).
 function NavGroup({ onClose }) {
   const location = useLocation();
-  const [abertos, setAbertos] = useState({ Operação: true, Marketing: false, Financeiro: false, Gestão: false });
-  const toggle = g => setAbertos(a => ({ ...a, [g]: !a[g] }));
-
-  useEffect(() => {
-    NAV_GRUPOS.forEach(({ grupo, fixo, itens }) => {
-      if (!fixo && itens.some(n => location.pathname.startsWith(n.to))) {
-        setAbertos(a => ({ ...a, [grupo]: true }));
-      }
-    });
-  }, [location.pathname]);
 
   return (
     <div className="mt-1 space-y-1">
-      {NAV_GRUPOS.map(({ grupo, cor, fixo, itens }) => {
+      {NAV_GRUPOS.map(({ grupo, cor, itens }) => {
         const isGrupoAtivo = itens.some(n => location.pathname.startsWith(n.to));
-        const aberto = fixo || abertos[grupo];
         return (
           <div key={grupo}>
-            {fixo ? (
-              <div className="flex items-center gap-2.5 px-2 pt-3 pb-1.5">
-                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.18em', color: cor, textTransform: 'uppercase' }}>{grupo}</span>
-                <div className="h-px flex-1" style={{ background: `linear-gradient(90deg, ${cor}40, transparent)` }} />
-              </div>
-            ) : (
-              <button onClick={() => toggle(grupo)}
-                className="w-full flex items-center gap-2.5 px-2 pt-3 pb-1.5 select-none">
-                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.18em', color: isGrupoAtivo ? cor : 'var(--txt-faint)', textTransform: 'uppercase' }}>{grupo}</span>
-                <div className="h-px flex-1" style={{ background: isGrupoAtivo ? `linear-gradient(90deg, ${cor}40, transparent)` : 'var(--hairline-soft)' }} />
-                <ChevronDown size={13} strokeWidth={2} style={{ color: isGrupoAtivo ? cor : 'var(--txt-faint)', transform: aberto ? 'none' : 'rotate(-90deg)', transition: 'transform 0.2s' }} />
-              </button>
-            )}
+            <div className="flex items-center gap-2.5 px-2 pt-3 pb-1.5">
+              <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.18em', color: isGrupoAtivo ? cor : 'var(--txt-faint)', textTransform: 'uppercase' }}>{grupo}</span>
+              <div className="h-px flex-1" style={{ background: isGrupoAtivo ? `linear-gradient(90deg, ${cor}40, transparent)` : 'var(--hairline-soft)' }} />
+            </div>
 
-            {aberto && (
-              <div className="space-y-0.5">
-                {itens.map(({ to, icon: Icon, label, badge }) => (
-                  <NavLink key={to} to={to} onClick={onClose} className="block group">
-                    {({ isActive }) => (
-                      <div className="flex items-center gap-3 px-2.5 py-2 rounded-xl relative transition-all duration-150"
-                        style={{
-                          background: isActive ? `linear-gradient(100deg, ${cor}1f, ${cor}08 60%, transparent)` : 'transparent',
-                          border: `1px solid ${isActive ? cor + '2e' : 'transparent'}`,
-                        }}>
-                        {isActive && (
-                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full" style={{ background: cor, boxShadow: `0 0 8px ${cor}` }} />
-                        )}
-                        <span className="w-8 h-8 flex items-center justify-center rounded-lg shrink-0 transition-all"
-                          style={{ background: isActive ? `${cor}1a` : 'var(--space-elev)', border: `1px solid ${isActive ? cor + '33' : 'var(--hairline-soft)'}` }}>
-                          <Icon size={17} strokeWidth={1.75} style={{ color: isActive ? cor : 'var(--txt-dim)' }} />
+            <div className="space-y-0.5">
+              {itens.map(({ to, icon: Icon, label, badge }) => (
+                <NavLink key={to} to={to} onClick={onClose} className="block group">
+                  {({ isActive }) => (
+                    <div className="flex items-center gap-3 px-2.5 py-2 rounded-xl relative transition-all duration-150"
+                      style={{
+                        background: isActive ? `linear-gradient(100deg, ${cor}1f, ${cor}08 60%, transparent)` : 'transparent',
+                        border: `1px solid ${isActive ? cor + '2e' : 'transparent'}`,
+                      }}>
+                      {isActive && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full" style={{ background: cor, boxShadow: `0 0 8px ${cor}` }} />
+                      )}
+                      <span className="w-8 h-8 flex items-center justify-center rounded-lg shrink-0 transition-all"
+                        style={{ background: isActive ? `${cor}1a` : 'var(--space-elev)', border: `1px solid ${isActive ? cor + '33' : 'var(--hairline-soft)'}` }}>
+                        <Icon size={17} strokeWidth={1.75} style={{ color: isActive ? cor : 'var(--txt-dim)' }} />
+                      </span>
+                      <span className="leading-none transition-colors flex-1"
+                        style={{ fontSize: 13, fontWeight: isActive ? 600 : 500, color: isActive ? 'var(--txt-strong)' : 'var(--txt)' }}>
+                        {label}
+                      </span>
+                      {badge && (
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
+                          style={{ background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b44' }}>
+                          {badge}
                         </span>
-                        <span className="leading-none transition-colors flex-1"
-                          style={{ fontSize: 13, fontWeight: isActive ? 600 : 500, color: isActive ? 'var(--txt-strong)' : 'var(--txt)' }}>
-                          {label}
-                        </span>
-                        {badge && (
-                          <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wide"
-                            style={{ background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b44' }}>
-                            {badge}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </NavLink>
-                ))}
-              </div>
-            )}
+                      )}
+                    </div>
+                  )}
+                </NavLink>
+              ))}
+            </div>
           </div>
         );
       })}
