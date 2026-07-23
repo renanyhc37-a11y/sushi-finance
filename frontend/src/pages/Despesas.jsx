@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import Modal from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import LancarPorFoto from '../components/LancarPorFoto';
 import { PageLoading } from '../components/Loading';
 import { brl, mesAtual } from '../lib/fmt';
 import { useDespesasOffline } from '../hooks/useDespesasOffline';
@@ -53,7 +54,7 @@ export default function Despesas() {
   const [salvando,   setSalvando]   = useState(false);
   const [excluindo,  setExcluindo]  = useState(false);
 
-  const { despesas, online, syncing, loading, qtdFila, criarDespesa, editarDespesa, excluirDespesa } = useDespesasOffline(mes);
+  const { despesas, online, syncing, loading, qtdFila, buscar, criarDespesa, editarDespesa, excluirDespesa } = useDespesasOffline(mes);
 
   const abrirNovo   = () => { setForm(FORM_VAZIO(mes)); setModal('novo'); };
   const abrirEditar = (d) => {
@@ -148,6 +149,7 @@ export default function Despesas() {
               <ChevronRight size={16} strokeWidth={2} />
             </button>
           </div>
+          <LancarPorFoto onSaved={() => buscar(mes)} />
           <button onClick={abrirNovo}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-black text-sm text-white transition-all active:scale-95"
             style={{ background:'var(--accent)', boxShadow:'0 2px 12px rgba(var(--accent-rgb),0.3)' }}>
