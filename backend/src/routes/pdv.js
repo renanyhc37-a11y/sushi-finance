@@ -426,8 +426,8 @@ router.get('/metricas-hoje', (req, res) => {
         COALESCE(SUM(total), 0) as faturamento,
         COALESCE(SUM(CASE WHEN forma_pagamento='pix'      THEN total ELSE 0 END), 0) as pix,
         COALESCE(SUM(CASE WHEN forma_pagamento='dinheiro' THEN total ELSE 0 END), 0) as dinheiro,
-        COALESCE(SUM(CASE WHEN forma_pagamento='credito'  THEN total ELSE 0 END), 0) as credito,
-        COALESCE(SUM(CASE WHEN forma_pagamento='debito'   THEN total ELSE 0 END), 0) as debito,
+        COALESCE(SUM(CASE WHEN forma_pagamento='cartao_cred' THEN total ELSE 0 END), 0) as credito,
+        COALESCE(SUM(CASE WHEN forma_pagamento='cartao_deb'  THEN total ELSE 0 END), 0) as debito,
         COUNT(CASE WHEN status='cancelado' THEN 1 END) as cancelados
       FROM pdv_pedidos
       WHERE date(created_at, '-3 hours') = date('now', '-3 hours')

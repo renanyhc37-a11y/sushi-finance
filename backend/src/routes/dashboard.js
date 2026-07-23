@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const db = require('../db/database');
+const faturamentoDia = require('../lib/faturamentoDia');
 const router = Router();
 
 // ── Migrações ─────────────────────────────────────────────────
@@ -62,18 +63,18 @@ router.get('/', (req, res) => {
   const semana = semanaAtras();
   const ultimos30 = mesAtras();
 
-  // ── VENDAS HOJE (PDV) ──────────────────────────────────────
-  const vendasHoje = db.prepare(`
-    SELECT
-      COUNT(*) as total_pedidos,
-      COALESCE(SUM(total), 0) as faturamento,
-      COALESCE(SUM(CASE WHEN forma_pagamento='pix' THEN total ELSE 0 END), 0) as pix,
-      COALESCE(SUM(CASE WHEN forma_pagamento='dinheiro' THEN total ELSE 0 END), 0) as dinheiro,
-      COALESCE(SUM(CASE WHEN forma_pagamento LIKE 'cartao%' THEN total ELSE 0 END), 0) as cartao,
-      COALESCE(AVG(total), 0) as ticket_medio
-    FROM pdv_pedidos
-    WHERE DATE(created_at) = ? AND status != 'cancelado'
-  `).get(agora);
+  // ── VENDAS HOJE ─────────────────────────────────────────────
+  // Reconciliado: usa o lançamento manual do dia se existir, senão os
+  // pedidos do PDV — mesma regra da tela Faturamento (ver lib/faturamentoDia).
+  const hojeReconciliado = faturamentoDia.somar(faturamentoDia.porDia(agora, agora));
+  const vendasHoje = {
+    total_pedidos: hojeReconciliado.pedidos,
+    faturamento: hojeReconciliado.total,
+    pix: hojeReconciliado.pix,
+    dinheiro: hojeReconciliado.dinheiro,
+    cartao: hojeReconciliado.credito + hojeReconciliado.debito,
+    ticket_medio: hojeReconciliado.pedidos > 0 ? hojeReconciliado.total / hojeReconciliado.pedidos : 0,
+  };
 
   // ── PEDIDOS POR STATUS (ao vivo) ──────────────────────────
   const pedidosAtivos = db.prepare(`
@@ -84,36 +85,13 @@ router.get('/', (req, res) => {
   `).all(agora);
 
   // ── FATURAMENTO ÚLTIMOS 7 DIAS ─────────────────────────────
-  const ultimos7dias = db.prepare(`
-    SELECT DATE(created_at) as dia,
-           COUNT(*) as pedidos,
-           COALESCE(SUM(total), 0) as total
-    FROM pdv_pedidos
-    WHERE DATE(created_at) >= ? AND status != 'cancelado'
-    GROUP BY dia ORDER BY dia
-  `).all(semana);
+  const ultimos7dias = faturamentoDia.porDia(semana, agora)
+    .map(d => ({ dia: d.data, pedidos: d.pedidos, total: d.total }));
 
   // ── FATURAMENTO MÊS ATUAL ─────────────────────────────────
-  // Combina o faturamento lançado manualmente (página Faturamento Diário)
-  // com os pedidos do cardápio online (PDV) dos dias que ainda não foram
-  // lançados manualmente — evitando dupla contagem por dia.
-  const fatManual = db.prepare(`
-    SELECT COALESCE(SUM(total_bruto), 0) as total,
-           COALESCE(SUM(quantidade_pedidos), 0) as pedidos
-    FROM faturamento_diario WHERE substr(data, 1, 7) = ?
-  `).get(mes);
-
-  const fatPdvSemManual = db.prepare(`
-    SELECT COALESCE(SUM(total), 0) as total, COUNT(*) as pedidos
-    FROM pdv_pedidos
-    WHERE strftime('%Y-%m', created_at) = ? AND status != 'cancelado'
-      AND DATE(created_at) NOT IN (SELECT data FROM faturamento_diario)
-  `).get(mes);
-
-  const fatMes = {
-    total:   (fatManual.total || 0) + (fatPdvSemManual.total || 0),
-    pedidos: (fatManual.pedidos || 0) + (fatPdvSemManual.pedidos || 0),
-  };
+  // Mesma reconciliação (manual prevalece, PDV cobre o resto), agregada
+  // do 1º dia do mês até hoje — bate exatamente com a tela Faturamento.
+  const fatMes = faturamentoDia.somar(faturamentoDia.porDia(`${mes}-01`, agora));
 
   // ── TOP ITENS VENDIDOS (últimos 30 dias) ──────────────────
   const topItens = db.prepare(`
@@ -240,12 +218,8 @@ router.get('/', (req, res) => {
   `).all(semana);
 
   // ── EVOLUÇÃO 30 DIAS (diária) ─────────────────────────────
-  const evolucao30d = db.prepare(`
-    SELECT DATE(created_at) as dia, COUNT(*) as pedidos, COALESCE(SUM(total),0) as total
-    FROM pdv_pedidos
-    WHERE DATE(created_at) >= ? AND status != 'cancelado'
-    GROUP BY dia ORDER BY dia
-  `).all(ultimos30);
+  const evolucao30d = faturamentoDia.porDia(ultimos30, agora)
+    .map(d => ({ dia: d.data, pedidos: d.pedidos, total: d.total }));
 
   res.json({
     gerado_em: new Date().toISOString(),

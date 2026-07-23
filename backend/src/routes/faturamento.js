@@ -73,8 +73,8 @@ router.get('/pedidos-agrupados', (req, res) => {
         COALESCE(SUM(total), 0) AS total_bruto,
         COALESCE(SUM(CASE WHEN forma_pagamento='pix'      THEN total ELSE 0 END), 0) AS pix,
         COALESCE(SUM(CASE WHEN forma_pagamento='dinheiro' THEN total ELSE 0 END), 0) AS dinheiro,
-        COALESCE(SUM(CASE WHEN forma_pagamento='credito'  THEN total ELSE 0 END), 0) AS credito,
-        COALESCE(SUM(CASE WHEN forma_pagamento='debito'   THEN total ELSE 0 END), 0) AS debito
+        COALESCE(SUM(CASE WHEN forma_pagamento='cartao_cred' THEN total ELSE 0 END), 0) AS credito,
+        COALESCE(SUM(CASE WHEN forma_pagamento='cartao_deb'  THEN total ELSE 0 END), 0) AS debito
       FROM pdv_pedidos
       WHERE status NOT IN ('cancelado')
         AND date(created_at, 'localtime') LIKE ?
