@@ -2,7 +2,7 @@
 // Fornecedores — comparador de preços de insumos por fornecedor.
 // Cadastra fornecedores (com telefone p/ pedido no WhatsApp), itens de compra
 // (já vem com os insumos clássicos do sushi) e o preço de cada item em cada
-// fornecedor. Tudo tenant-scoped (usa o facade db, roteado pela conta logada).
+// fornecedor.
 // ═══════════════════════════════════════════════════════════════
 const { Router } = require('express');
 const db = require('../db/database');
