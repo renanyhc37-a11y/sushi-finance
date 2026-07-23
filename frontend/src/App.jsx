@@ -35,6 +35,7 @@ const Boletos          = React.lazy(() => import('./pages/Boletos'));
 const VendasDia        = React.lazy(() => import('./pages/VendasDia'));
 const RendimentoSalmao = React.lazy(() => import('./pages/RendimentoSalmao'));
 const Insumos          = React.lazy(() => import('./pages/Insumos'));
+const Fornecedores     = React.lazy(() => import('./pages/Fornecedores'));
 const PDV              = React.lazy(() => import('./pages/PDV'));
 const WhatsAppConfig   = React.lazy(() => import('./pages/WhatsAppConfig'));
 const Clientes         = React.lazy(() => import('./pages/Clientes'));
@@ -598,6 +599,7 @@ function Layout({ logout }) {
               <Route path="/vendas" element={<VendasDia />} />
               <Route path="/rendimento" element={<RendimentoSalmao />} />
               <Route path="/insumos" element={<Insumos />} />
+              <Route path="/fornecedores" element={<Fornecedores />} />
               <Route path="/pdv" element={<PDV />} />
               <Route path="/clientes" element={<Clientes />} />
               <Route path="/cashback" element={<Cashback />} />
