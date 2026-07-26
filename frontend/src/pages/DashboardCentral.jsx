@@ -442,9 +442,12 @@ export default function DashboardCentral() {
         faturamento: cur.total,
         ticket: ticketCur,
         clientes: totalCli,
-        varPedidos: prev ? variacao(cur.pedidos, prev.pedidos) : null,
-        varFat: prev ? variacao(cur.total, prev.total) : null,
-        varTicket: ticketPrev ? variacao(ticketCur, ticketPrev) : null,
+        // "Hoje" compara um dia ainda em andamento com um dia inteiro anterior —
+        // a variação sempre parece "queda" enquanto o dia não termina. Só faz
+        // sentido mostrar a comparação em janelas fechadas (7d/30d).
+        varPedidos: (prev && periodo !== 'hoje') ? variacao(cur.pedidos, prev.pedidos) : null,
+        varFat: (prev && periodo !== 'hoje') ? variacao(cur.total, prev.total) : null,
+        varTicket: (ticketPrev && periodo !== 'hoje') ? variacao(ticketCur, ticketPrev) : null,
         novos, recorrentes,
       },
       chart, fat30, segmentos, totalCli,
@@ -484,6 +487,14 @@ export default function DashboardCentral() {
       <Toaster position="top-center" />
 
       <HeaderDash nome={nome} periodo={periodo} setPeriodo={setPeriodo} onNovoPedido={() => navigate('/pdv')} />
+
+      {periodo === 'hoje' && k.pedidos === 0 && k.faturamento === 0 && (
+        <div className="rounded-xl px-4 py-2.5 text-xs flex items-center gap-2"
+          style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)', color: 'var(--txt-dim)' }}>
+          <Activity size={14} strokeWidth={1.75} style={{ color: 'var(--accent)' }} />
+          Nenhum pedido registrado hoje ainda — os números abaixo aparecem conforme chegam. Veja <b>7 dias</b> ou <b>30 dias</b> pro histórico.
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
