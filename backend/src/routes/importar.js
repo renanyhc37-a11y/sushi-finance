@@ -294,7 +294,7 @@ router.post('/clientes/confirmar', upload.single('arquivo'), (req, res) => {
         let aniversario = null;
         const aniRaw = get(row, 'aniversario');
         if (aniRaw) {
-          const m = aniRaw.match(/(\d{1,2})[\/\-](\d{1,2})/);
+          const m = aniRaw.match(/(\d{1,2})[/-](\d{1,2})/);
           if (m) aniversario = `${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
         }
 
@@ -323,6 +323,191 @@ router.post('/clientes/confirmar', upload.single('arquivo'), (req, res) => {
   } catch (e) {
     console.error('[importar clientes confirmar]', e);
     res.status(500).json({ erro: e.message });
+  }
+});
+
+// ── Importação de FATURAMENTO via XLSX (planilha de outro PDV) ──────────
+
+const ABA_FATURAMENTO_FINANCEIRA = 'Movimentação Financeira';
+const ABA_FATURAMENTO_GERAL = 'Geral';
+
+// Remove acentos, baixa a caixa e tira tudo que não for letra/número —
+// assim "Nᵒ de Pedidos", "N° de Pedidos" e "No de Pedidos" batem igual
+// contra o alvo "N de Pedidos" (o símbolo entre N e "de" é sempre removido).
+function normalizarHeaderFaturamento(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function acharColunaFaturamento(headerRow, alvo) {
+  const alvoNorm = normalizarHeaderFaturamento(alvo);
+  return headerRow.findIndex(h => normalizarHeaderFaturamento(h) === alvoNorm);
+}
+
+// "01/07/2026" → "2026-07-01". Retorna null se não bater o formato
+// (usado também para pular a linha em branco entre cabeçalho e dados,
+// e uma eventual linha de "Total" no fim da planilha).
+function parseDataBRFaturamento(str) {
+  const m = String(str || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  const [, d, mo, y] = m;
+  return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`;
+}
+
+// Aceita tanto número puro (a maioria das células da aba "Geral") quanto
+// texto (a aba "Movimentação Financeira" vem com células formatadas como
+// texto, ex. "464.50" como string) — com ou sem vírgula decimal.
+function parseMoedaFaturamento(v) {
+  if (typeof v === 'number') return v;
+  const s = String(v ?? '').trim();
+  if (!s) return 0;
+  const n = s.includes(',') ? parseFloat(s.replace(/\./g, '').replace(',', '.')) : parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+// Lê o buffer do .xlsx e devolve um array de dias:
+// [{ data, total_bruto, quantidade_pedidos, pix, dinheiro, credito, debito }]
+// Lança Error com mensagem amigável se a aba/coluna esperada não existir.
+function extrairDiasFaturamento(buffer) {
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+
+  if (!wb.SheetNames.includes(ABA_FATURAMENTO_FINANCEIRA)) {
+    throw new Error(`Aba "${ABA_FATURAMENTO_FINANCEIRA}" não encontrada. Abas no arquivo: ${wb.SheetNames.join(', ')}`);
+  }
+
+  const wsFin = wb.Sheets[ABA_FATURAMENTO_FINANCEIRA];
+  const rowsFin = XLSX.utils.sheet_to_json(wsFin, { header: 1, defval: '' });
+  if (!rowsFin.length) throw new Error(`Aba "${ABA_FATURAMENTO_FINANCEIRA}" está vazia.`);
+  const headerFin = rowsFin[0].map(h => String(h || ''));
+
+  const iLiquido  = acharColunaFaturamento(headerFin, 'Líquido');
+  const iPix      = acharColunaFaturamento(headerFin, 'PIX');
+  const iDinheiro = acharColunaFaturamento(headerFin, 'Dinheiro');
+  const iCartao   = acharColunaFaturamento(headerFin, 'Cartão de Crédito');
+  const iOnline   = acharColunaFaturamento(headerFin, 'Online');
+  const iDebito   = acharColunaFaturamento(headerFin, 'Débito');
+
+  if (iLiquido === -1) {
+    throw new Error(`Coluna "Líquido" não encontrada na aba "${ABA_FATURAMENTO_FINANCEIRA}".`);
+  }
+
+  // Mapa data → nº de pedidos, a partir da aba "Geral" (opcional — se não
+  // existir ou não tiver a coluna, quantidade_pedidos fica 0 pra todo mundo).
+  const pedidosPorData = new Map();
+  if (wb.SheetNames.includes(ABA_FATURAMENTO_GERAL)) {
+    const wsGeral = wb.Sheets[ABA_FATURAMENTO_GERAL];
+    const rowsGeral = XLSX.utils.sheet_to_json(wsGeral, { header: 1, defval: '' });
+    if (rowsGeral.length) {
+      const headerGeral = rowsGeral[0].map(h => String(h || ''));
+      const iPedidos = acharColunaFaturamento(headerGeral, 'N de Pedidos');
+      if (iPedidos !== -1) {
+        for (const row of rowsGeral.slice(1)) {
+          if (!Array.isArray(row)) continue;
+          const data = parseDataBRFaturamento(row[0]);
+          if (data) pedidosPorData.set(data, Number(row[iPedidos]) || 0);
+        }
+      }
+    }
+  }
+
+  const dias = [];
+  for (const row of rowsFin.slice(1)) {
+    if (!Array.isArray(row)) continue;
+    const data = parseDataBRFaturamento(row[0]);
+    if (!data) continue; // pula linha em branco / linha de total, se houver
+
+    dias.push({
+      data,
+      total_bruto: parseMoedaFaturamento(row[iLiquido]),
+      quantidade_pedidos: pedidosPorData.get(data) || 0,
+      pix:      iPix      >= 0 ? parseMoedaFaturamento(row[iPix])      : 0,
+      dinheiro: iDinheiro  >= 0 ? parseMoedaFaturamento(row[iDinheiro]) : 0,
+      credito: (iCartao >= 0 ? parseMoedaFaturamento(row[iCartao]) : 0)
+             + (iOnline >= 0 ? parseMoedaFaturamento(row[iOnline]) : 0),
+      debito:   iDebito   >= 0 ? parseMoedaFaturamento(row[iDebito])   : 0,
+    });
+  }
+
+  if (!dias.length) throw new Error('Nenhum dia com data válida encontrado na planilha.');
+  return dias;
+}
+
+// POST /api/importar/faturamento/preview
+router.post('/faturamento/preview', upload.single('arquivo'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
+
+    const dias = extrairDiasFaturamento(req.file.buffer);
+
+    const datas = dias.map(d => d.data);
+    const placeholders = datas.map(() => '?').join(',');
+    const existentes = db.prepare(
+      `SELECT data, total_bruto FROM faturamento_diario WHERE data IN (${placeholders})`
+    ).all(...datas);
+    const existentesPorData = new Map(existentes.map(e => [e.data, e.total_bruto]));
+
+    const diasComStatus = dias.map(d => ({
+      ...d,
+      ja_existe: existentesPorData.has(d.data),
+      valor_atual: existentesPorData.has(d.data) ? existentesPorData.get(d.data) : null,
+    }));
+
+    res.json({
+      dias: diasComStatus,
+      total_dias: diasComStatus.length,
+      qtd_conflitos: diasComStatus.filter(d => d.ja_existe).length,
+      periodo: { inicio: dias[0].data, fim: dias[dias.length - 1].data },
+    });
+  } catch (e) {
+    console.error('[importar faturamento preview]', e.message);
+    res.status(400).json({ erro: e.message });
+  }
+});
+
+// POST /api/importar/faturamento/confirmar
+router.post('/faturamento/confirmar', upload.single('arquivo'), (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo' });
+    const modo = req.body.modo === 'sobrescrever' ? 'sobrescrever' : 'pular';
+
+    const dias = extrairDiasFaturamento(req.file.buffer);
+
+    const stmtBuscar = db.prepare('SELECT id FROM faturamento_diario WHERE data = ?');
+    const stmtInserir = db.prepare(`
+      INSERT INTO faturamento_diario (data, total_bruto, quantidade_pedidos, pix, dinheiro, credito, debito, taxa_cartao, observacao)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'Importado de planilha')
+    `);
+    const stmtAtualizar = db.prepare(`
+      UPDATE faturamento_diario
+      SET total_bruto = ?, quantidade_pedidos = ?, pix = ?, dinheiro = ?, credito = ?, debito = ?
+      WHERE data = ?
+    `);
+
+    let criados = 0, sobrescritos = 0, ignorados = 0;
+
+    db.transaction(() => {
+      for (const d of dias) {
+        const existente = stmtBuscar.get(d.data);
+        if (existente) {
+          if (modo === 'sobrescrever') {
+            stmtAtualizar.run(d.total_bruto, d.quantidade_pedidos, d.pix, d.dinheiro, d.credito, d.debito, d.data);
+            sobrescritos++;
+          } else {
+            ignorados++;
+          }
+        } else {
+          stmtInserir.run(d.data, d.total_bruto, d.quantidade_pedidos, d.pix, d.dinheiro, d.credito, d.debito);
+          criados++;
+        }
+      }
+    })();
+
+    res.json({ ok: true, criados, sobrescritos, ignorados, total: dias.length });
+  } catch (e) {
+    console.error('[importar faturamento confirmar]', e.message);
+    res.status(400).json({ erro: e.message });
   }
 });
 
