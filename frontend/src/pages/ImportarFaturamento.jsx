@@ -3,7 +3,7 @@ import { getToken } from '../hooks/useAuth';
 import toast, { Toaster } from 'react-hot-toast';
 import {
   Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, Wallet,
-  RefreshCw, ArrowRight,
+  RefreshCw,
 } from 'lucide-react';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
@@ -68,7 +68,7 @@ export default function ImportarFaturamento() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.erro || 'Erro');
       setResultado(d);
-      toast.success(`Importação concluída! ${d.criados} criados, ${d.sobrescritos} sobrescritos.`);
+      toast.success(`Importação concluída! ${d.criados} criados, ${d.sobrescritos} sobrescritos, ${d.ignorados} ignorados.`);
     } catch (e) { toast.error(e.message); }
     finally { setConfirmando(false); }
   }
