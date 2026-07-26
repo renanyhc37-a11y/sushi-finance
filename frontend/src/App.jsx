@@ -6,6 +6,7 @@ import {
   TrendingUp, FileBarChart, ClipboardList, Beef, FileText, Fish, Upload, Boxes,
   Smartphone, ConciergeBell, Bot, StickyNote, Sun, Moon, Palette, KeyRound,
   LogOut, Menu, ChevronDown, Circle, Calculator, ChefHat, Pin, Plus, Check, ArrowDownUp, PieChart, Coins, Truck,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useTheme } from './hooks/useTheme';
 import { useBoletoAlert } from './hooks/useBoletoAlert';
@@ -43,6 +44,7 @@ const CardapioAdmin    = React.lazy(() => import('./pages/CardapioAdmin'));
 const EditorBanner     = React.lazy(() => import('./pages/EditorBanner'));
 const ImportarCardapio = React.lazy(() => import('./pages/ImportarCardapio'));
 const ImportarClientes = React.lazy(() => import('./pages/ImportarClientes'));
+const ImportarFaturamento = React.lazy(() => import('./pages/ImportarFaturamento'));
 const Promocoes        = React.lazy(() => import('./pages/Promocoes'));
 const CriativoSocial   = React.lazy(() => import('./pages/CriativoSocial'));
 const RelatorioPedidos = React.lazy(() => import('./pages/RelatorioPedidos'));
@@ -96,6 +98,7 @@ const NAV_GRUPOS = [
       { to: '/caixa',             icon: Calculator,    label: 'Caixa'       },
       { to: '/fluxo-caixa',       icon: ArrowDownUp,   label: 'Fluxo de Caixa' },
       { to: '/faturamento',       icon: Wallet,        label: 'Faturamento' },
+      { to: '/importar-faturamento', icon: FileSpreadsheet, label: 'Importar Faturamento' },
       { to: '/despesas',          icon: TrendingDown,  label: 'Despesas'    },
       { to: '/boletos',           icon: Receipt,       label: 'Boletos'     },
       { to: '/vendas',            icon: TrendingUp,    label: 'Vendas'      },
@@ -589,6 +592,7 @@ function Layout({ logout }) {
               <Route path="/criativo-social" element={<CriativoSocial />} />
               <Route path="/importar-cardapio" element={<ImportarCardapio />} />
               <Route path="/importar-clientes" element={<ImportarClientes />} />
+              <Route path="/importar-faturamento" element={<ImportarFaturamento />} />
               <Route path="/relatorio-pedidos" element={<RelatorioPedidos />} />
               <Route path="/whatsapp" element={<WhatsAppConfig />} />
               <Route path="/chat" element={<Chat />} />
