@@ -757,4 +757,23 @@ router.get('/despesas-analise', (req, res) => {
   } catch (e) { console.error('despesas-analise:', e); res.status(500).json({ erro: e.message }); }
 });
 
+// ── GET /api/relatorios/pico-semanal?dias=90 ───────────────────
+// Pedidos por dia da semana × hora — mapa de calor de horário de pico.
+// Só pedidos reais do PDV (faturamento importado não tem timestamp).
+router.get('/pico-semanal', (req, res) => {
+  try {
+    const dias = Math.min(Math.max(parseInt(req.query.dias) || 90, 1), 365);
+    const mapa = db.prepare(`
+      SELECT CAST(strftime('%w', created_at, '-3 hours') AS INTEGER) as dow,
+             CAST(strftime('%H', created_at, '-3 hours') AS INTEGER) as hora,
+             COUNT(*) as pedidos
+      FROM pdv_pedidos
+      WHERE created_at >= datetime('now', '-' || ? || ' days') AND status != 'cancelado'
+      GROUP BY dow, hora
+      ORDER BY dow, hora
+    `).all(dias);
+    res.json({ dias, mapa });
+  } catch (e) { console.error('pico-semanal:', e); res.status(500).json({ erro: e.message }); }
+});
+
 module.exports = router;
