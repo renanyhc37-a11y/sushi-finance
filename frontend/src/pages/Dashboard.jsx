@@ -4,12 +4,14 @@ import { LayoutDashboard, Wallet, Package, TrendingDown, Clock } from 'lucide-re
 import { getToken } from '../hooks/useAuth';
 import VisaoGeral from './dashboard/VisaoGeral';
 import Financeiro from './dashboard/Financeiro';
+import Produtos from './dashboard/Produtos';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
 const ABAS = [
   { id: 'geral', label: 'Visão Geral', icon: LayoutDashboard, componente: VisaoGeral },
   { id: 'financeiro', label: 'Financeiro', icon: Wallet, componente: Financeiro },
+  { id: 'produtos', label: 'Produtos', icon: Package, componente: Produtos },
 ];
 
 export default function Dashboard() {
