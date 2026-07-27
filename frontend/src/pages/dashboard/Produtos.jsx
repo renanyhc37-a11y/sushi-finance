@@ -37,6 +37,11 @@ export default function Produtos() {
     const copia = [...itens];
     copia.sort((a, b) => {
       const va = a[ordem.campo] ?? 0, vb = b[ordem.campo] ?? 0;
+      if (typeof va === 'string' || typeof vb === 'string') {
+        return ordem.dir === 'desc'
+          ? String(vb).localeCompare(String(va), 'pt-BR')
+          : String(va).localeCompare(String(vb), 'pt-BR');
+      }
       return ordem.dir === 'desc' ? vb - va : va - vb;
     });
     return copia;
