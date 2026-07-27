@@ -722,4 +722,39 @@ router.get('/painel-dono', (req, res) => {
   } catch (e) { console.error('painel-dono:', e); res.status(500).json({ erro: e.message }); }
 });
 
+// ── GET /api/relatorios/despesas-analise?mes=YYYY-MM ──────────
+// Breakdown do mês por categoria/tipo + evolução dos últimos 12 meses.
+// Usado pela aba Despesas do Dashboard unificado.
+router.get('/despesas-analise', (req, res) => {
+  try {
+    const mes = getMes(req.query.mes);
+    const porCategoria = db.prepare(`
+      SELECT categoria, COALESCE(SUM(valor),0) as total
+      FROM despesas WHERE substr(data_competencia,1,7) = ?
+      GROUP BY categoria ORDER BY total DESC
+    `).all(mes);
+    const porTipo = db.prepare(`
+      SELECT COALESCE(NULLIF(tipo,''), 'Sem tipo') as tipo, COALESCE(SUM(valor),0) as total
+      FROM despesas WHERE substr(data_competencia,1,7) = ?
+      GROUP BY tipo ORDER BY total DESC
+    `).all(mes);
+
+    const [anoAtual, mesAtualNum] = mes.split('-').map(Number);
+    const evolucao = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(anoAtual, mesAtualNum - 1 - i, 1);
+      const mesRef = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const row = db.prepare(`
+        SELECT COALESCE(SUM(CASE WHEN categoria='fixo' THEN valor ELSE 0 END),0) as fixas,
+               COALESCE(SUM(CASE WHEN categoria!='fixo' THEN valor ELSE 0 END),0) as variaveis,
+               COALESCE(SUM(valor),0) as total
+        FROM despesas WHERE substr(data_competencia,1,7) = ?
+      `).get(mesRef);
+      evolucao.push({ mes: mesRef, fixas: row.fixas, variaveis: row.variaveis, total: row.total });
+    }
+
+    res.json({ mes, por_categoria: porCategoria, por_tipo: porTipo, evolucao });
+  } catch (e) { console.error('despesas-analise:', e); res.status(500).json({ erro: e.message }); }
+});
+
 module.exports = router;
