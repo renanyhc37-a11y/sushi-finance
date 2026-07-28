@@ -6,6 +6,7 @@ import VisaoGeral from './dashboard/VisaoGeral';
 import Financeiro from './dashboard/Financeiro';
 import Produtos from './dashboard/Produtos';
 import Despesas from './dashboard/Despesas';
+import Operacao from './dashboard/Operacao';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -14,6 +15,7 @@ const ABAS = [
   { id: 'financeiro', label: 'Financeiro', icon: Wallet, componente: Financeiro },
   { id: 'produtos', label: 'Produtos', icon: Package, componente: Produtos },
   { id: 'despesas', label: 'Despesas', icon: TrendingDown, componente: Despesas },
+  { id: 'operacao', label: 'Operação', icon: Clock, componente: Operacao },
 ];
 
 export default function Dashboard() {
