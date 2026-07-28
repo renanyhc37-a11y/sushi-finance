@@ -7,6 +7,7 @@ import {
   Minus, Clock, Calendar, CreditCard, ShoppingBag, Bike, BarChart2, Award,
   Edit3, Save, MessageCircle, Send, ChevronRight, PartyPopper,
 } from 'lucide-react';
+import VisaoGeralClientes from './clientes/VisaoGeralClientes';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 const diasDesde = d => d ? Math.floor((Date.now() - new Date(d).getTime()) / 86400000) : 9999;
@@ -934,7 +935,10 @@ export default function Clientes() {
       </>)}
 
       {aba === 'geral' && (
-        <div className="py-20 text-center text-zinc-600">Em breve</div>
+        <VisaoGeralClientes onAbrirCliente={id => {
+          const c = clientes.find(x => x.id === id);
+          if (c) setClienteSelecionado(c);
+        }} />
       )}
 
       {/* Modal detalhe */}
