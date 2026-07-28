@@ -38,7 +38,9 @@ export default function Operacao() {
 
   const grade = useMemo(() => {
     const lookup = new Map(mapa.map(m => [`${m.dow}-${m.hora}`, m.pedidos]));
-    const max = mapa.reduce((m, x) => Math.max(m, x.pedidos), 0);
+    const max = mapa
+      .filter(x => HORAS_VISIVEIS.includes(x.hora))
+      .reduce((m, x) => Math.max(m, x.pedidos), 0);
     return { lookup, max };
   }, [mapa]);
 
