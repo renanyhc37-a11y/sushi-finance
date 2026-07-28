@@ -268,4 +268,74 @@ router.post('/:id/resgatar', (req, res) => {
   res.json({ ok: true, cliente: comFidelidade(atualizado) });
 });
 
+// ── GET /api/clientes/analise — visão de conjunto da base ─────
+router.get('/analise', (req, res) => {
+  try {
+    const base = clientesAnalise.calcularBaseRFV();
+    const comPedido = base.filter(c => c.total_pedidos > 0);
+
+    const porGasto = [...comPedido].sort((a, b) => b.total_gasto - a.total_gasto).slice(0, 10)
+      .map(c => ({ id: c.id, nome: c.nome, telefone: c.telefone, total_gasto: c.total_gasto, total_pedidos: c.total_pedidos }));
+    const porFrequencia = [...comPedido].sort((a, b) => b.total_pedidos - a.total_pedidos).slice(0, 10)
+      .map(c => ({ id: c.id, nome: c.nome, total_pedidos: c.total_pedidos, total_gasto: c.total_gasto }));
+    const porTicketMedio = [...comPedido].filter(c => c.total_pedidos >= 2)
+      .sort((a, b) => b.ticket_medio - a.ticket_medio).slice(0, 10)
+      .map(c => ({ id: c.id, nome: c.nome, ticket_medio: c.ticket_medio, total_pedidos: c.total_pedidos }));
+
+    const segMap = {};
+    for (const c of base) {
+      if (!segMap[c.segmento]) segMap[c.segmento] = { segmento: c.segmento, qtd: 0, valor_total: 0 };
+      segMap[c.segmento].qtd++;
+      segMap[c.segmento].valor_total += c.total_gasto;
+    }
+    const segmentos = Object.values(segMap);
+
+    const hoje = new Date();
+    const evolucaoBase = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const mes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const novos = db.prepare("SELECT COUNT(*) as n FROM clientes WHERE substr(created_at,1,7) = ?").get(mes).n;
+      const ativos = db.prepare("SELECT COUNT(DISTINCT cliente_telefone) as n FROM pdv_pedidos WHERE substr(created_at,1,7) = ? AND status != 'cancelado'").get(mes).n;
+      evolucaoBase.push({ mes, novos, ativos });
+    }
+
+    const emRisco = base.filter(c => c.segmento === 'em_risco')
+      .sort((a, b) => b.total_gasto - a.total_gasto).slice(0, 20)
+      .map(c => ({ id: c.id, nome: c.nome, telefone: c.telefone, total_gasto: c.total_gasto, dias_desde_ultimo: c.dias_desde_ultimo }));
+
+    const brindesParados = base.filter(c => c.recompensas_disponiveis > 0)
+      .map(c => ({ id: c.id, nome: c.nome, telefone: c.telefone, recompensas_disponiveis: c.recompensas_disponiveis }));
+
+    // Mesma lógica de GET /aniversarios (janela de 30 dias), reaproveitada aqui.
+    const rows = db.prepare(
+      "SELECT id, nome, telefone, aniversario, total_pedidos FROM clientes WHERE aniversario IS NOT NULL AND aniversario <> ''"
+    ).all();
+    const hojeSemHora = new Date(); hojeSemHora.setHours(0, 0, 0, 0);
+    const aniversariosProximos = [];
+    for (const c of rows) {
+      const m = /^(\d{2})-(\d{2})$/.exec(c.aniversario);
+      if (!m) continue;
+      const mesA = Number(m[1]) - 1, diaA = Number(m[2]);
+      let prox = new Date(hojeSemHora.getFullYear(), mesA, diaA);
+      if (prox < hojeSemHora) prox = new Date(hojeSemHora.getFullYear() + 1, mesA, diaA);
+      const faltam = Math.round((prox - hojeSemHora) / 86400000);
+      if (faltam <= 30) {
+        aniversariosProximos.push({
+          id: c.id, nome: c.nome, telefone: c.telefone, total_pedidos: c.total_pedidos,
+          aniversario: c.aniversario, dia: diaA, mes: mesA + 1, dias_para: faltam, hoje: faltam === 0,
+          data_label: `${String(diaA).padStart(2, '0')}/${String(mesA + 1).padStart(2, '0')}`,
+        });
+      }
+    }
+    aniversariosProximos.sort((a, b) => a.dias_para - b.dias_para);
+
+    res.json({
+      rankings: { porGasto, porFrequencia, porTicketMedio },
+      saude: { segmentos, evolucaoBase, totalClientes: base.length, totalComPedido: comPedido.length },
+      acao: { emRisco, aniversariosProximos, brindesParados },
+    });
+  } catch (e) { console.error('clientes/analise:', e); res.status(500).json({ erro: e.message }); }
+});
+
 module.exports = router;
