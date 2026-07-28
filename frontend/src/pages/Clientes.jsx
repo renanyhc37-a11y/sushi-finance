@@ -279,6 +279,28 @@ function ModalCliente({ cliente, onClose, onResgatar, onAtualizado }) {
                 ))}
               </div>
 
+              {/* RFV */}
+              {perfil.rfv && (
+                <div className="rounded-2xl p-4" style={{ background: '#111', border: '1px solid #1a1a1a' }}>
+                  <p className="text-xs font-bold mb-3" style={{ color: '#888' }}>RFV — comparado com a base inteira</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'Recência', nota: perfil.rfv.r },
+                      { label: 'Frequência', nota: perfil.rfv.f },
+                      { label: 'Valor', nota: perfil.rfv.v },
+                    ].map(x => (
+                      <div key={x.label} className="text-center">
+                        <p className="text-2xl font-black" style={{ color: x.nota >= 4 ? '#10b981' : x.nota <= 2 ? '#ef4444' : 'var(--accent)' }}>{x.nota}</p>
+                        <p className="text-[10px]" style={{ color: '#666' }}>{x.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] mt-3 text-center" style={{ color: '#666' }}>
+                    Valor gasto: top {100 - perfil.rfv.percentil_valor}% da base
+                  </p>
+                </div>
+              )}
+
               {/* Tendência + intervalo */}
               <div className="flex gap-2">
                 <div className="flex-1 p-3 rounded-2xl flex items-center gap-3"
