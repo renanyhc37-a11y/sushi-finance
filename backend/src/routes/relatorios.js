@@ -118,15 +118,24 @@ router.get('/dashboard', (req, res) => {
 router.get('/dre', (req, res) => {
   try {
     const mes = getMes(req.query.mes);
-    const fatRow = db.prepare(`
-      SELECT COALESCE(SUM(total_bruto),0) as faturamento_bruto,
-             COALESCE(SUM(taxa_cartao),0) as total_taxas,
-             COALESCE(SUM(pix),0) as total_pix,
-             COALESCE(SUM(dinheiro),0) as total_dinheiro,
-             COALESCE(SUM(credito),0) as total_credito,
-             COALESCE(SUM(debito),0) as total_debito
+    // Reconciliado: faturamento_bruto e o breakdown de formas de pagamento vêm
+    // de faturamentoDia (lançamento manual/importado quando existe, senão os
+    // pedidos reais do PDV) — mesma regra do Dashboard e do Painel do Dono.
+    // taxa_cartao continua vindo direto de faturamento_diario: é um conceito
+    // só de lançamento manual/importado, sem equivalente em pedido real do PDV.
+    const taxaRow = db.prepare(`
+      SELECT COALESCE(SUM(taxa_cartao),0) as total_taxas
       FROM faturamento_diario WHERE substr(data, 1, 7) = ?
     `).get(mes);
+    const fatReconciliado = faturamentoDia.somar(faturamentoDia.porDia(`${mes}-01`, ultimoDiaDoMes(mes)));
+    const fatRow = {
+      faturamento_bruto: fatReconciliado.total,
+      total_taxas: taxaRow.total_taxas,
+      total_pix: fatReconciliado.pix,
+      total_dinheiro: fatReconciliado.dinheiro,
+      total_credito: fatReconciliado.credito,
+      total_debito: fatReconciliado.debito,
+    };
     const despesas = db.prepare(`
       SELECT categoria, COALESCE(SUM(valor),0) as total
       FROM despesas WHERE substr(data_competencia, 1, 7) = ?
@@ -249,20 +258,35 @@ router.patch('/cmv-produtos/:nome/custo', (req, res) => {
 
 router.get('/evolucao', (req, res) => {
   try {
-    const meses = db.prepare(`
-      SELECT substr(data, 1, 7) as mes,
-        SUM(total_bruto) as faturamento_bruto,
-        COALESCE(SUM(taxa_cartao),0) as total_taxas,
-        COUNT(*) as total_dias
-      FROM faturamento_diario
-      GROUP BY mes ORDER BY mes DESC LIMIT 12
-    `).all();
-    const resultado = meses.map(m => {
-      const d = db.prepare(`SELECT COALESCE(SUM(valor),0) as t FROM despesas WHERE substr(data_competencia,1,7)=?`).get(m.mes);
-      const liq = m.faturamento_bruto - m.total_taxas;
-      return { mes: m.mes, faturamento_bruto: m.faturamento_bruto, total_pedidos: m.total_dias, cmv_total: 0, lucro_bruto: liq, lucro_liquido: liq - d.t };
-    });
-    res.json(resultado.reverse());
+    // Reconciliado: faturamento_bruto de cada mês vem de faturamentoDia
+    // (lançamento manual/importado quando existe, senão os pedidos reais do
+    // PDV) — mesma regra do Dashboard, do Painel do Dono e do /dre acima.
+    // taxa_cartao continua vindo direto de faturamento_diario (conceito só
+    // de lançamento manual/importado). Últimos 12 meses corridos, terminando
+    // no mês atual (mesmo shape de loop usado em despesas-analise acima).
+    const mesRef = getMes();
+    const [anoRef, mesRefNum] = mesRef.split('-').map(Number);
+    const resultado = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(anoRef, mesRefNum - 1 - i, 1);
+      const mes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const fat = faturamentoDia.somar(faturamentoDia.porDia(`${mes}-01`, ultimoDiaDoMes(mes)));
+      const taxaRow = db.prepare(`
+        SELECT COALESCE(SUM(taxa_cartao),0) as total_taxas
+        FROM faturamento_diario WHERE substr(data, 1, 7) = ?
+      `).get(mes);
+      const despRow = db.prepare(`SELECT COALESCE(SUM(valor),0) as t FROM despesas WHERE substr(data_competencia,1,7)=?`).get(mes);
+      const liq = fat.total - taxaRow.total_taxas;
+      resultado.push({
+        mes,
+        faturamento_bruto: fat.total,
+        total_pedidos: fat.pedidos,
+        cmv_total: 0,
+        lucro_bruto: liq,
+        lucro_liquido: liq - despRow.t,
+      });
+    }
+    res.json(resultado);
   } catch (e) { console.error('evolucao:', e); res.status(500).json({ erro: e.message }); }
 });
 
