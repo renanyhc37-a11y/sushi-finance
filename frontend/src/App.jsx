@@ -1,19 +1,21 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import {
   MessageCircle, Users, UtensilsCrossed, ShoppingCart, LayoutDashboard,
   Megaphone, Percent, Image as ImageIcon, Wallet, TrendingDown, Receipt,
   TrendingUp, FileBarChart, ClipboardList, Beef, FileText, Fish, Upload, Boxes,
   Smartphone, ConciergeBell, Bot, StickyNote, Sun, Moon, Palette, KeyRound,
-  LogOut, Menu, ChevronDown, Circle, Calculator, ChefHat, Pin, Plus, Check, ArrowDownUp, PieChart, Coins, Truck,
+  LogOut, Menu, ChevronDown, Circle, Calculator, ChefHat, Pin, Plus, Check, ArrowDownUp, PieChart, Coins, Sparkles, X, Landmark, Truck,
   FileSpreadsheet,
 } from 'lucide-react';
 import { useTheme } from './hooks/useTheme';
 import { useBoletoAlert } from './hooks/useBoletoAlert';
 import { useAuth, getToken } from './hooks/useAuth';
 import { PersonalizacaoProvider } from './hooks/usePersonalizacao';
+import useGrabScroll from './hooks/useGrabScroll';
 import Logo from './components/Logo';
 import FundoApp from './components/FundoApp';
+import ChegouInsumo from './components/ChegouInsumo';
 import { aplicarCorDestaque, cachearCor } from './lib/tema';
 // Rotas públicas do cliente + login: carregadas de imediato (bundle inicial
 // enxuto, importante pro cardápio abrir rápido no celular).
@@ -26,6 +28,7 @@ import AcompanharPedido from './pages/AcompanharPedido';
 // relatórios com jsPDF/html2canvas/xlsx, etc.) só pra ver o menu.
 const AlterarSenha     = React.lazy(() => import('./pages/AlterarSenha'));
 const Dashboard        = React.lazy(() => import('./pages/Dashboard'));
+const DashboardCentral = React.lazy(() => import('./pages/DashboardCentral'));
 const Ingredientes     = React.lazy(() => import('./pages/Ingredientes'));
 const FichasTecnicas   = React.lazy(() => import('./pages/FichasTecnicas'));
 const FaturamentoDiario= React.lazy(() => import('./pages/FaturamentoDiario'));
@@ -45,6 +48,7 @@ const EditorBanner     = React.lazy(() => import('./pages/EditorBanner'));
 const ImportarCardapio = React.lazy(() => import('./pages/ImportarCardapio'));
 const ImportarClientes = React.lazy(() => import('./pages/ImportarClientes'));
 const ImportarFaturamento = React.lazy(() => import('./pages/ImportarFaturamento'));
+const Movimentacoes    = React.lazy(() => import('./pages/Movimentacoes'));
 const Promocoes        = React.lazy(() => import('./pages/Promocoes'));
 const CriativoSocial   = React.lazy(() => import('./pages/CriativoSocial'));
 const RelatorioPedidos = React.lazy(() => import('./pages/RelatorioPedidos'));
@@ -55,6 +59,10 @@ const Caixa            = React.lazy(() => import('./pages/Caixa'));
 const Producao         = React.lazy(() => import('./pages/Producao'));
 const FluxoCaixa       = React.lazy(() => import('./pages/FluxoCaixa'));
 const CmvProdutos      = React.lazy(() => import('./pages/CmvProdutos'));
+const Rentabilidade    = React.lazy(() => import('./pages/Rentabilidade'));
+const AnaliseProduto   = React.lazy(() => import('./pages/AnaliseProduto'));
+const PainelDono       = React.lazy(() => import('./pages/PainelDono'));
+const CentroComando    = React.lazy(() => import('./pages/CentroComando'));
 const Setup            = React.lazy(() => import('./pages/Setup'));
 const DroneSimulator   = React.lazy(() => import('./pages/Drone'));
 const Cashback         = React.lazy(() => import('./pages/Cashback'));
@@ -64,6 +72,7 @@ import ServidorMonitor from './components/ServidorMonitor';
 import AssistenteVoz from './components/AssistenteVoz';
 import UnidadeSwitcher from './components/UnidadeSwitcher';
 import AlertaPedidosGlobal from './components/AlertaPedidosGlobal';
+import RotaErrorBoundary from './components/RotaErrorBoundary';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -71,20 +80,21 @@ const NAV_GRUPOS = [
   {
     grupo: 'Operação',
     cor: 'var(--accent-2)',
-    fixo: true,
+    icone: LayoutDashboard,
     itens: [
+      { to: '/dashboard',      icon: LayoutDashboard,  label: 'Dashboard'       },
       { to: '/chat',           icon: MessageCircle,    label: 'Chat & WhatsApp' },
       { to: '/clientes',         icon: Users,            label: 'Clientes'          },
       { to: '/cashback',         icon: Coins,            label: 'Cashback'          },
       { to: '/cardapio-admin', icon: UtensilsCrossed,  label: 'Cardápio'        },
       { to: '/producao',       icon: ChefHat,          label: 'Produção'        },
       { to: '/lista-compras',  icon: ShoppingCart,     label: 'Compras'         },
-      { to: '/dashboard',      icon: LayoutDashboard,  label: 'Dashboard'       },
     ],
   },
   {
     grupo: 'Marketing',
     cor: '#fb923c',
+    icone: Megaphone,
     itens: [
       { to: '/campanhas',       icon: Megaphone,  label: 'Campanhas' },
       { to: '/promocoes',       icon: Percent,    label: 'Promoções' },
@@ -94,22 +104,33 @@ const NAV_GRUPOS = [
   {
     grupo: 'Financeiro',
     cor: '#34d399',
+    icone: Wallet,
     itens: [
       { to: '/caixa',             icon: Calculator,    label: 'Caixa'       },
       { to: '/fluxo-caixa',       icon: ArrowDownUp,   label: 'Fluxo de Caixa' },
       { to: '/faturamento',       icon: Wallet,        label: 'Faturamento' },
       { to: '/importar-faturamento', icon: FileSpreadsheet, label: 'Importar Faturamento' },
       { to: '/despesas',          icon: TrendingDown,  label: 'Despesas'    },
+      { to: '/movimentacoes',     icon: Landmark,      label: 'Extrato Banco' },
       { to: '/boletos',           icon: Receipt,       label: 'Boletos'     },
-      { to: '/vendas',            icon: TrendingUp,    label: 'Vendas'      },
-      { to: '/relatorios',        icon: FileBarChart,  label: 'Relatórios'  },
+    ],
+  },
+  {
+    grupo: 'Relatórios',
+    cor: '#2dd4bf',
+    icone: FileBarChart,
+    itens: [
       { to: '/cmv-produtos',      icon: PieChart,      label: 'CMV / Margem' },
       { to: '/relatorio-pedidos', icon: ClipboardList, label: 'Rel. Pedidos'},
     ],
   },
+  // Telas antigas (Dashboard, Dashboard Central, Relatórios, Vendas,
+  // Rentabilidade, Análise de Produto) foram aposentadas do menu por gerarem
+  // números conflitantes — as rotas seguem vivas p/ acesso direto, se preciso.
   {
     grupo: 'Gestão',
     cor: '#818cf8',
+    icone: Boxes,
     itens: [
       { to: '/ingredientes',     icon: Beef,       label: 'Ingredientes'    },
       { to: '/fichas',           icon: FileText,   label: 'Fichas Técnicas' },
@@ -124,6 +145,7 @@ const NAV_GRUPOS = [
   {
     grupo: 'Drone 🚁',
     cor: '#38bdf8',
+    icone: Bot,
     itens: [
       { to: '/drone', icon: Bot, label: '🚁 Simulador de Entrega', badge: 'em construção' },
     ],
@@ -308,8 +330,9 @@ function Sidebar({ open, onClose }) {
             </div>
             <div className="min-w-0">
               <div className="flex items-baseline">
-                <p className="font-bold text-[15px] leading-none tracking-tight" style={{ color: 'var(--txt-strong)' }}>Sushi</p>
-                <p className="font-bold text-[15px] leading-none tracking-tight" style={{ background: 'linear-gradient(90deg, var(--accent), var(--accent-2))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Contrlol</p>
+                <p className="font-semibold text-[9px] tracking-[0.28em] uppercase mr-1" style={{ color: 'var(--txt-faint)', opacity: 0.85 }}>sushi</p>
+                <p className="font-extrabold text-[15px] leading-none tracking-tight" style={{ color: '#ee4436' }}>ninja</p>
+                <p className="font-extrabold text-[15px] leading-none tracking-tight" style={{ color: 'var(--txt-strong)' }}>control</p>
               </div>
               <p className="text-[9.5px] tracking-[0.2em] font-medium mt-1.5" style={{ color: 'var(--txt-faint)' }}>SISTEMA DE GESTÃO</p>
             </div>
@@ -503,8 +526,13 @@ function Layout({ logout }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dark, toggleTheme] = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const [setupPendente, setSetupPendente] = useState(false);
   const [setupChecked, setSetupChecked] = useState(false);
+  const grab = useGrabScroll(); // arrastar-para-rolar em todas as telas
+
+  // App carregou OK → libera novo auto-reload caso um chunk falhe no futuro.
+  useEffect(() => { sessionStorage.removeItem('chunk_reload'); }, []);
 
   useEffect(() => {
     fetch(`${BASE}/setup/status`, { headers: { Authorization: `Bearer ${getToken()}` } })
@@ -538,6 +566,7 @@ function Layout({ logout }) {
 
             {/* WhatsApp + atalhos editáveis (acesso rápido, esquerda) */}
             <WhatsAppTopo />
+            <ChegouInsumo compact />
             <AtalhosTopo />
 
             <div className="ml-auto flex items-center gap-2">
@@ -567,15 +596,19 @@ function Layout({ logout }) {
           <AvisoSenhaPadrao />
           <AlertaBoletos />
 
-          <main className="main-conteudo flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6" style={{ background: 'transparent' }}>
+          <main ref={grab.ref} onPointerDown={grab.onPointerDown}
+            className="main-conteudo flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6" style={{ background: 'transparent' }}>
+            <RotaErrorBoundary rotaKey={location.pathname}>
             <React.Suspense fallback={<div className="p-10 text-center text-sm" style={{ color: 'var(--txt-muted, #71717a)' }}>Carregando…</div>}>
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard-central" element={<DashboardCentral />} />
               <Route path="/ingredientes" element={<Ingredientes />} />
               <Route path="/fichas" element={<FichasTecnicas />} />
               <Route path="/faturamento" element={<FaturamentoDiario />} />
               <Route path="/despesas" element={<Despesas />} />
+              <Route path="/movimentacoes" element={<Movimentacoes />} />
               <Route path="/relatorios" element={<Relatorios />} />
               <Route path="/lista-compras" element={<ListaCompras />} />
               <Route path="/boletos" element={<Boletos />} />
@@ -601,12 +634,17 @@ function Layout({ logout }) {
               <Route path="/caixa" element={<Caixa />} />
               <Route path="/fluxo-caixa" element={<FluxoCaixa />} />
               <Route path="/cmv-produtos" element={<CmvProdutos />} />
+              <Route path="/rentabilidade" element={<Rentabilidade />} />
+              <Route path="/painel-dono" element={<PainelDono />} />
+              <Route path="/analise-produto" element={<AnaliseProduto />} />
+              <Route path="/centro-comando" element={<CentroComando />} />
               <Route path="/producao" element={<Producao />} />
               <Route path="/alterar-senha" element={<AlterarSenha />} />
               <Route path="/setup" element={<Setup onConcluido={() => navigate('/dashboard')} />} />
               <Route path="/drone" element={<DroneSimulator />} />
             </Routes>
             </React.Suspense>
+            </RotaErrorBoundary>
           </main>
         </div>
 
