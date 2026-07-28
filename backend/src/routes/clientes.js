@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const db = require('../db/database');
+const clientesAnalise = require('../lib/clientesAnalise');
 
 const router = Router();
 
@@ -61,7 +62,7 @@ router.patch('/:id', (req, res) => {
   // aniversario esperado em formato 'MM-DD' ou 'DD/MM' → normaliza para 'MM-DD'
   let aniv = null;
   if (aniversario) {
-    const m1 = /^(\d{2})[\/\-](\d{2})$/.exec(aniversario.trim());
+    const m1 = /^(\d{2})[/-](\d{2})$/.exec(aniversario.trim());
     if (m1) {
       // detecta se veio DD/MM (dia <= 31, mês <= 12) — armazena MM-DD
       const a = Number(m1[1]), b = Number(m1[2]);
@@ -200,6 +201,8 @@ router.get('/:id/perfil', (req, res) => {
     : ultimos3.length < anteriores3.length ? 'caindo'
     : 'estavel';
 
+  const rfvInfo = clientesAnalise.buscarClienteRFV(cliente.id);
+
   res.json({
     cliente: comFidelidade(cliente),
     pedidosCancelados,
@@ -226,6 +229,7 @@ router.get('/:id/perfil', (req, res) => {
       evolucaoMensal,
       segmento,
       tendencia,
+      rfv: rfvInfo?.rfv || null,
     },
     pedidos: pedidos.slice(-20).reverse(), // últimos 20 para o histórico
   });
