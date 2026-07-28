@@ -56,7 +56,7 @@ export default function VisaoGeralClientes({ onAbrirCliente }) {
 
   useEffect(() => {
     fetch(`${BASE}/clientes/analise`, { headers: authH() })
-      .then(r => r.json()).then(setDados).catch(() => {}).finally(() => setLoading(false));
+      .then(r => r.ok ? r.json() : null).then(setDados).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="py-20 text-center text-zinc-600 animate-pulse">Carregando visão geral…</div>;
