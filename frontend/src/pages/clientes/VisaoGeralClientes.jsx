@@ -66,9 +66,17 @@ export default function VisaoGeralClientes({ onAbrirCliente }) {
   const evolucaoChart = saude.evolucaoBase.map(e => ({
     mes: e.mes.slice(5, 7) + '/' + e.mes.slice(2, 4), novos: e.novos, ativos: e.ativos,
   }));
+  const semHistorico = saude.totalClientes - saude.totalComPedido;
 
   return (
     <div className="space-y-4">
+      {semHistorico > 0 && (
+        <div className="rounded-xl px-4 py-2.5 text-xs" style={{ background: '#111', border: '1px solid #1a1a1a', color: '#888' }}>
+          {semHistorico} de {saude.totalClientes} clientes ainda não têm pedido pelo cardápio novo (cadastro importado ou nunca pediu por aqui) —
+          eles não aparecem nos rankings/segmentos até o primeiro pedido. Todos os {saude.totalClientes} cadastros estão em <b style={{ color: '#aaa' }}>Todos os Clientes</b>.
+        </div>
+      )}
+
       {/* Rankings */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card titulo="Top 10 · Maior gasto" Icon={Trophy} cor="#f59e0b">

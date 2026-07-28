@@ -721,6 +721,7 @@ export default function Clientes() {
   const [aniversarios, setAniversarios] = useState([]);
   const [modalAniversarios, setModalAniversarios] = useState(false);
   const [aba, setAba] = useState('geral'); // 'geral' | 'lista'
+  const [mostrarQtd, setMostrarQtd] = useState(50); // paginação client-side da lista (bases grandes travavam o navegador)
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -760,6 +761,8 @@ export default function Clientes() {
     { id: 'inativos',   label: 'Inativos',    Icon: MoonStar, teste: ehInativo },
   ];
   const segAtivo = SEGMENTOS.find(s => s.id === seg) || SEGMENTOS[0];
+
+  useEffect(() => { setMostrarQtd(50); }, [busca, seg, ordenar]);
 
   const filtrados = clientes
     .filter(c => !busca || c.nome.toLowerCase().includes(busca.toLowerCase()) || c.telefone.includes(busca))
@@ -908,7 +911,8 @@ export default function Clientes() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtrados.map(c => {
+          <p className="text-xs text-zinc-600 px-1">Mostrando {Math.min(mostrarQtd, filtrados.length)} de {filtrados.length}</p>
+          {filtrados.slice(0, mostrarQtd).map(c => {
             const fid = c.fidelidade || {};
             const temBrinde = (c.recompensas_ganhas - c.recompensas_usadas) > 0;
             return (
@@ -952,6 +956,13 @@ export default function Clientes() {
               </button>
             );
           })}
+          {filtrados.length > mostrarQtd && (
+            <button onClick={() => setMostrarQtd(q => q + 50)}
+              className="w-full text-center py-3 rounded-2xl text-sm font-bold transition-all active:scale-[0.99]"
+              style={{ background: '#111', border: '1px solid #1a1a1a', color: 'var(--accent)' }}>
+              Carregar mais ({filtrados.length - mostrarQtd} restantes)
+            </button>
+          )}
         </div>
       )}
       </>)}
