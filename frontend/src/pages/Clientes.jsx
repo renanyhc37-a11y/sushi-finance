@@ -697,6 +697,7 @@ export default function Clientes() {
   const [seg, setSeg] = useState('todos'); // segmento ativo
   const [aniversarios, setAniversarios] = useState([]);
   const [modalAniversarios, setModalAniversarios] = useState(false);
+  const [aba, setAba] = useState('geral'); // 'geral' | 'lista'
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -766,6 +767,20 @@ export default function Clientes() {
         </button>
       </div>
 
+      {/* Abas */}
+      <div className="flex gap-1 p-1 rounded-xl" style={{ background: '#111', border: '1px solid #1a1a1a', width: 'fit-content' }}>
+        {[{ id: 'geral', label: 'Visão Geral' }, { id: 'lista', label: 'Todos os Clientes' }].map(t => (
+          <button key={t.id} onClick={() => setAba(t.id)}
+            className="px-4 py-2 rounded-lg text-xs font-bold transition-all"
+            style={aba === t.id
+              ? { background: 'rgba(var(--accent-rgb),0.15)', color: 'var(--accent)' }
+              : { color: '#666' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {aba === 'lista' && (<>
       {/* Cards resumo */}
       <div className="grid grid-cols-3 gap-3">
         {[
@@ -915,6 +930,11 @@ export default function Clientes() {
             );
           })}
         </div>
+      )}
+      </>)}
+
+      {aba === 'geral' && (
+        <div className="py-20 text-center text-zinc-600">Em breve</div>
       )}
 
       {/* Modal detalhe */}
