@@ -181,14 +181,6 @@ router.get('/:id/perfil', (req, res) => {
   });
   const evolucaoMensal = Object.values(porMes).sort((a, b) => a.mes.localeCompare(b.mes)).slice(-12);
 
-  // ── Segmentação RFM simplificada ─────────────────────────────
-  let segmento = 'novo';
-  if (pedidos.length >= 10 && diasDesdeUltimo <= 30) segmento = 'fiel';
-  else if (pedidos.length >= 5 && diasDesdeUltimo <= 14) segmento = 'recorrente';
-  else if (pedidos.length >= 10 && diasDesdeUltimo > 60) segmento = 'em_risco';
-  else if (diasDesdeUltimo > 90) segmento = 'inativo';
-  else if (pedidos.length >= 3) segmento = 'regular';
-
   // ── Tendência (últimos 3 meses vs 3 meses anteriores) ────────
   const agora = Date.now();
   const ultimos3 = pedidos.filter(p => agora - new Date(p.created_at).getTime() < 90 * 86400000);
@@ -227,7 +219,7 @@ router.get('/:id/perfil', (req, res) => {
       entregas,
       itensFavoritos,
       evolucaoMensal,
-      segmento,
+      segmento: rfvInfo?.segmento || 'novo',
       tendencia,
       rfv: rfvInfo?.rfv || null,
     },
