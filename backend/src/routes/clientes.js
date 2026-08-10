@@ -2,6 +2,17 @@ const { Router } = require('express');
 const db = require('../db/database');
 const clientesAnalise = require('../lib/clientesAnalise');
 
+// ── Migração: histórico de ajustes manuais de fidelidade ──────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS clientes_fidelidade_ajustes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cliente_id INTEGER NOT NULL,
+    delta INTEGER NOT NULL,
+    motivo TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+`);
+
 const router = Router();
 
 const PEDIDOS_POR_RECOMPENSA = 10;
@@ -258,6 +269,37 @@ router.post('/:id/resgatar', (req, res) => {
 
   const atualizado = db.prepare('SELECT * FROM clientes WHERE id = ?').get(cliente.id);
   res.json({ ok: true, cliente: comFidelidade(atualizado) });
+});
+
+// POST /api/clientes/:id/fidelidade/ajustar — concede (delta>0) ou revoga (delta<0) brindes manualmente
+router.post('/:id/fidelidade/ajustar', (req, res) => {
+  const { delta, motivo } = req.body;
+  const d = parseInt(delta, 10);
+  if (!Number.isInteger(d) || d === 0) return res.status(400).json({ erro: 'delta deve ser um número inteiro diferente de zero' });
+  if (!motivo || !String(motivo).trim()) return res.status(400).json({ erro: 'Motivo é obrigatório' });
+
+  const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(req.params.id);
+  if (!cliente) return res.status(404).json({ erro: 'Cliente não encontrado' });
+
+  const novoBonus = (cliente.recompensas_bonus || 0) + d;
+  const disponiveisApos = (cliente.recompensas_ganhas + novoBonus) - cliente.recompensas_usadas;
+  if (disponiveisApos < 0) {
+    return res.status(400).json({ erro: 'Isso deixaria o saldo de brindes negativo' });
+  }
+
+  db.prepare('UPDATE clientes SET recompensas_bonus = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(novoBonus, cliente.id);
+  db.prepare('INSERT INTO clientes_fidelidade_ajustes (cliente_id, delta, motivo) VALUES (?, ?, ?)').run(cliente.id, d, String(motivo).trim());
+
+  const atualizado = db.prepare('SELECT * FROM clientes WHERE id = ?').get(cliente.id);
+  res.json({ ok: true, cliente: comFidelidade(atualizado) });
+});
+
+// GET /api/clientes/:id/fidelidade/ajustes — histórico de ajustes manuais
+router.get('/:id/fidelidade/ajustes', (req, res) => {
+  const ajustes = db.prepare(
+    'SELECT * FROM clientes_fidelidade_ajustes WHERE cliente_id = ? ORDER BY created_at DESC LIMIT 50'
+  ).all(req.params.id);
+  res.json(ajustes);
 });
 
 // ── GET /api/clientes/analise — visão de conjunto da base ─────
