@@ -73,7 +73,7 @@ function calcularBaseRFV() {
       dias_desde_ultimo: x.recencia,
       rfv: { r, f, v, percentil_valor: percentilValor },
       segmento: segmentoDeRFV(r, f, v),
-      recompensas_disponiveis: x.cliente.recompensas_ganhas - x.cliente.recompensas_usadas,
+      recompensas_disponiveis: (x.cliente.recompensas_ganhas + (x.cliente.recompensas_bonus || 0)) - x.cliente.recompensas_usadas,
       aniversario: x.cliente.aniversario,
     };
   });
@@ -83,7 +83,7 @@ function calcularBaseRFV() {
       id: c.id, nome: c.nome, telefone: c.telefone,
       total_gasto: 0, total_pedidos: 0, ticket_medio: 0, dias_desde_ultimo: null,
       rfv: null, segmento: 'novo',
-      recompensas_disponiveis: c.recompensas_ganhas - c.recompensas_usadas,
+      recompensas_disponiveis: (c.recompensas_ganhas + (c.recompensas_bonus || 0)) - c.recompensas_usadas,
       aniversario: c.aniversario,
     });
   }
