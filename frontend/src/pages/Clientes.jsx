@@ -140,7 +140,7 @@ function ModalCliente({ cliente, onClose, onResgatar, onAtualizado }) {
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.erro || 'Erro ao ajustar');
-      toast.success(sinal > 0 ? 'Brinde(s) concedido(s)!' : 'Brinde(s) revogado(s)!');
+      toast.success(sinal > 0 ? 'Pontos concedidos!' : 'Pontos revogados!');
       onResgatar(d.cliente);
       setDados(prev => prev ? { ...prev, cliente: { ...prev.cliente, ...d.cliente } } : prev);
       setAjusteMotivo(''); setAjusteQtd(1);
@@ -635,9 +635,10 @@ function ModalCliente({ cliente, onClose, onResgatar, onAtualizado }) {
                 </div>
               )}
 
-              {/* Ajuste manual — brindes do cartão fidelidade */}
+              {/* Ajuste manual — pontos do cartão fidelidade (1 a 10 = 1 ciclo; a cada 10, vira brinde) */}
               <div className="rounded-2xl p-4" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
-                <p className="text-[10px] font-black tracking-widest t-dim mb-3">AJUSTE MANUAL — BRINDES</p>
+                <p className="text-[10px] font-black tracking-widest t-dim mb-1">AJUSTE MANUAL — PONTOS</p>
+                <p className="text-[11px] t-faint mb-3">Cada 10 pontos completam um ciclo e viram 1 brinde</p>
                 <div className="flex items-center gap-2 mb-2">
                   <input type="number" min={1} value={ajusteQtd} onChange={e => setAjusteQtd(e.target.value)}
                     className="w-16 px-2 py-2 rounded-lg text-sm text-center"
@@ -650,12 +651,12 @@ function ModalCliente({ cliente, onClose, onResgatar, onAtualizado }) {
                   <button onClick={() => ajustarFidelidade(1)} disabled={ajustando}
                     className="flex-1 py-2 rounded-lg text-xs font-black disabled:opacity-50"
                     style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
-                    + Conceder
+                    + Conceder pontos
                   </button>
-                  <button onClick={() => ajustarFidelidade(-1)} disabled={ajustando || (fid?.recompensas_disponiveis || 0) < 1}
+                  <button onClick={() => ajustarFidelidade(-1)} disabled={ajustando}
                     className="flex-1 py-2 rounded-lg text-xs font-black disabled:opacity-50"
                     style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>
-                    − Revogar
+                    − Revogar pontos
                   </button>
                 </div>
               </div>
@@ -703,7 +704,7 @@ function ModalCliente({ cliente, onClose, onResgatar, onAtualizado }) {
                         <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg" style={{ background: 'var(--space-elev)' }}>
                           <div>
                             <span className="font-bold" style={{ color: h.delta > 0 ? '#10b981' : '#ef4444' }}>
-                              {h.tipo === 'selo' ? `${h.delta > 0 ? '+' : ''}${h.delta} brinde${Math.abs(h.delta) > 1 ? 's' : ''}` : brl(h.delta)}
+                              {h.tipo === 'selo' ? `${h.delta > 0 ? '+' : ''}${h.delta} ponto${Math.abs(h.delta) > 1 ? 's' : ''}` : brl(h.delta)}
                             </span>
                             <span className="t-dim ml-2">{h.motivo}</span>
                           </div>

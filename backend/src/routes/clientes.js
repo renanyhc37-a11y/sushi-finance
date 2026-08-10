@@ -17,15 +17,24 @@ const router = Router();
 
 const PEDIDOS_POR_RECOMPENSA = 10;
 
-function calcFidelidade(total_pedidos, recompensas_ganhas, recompensas_usadas, recompensas_bonus = 0) {
-  const recompensas_disponiveis = (recompensas_ganhas + recompensas_bonus) - recompensas_usadas;
-  const pedidos_no_ciclo = total_pedidos % PEDIDOS_POR_RECOMPENSA;
+// selos_bonus é um ajuste manual em PONTOS (não em brindes inteiros): soma
+// direto no total efetivo do ciclo, então cruzar um múltiplo de 10 gera
+// brinde do mesmo jeito que pedidos reais gerariam. total_pedidos nunca é
+// tocado por esse ajuste — continua sendo a contagem real de pedidos,
+// usada em métricas/segmentação — e pdv.js nunca escreve em selos_bonus,
+// então o ajuste manual sobrevive a pedidos reais.
+function calcFidelidade(total_pedidos, recompensas_ganhas, recompensas_usadas, selos_bonus = 0) {
+  const totalEfetivo = total_pedidos + selos_bonus;
+  const recompensas_ganhas_efetivo = Math.floor(totalEfetivo / PEDIDOS_POR_RECOMPENSA);
+  const recompensas_disponiveis = recompensas_ganhas_efetivo - recompensas_usadas;
+  // modulo "seguro": em JS, número negativo % positivo pode dar negativo
+  const pedidos_no_ciclo = ((totalEfetivo % PEDIDOS_POR_RECOMPENSA) + PEDIDOS_POR_RECOMPENSA) % PEDIDOS_POR_RECOMPENSA;
   const proximo_em = PEDIDOS_POR_RECOMPENSA - pedidos_no_ciclo;
-  return { total_pedidos, recompensas_ganhas, recompensas_usadas, recompensas_bonus, recompensas_disponiveis, pedidos_no_ciclo, proximo_em };
+  return { total_pedidos, recompensas_ganhas, recompensas_usadas, selos_bonus, recompensas_disponiveis, pedidos_no_ciclo, proximo_em };
 }
 
 function comFidelidade(c) {
-  return { ...c, fidelidade: calcFidelidade(c.total_pedidos, c.recompensas_ganhas, c.recompensas_usadas, c.recompensas_bonus || 0) };
+  return { ...c, fidelidade: calcFidelidade(c.total_pedidos, c.recompensas_ganhas, c.recompensas_usadas, c.selos_bonus || 0) };
 }
 
 // GET /api/clientes — lista todos
@@ -261,8 +270,8 @@ router.post('/:id/resgatar', (req, res) => {
   const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(req.params.id);
   if (!cliente) return res.status(404).json({ erro: 'Cliente não encontrado' });
 
-  const disponiveis = (cliente.recompensas_ganhas + (cliente.recompensas_bonus || 0)) - cliente.recompensas_usadas;
-  if (disponiveis <= 0) return res.status(400).json({ erro: 'Nenhum brinde disponível' });
+  const fid = calcFidelidade(cliente.total_pedidos, cliente.recompensas_ganhas, cliente.recompensas_usadas, cliente.selos_bonus || 0);
+  if (fid.recompensas_disponiveis <= 0) return res.status(400).json({ erro: 'Nenhum brinde disponível' });
 
   db.prepare('UPDATE clientes SET recompensas_usadas = recompensas_usadas + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
     .run(cliente.id);
@@ -271,7 +280,8 @@ router.post('/:id/resgatar', (req, res) => {
   res.json({ ok: true, cliente: comFidelidade(atualizado) });
 });
 
-// POST /api/clientes/:id/fidelidade/ajustar — concede (delta>0) ou revoga (delta<0) brindes manualmente
+// POST /api/clientes/:id/fidelidade/ajustar — concede (delta>0) ou revoga (delta<0) PONTOS manualmente
+// (não brindes inteiros: 10 pontos = 1 brinde, igual ao ciclo de pedidos reais)
 router.post('/:id/fidelidade/ajustar', (req, res) => {
   const { delta, motivo } = req.body;
   const d = parseInt(delta, 10);
@@ -281,13 +291,13 @@ router.post('/:id/fidelidade/ajustar', (req, res) => {
   const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(req.params.id);
   if (!cliente) return res.status(404).json({ erro: 'Cliente não encontrado' });
 
-  const novoBonus = (cliente.recompensas_bonus || 0) + d;
-  const disponiveisApos = (cliente.recompensas_ganhas + novoBonus) - cliente.recompensas_usadas;
-  if (disponiveisApos < 0) {
-    return res.status(400).json({ erro: 'Isso deixaria o saldo de brindes negativo' });
+  const novoBonus = (cliente.selos_bonus || 0) + d;
+  const fidApos = calcFidelidade(cliente.total_pedidos, cliente.recompensas_ganhas, cliente.recompensas_usadas, novoBonus);
+  if (fidApos.recompensas_disponiveis < 0) {
+    return res.status(400).json({ erro: 'Isso deixaria o saldo de pontos negativo' });
   }
 
-  db.prepare('UPDATE clientes SET recompensas_bonus = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(novoBonus, cliente.id);
+  db.prepare('UPDATE clientes SET selos_bonus = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(novoBonus, cliente.id);
   db.prepare('INSERT INTO clientes_fidelidade_ajustes (cliente_id, delta, motivo) VALUES (?, ?, ?)').run(cliente.id, d, String(motivo).trim());
 
   const atualizado = db.prepare('SELECT * FROM clientes WHERE id = ?').get(cliente.id);

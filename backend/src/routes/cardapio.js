@@ -139,6 +139,12 @@ try { db.exec('ALTER TABLE pdv_pedidos ADD COLUMN utm_campaign TEXT'); } catch {
 try { db.exec('ALTER TABLE clientes ADD COLUMN aniversario TEXT'); } catch {}
 try { db.exec('ALTER TABLE clientes ADD COLUMN aniversario_enviado_ano INTEGER'); } catch {}
 try { db.exec('ALTER TABLE clientes ADD COLUMN recompensas_bonus INTEGER DEFAULT 0'); } catch {}
+// Ajuste manual de fidelidade em PONTOS (não brindes inteiros). Nome final
+// direto — a coluna já existiu como "recompensas_bonus" e foi renomeada uma
+// única vez em produção; manter o ADD+RENAME em par aqui reabriria
+// "recompensas_bonus" a cada boot (o ADD sempre teria sucesso de novo) e o
+// RENAME falharia silenciosamente por "selos_bonus" já existir.
+try { db.exec('ALTER TABLE clientes ADD COLUMN selos_bonus INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE cardapio_itens ADD COLUMN foto TEXT'); } catch {}
 try { db.exec('ALTER TABLE cardapio_categorias ADD COLUMN descricao TEXT'); } catch {}
 try { db.exec('ALTER TABLE cardapio_itens ADD COLUMN is_sugestao INTEGER DEFAULT 0'); } catch {}
@@ -191,11 +197,16 @@ try {
 const PEDIDOS_POR_RECOMPENSA = 10;
 const RECOMPENSA_DESCRICAO   = '1 Temaki Salmão grátis no próximo pedido! 🎁';
 
-function calcFidelidade(total_pedidos, recompensas_ganhas, recompensas_usadas, recompensas_bonus = 0) {
-  const recompensas_disponiveis = (recompensas_ganhas + recompensas_bonus) - recompensas_usadas;
-  const pedidos_no_ciclo = total_pedidos % PEDIDOS_POR_RECOMPENSA;
+// Mantém a mesma fórmula de backend/src/routes/clientes.js — selos_bonus é
+// ajuste manual em PONTOS, soma no total efetivo do ciclo (não é mais
+// "brindes inteiros"). total_pedidos nunca é alterado por esse ajuste.
+function calcFidelidade(total_pedidos, recompensas_ganhas, recompensas_usadas, selos_bonus = 0) {
+  const totalEfetivo = total_pedidos + selos_bonus;
+  const recompensas_ganhas_efetivo = Math.floor(totalEfetivo / PEDIDOS_POR_RECOMPENSA);
+  const recompensas_disponiveis = recompensas_ganhas_efetivo - recompensas_usadas;
+  const pedidos_no_ciclo = ((totalEfetivo % PEDIDOS_POR_RECOMPENSA) + PEDIDOS_POR_RECOMPENSA) % PEDIDOS_POR_RECOMPENSA;
   const proximo_em = PEDIDOS_POR_RECOMPENSA - pedidos_no_ciclo;
-  return { total_pedidos, recompensas_ganhas, recompensas_usadas, recompensas_bonus, recompensas_disponiveis, pedidos_no_ciclo, proximo_em };
+  return { total_pedidos, recompensas_ganhas, recompensas_usadas, selos_bonus, recompensas_disponiveis, pedidos_no_ciclo, proximo_em };
 }
 
 function normalizarTelefone(tel) {
@@ -433,7 +444,7 @@ router.get('/cliente/:telefone', (req, res) => {
   const cliente = db.prepare('SELECT * FROM clientes WHERE telefone = ?').get(tel);
   if (!cliente) return res.status(404).json({ erro: 'Cliente não encontrado' });
 
-  res.json({ ...cliente, fidelidade: calcFidelidade(cliente.total_pedidos, cliente.recompensas_ganhas, cliente.recompensas_usadas, cliente.recompensas_bonus || 0) });
+  res.json({ ...cliente, fidelidade: calcFidelidade(cliente.total_pedidos, cliente.recompensas_ganhas, cliente.recompensas_usadas, cliente.selos_bonus || 0) });
 });
 
 // ── POST /api/cardapio/pedido ────────────────────────────────
@@ -596,7 +607,7 @@ router.post('/pedido', (req, res) => {
       `).run(cliente_nome.trim(), cliente_endereco.trim(), novo_total, novo_ganhas, anivMMDD, tel);
 
       const atualizado = db.prepare('SELECT * FROM clientes WHERE telefone = ?').get(tel);
-      fidelidade = calcFidelidade(atualizado.total_pedidos, atualizado.recompensas_ganhas, atualizado.recompensas_usadas, atualizado.recompensas_bonus || 0);
+      fidelidade = calcFidelidade(atualizado.total_pedidos, atualizado.recompensas_ganhas, atualizado.recompensas_usadas, atualizado.selos_bonus || 0);
     } else {
       // Cria novo cliente
       db.prepare(`
