@@ -67,14 +67,24 @@ function ModalCliente({ cliente, onClose, onResgatar, onAtualizado }) {
   const [aba, setAba] = useState('perfil'); // 'perfil' | 'historico' | 'fidelidade' | 'dados'
   const [editDados, setEditDados] = useState({ nome: cliente.nome || '', endereco: cliente.endereco || '', bairro: cliente.bairro || '', email: cliente.email || '', observacao: cliente.observacao || '', aniversario: cliente.aniversario ? cliente.aniversario.split('-').reverse().join('/') : '' });
   const [salvandoDados, setSalvandoDados] = useState(false);
+  const [ajusteQtd, setAjusteQtd] = useState(1);
+  const [ajusteMotivo, setAjusteMotivo] = useState('');
+  const [ajustando, setAjustando] = useState(false);
+  const [cashbackSaldo, setCashbackSaldo] = useState(null);
+  const [cbValor, setCbValor] = useState('');
+  const [cbMotivo, setCbMotivo] = useState('');
+  const [cbOperando, setCbOperando] = useState(false);
+  const [historicoAjustes, setHistoricoAjustes] = useState(null); // null = não carregado ainda
+  const [carregandoHist, setCarregandoHist] = useState(false);
 
   useEffect(() => {
     Promise.all([
       fetch(`${BASE}/clientes/${cliente.id}/perfil`, { headers: authH() }).then(r => r.ok ? r.json() : null),
       fetch(`${BASE}/promocoes/cliente/${cliente.id}`, { headers: authH() }).then(r => r.ok ? r.json() : []),
-    ]).then(([d, pr]) => { setDados(d); setPromocoes(pr); setLoading(false); })
+      fetch(`${BASE}/cashback/saldo/${cliente.telefone}`, { headers: authH() }).then(r => r.ok ? r.json() : null),
+    ]).then(([d, pr, cb]) => { setDados(d); setPromocoes(pr); setCashbackSaldo(cb); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [cliente.id]);
+  }, [cliente.id, cliente.telefone]);
 
   async function resgatarPromocao(cp) {
     setResgatando(cp.id);
@@ -116,6 +126,77 @@ function ModalCliente({ cliente, onClose, onResgatar, onAtualizado }) {
       setDados(prev => ({ ...prev, cliente: { ...prev.cliente, ...data.cliente } }));
     } catch (err) { toast.error(err.message); }
     setResgatando(null);
+  }
+
+  async function ajustarFidelidade(sinal) {
+    if (!ajusteMotivo.trim()) { toast.error('Informe o motivo'); return; }
+    const qtd = Math.abs(parseInt(ajusteQtd, 10)) || 0;
+    if (qtd <= 0) { toast.error('Quantidade inválida'); return; }
+    setAjustando(true);
+    try {
+      const r = await fetch(`${BASE}/clientes/${cliente.id}/fidelidade/ajustar`, {
+        method: 'POST', headers: authH(),
+        body: JSON.stringify({ delta: sinal * qtd, motivo: ajusteMotivo.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'Erro ao ajustar');
+      toast.success(sinal > 0 ? 'Brinde(s) concedido(s)!' : 'Brinde(s) revogado(s)!');
+      onResgatar(d.cliente);
+      setDados(prev => prev ? { ...prev, cliente: { ...prev.cliente, ...d.cliente } } : prev);
+      setAjusteMotivo(''); setAjusteQtd(1);
+      setHistoricoAjustes(null); // força recarregar se o usuário abrir de novo
+    } catch (e) { toast.error(e.message); }
+    setAjustando(false);
+  }
+
+  async function recarregarCashback() {
+    try {
+      const r = await fetch(`${BASE}/cashback/saldo/${cliente.telefone}`, { headers: authH() });
+      if (r.ok) setCashbackSaldo(await r.json());
+    } catch { /* mantém saldo atual */ }
+  }
+
+  async function ajustarCashback(tipo) {
+    const valor = parseFloat(cbValor);
+    if (!valor || valor <= 0) { toast.error('Informe um valor válido'); return; }
+    if (!cbMotivo.trim()) { toast.error('Informe o motivo'); return; }
+    if (tipo === 'remover' && valor > (cashbackSaldo?.saldo || 0)) {
+      toast.error(`Valor maior que o saldo disponível (${brl(cashbackSaldo?.saldo || 0)})`);
+      return;
+    }
+    setCbOperando(true);
+    try {
+      const endpoint = tipo === 'creditar' ? 'creditar' : 'estornar';
+      const r = await fetch(`${BASE}/cashback/${endpoint}`, {
+        method: 'POST', headers: authH(),
+        body: JSON.stringify({ telefone: cliente.telefone, nome: cliente.nome, valor, descricao: cbMotivo.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.erro) throw new Error(d.erro || 'Erro');
+      toast.success(tipo === 'creditar' ? 'Cashback creditado!' : 'Cashback removido!');
+      await recarregarCashback();
+      setCbValor(''); setCbMotivo('');
+      setHistoricoAjustes(null);
+    } catch (e) { toast.error(e.message); }
+    setCbOperando(false);
+  }
+
+  async function abrirHistoricoAjustes() {
+    if (historicoAjustes !== null) { setHistoricoAjustes(null); return; }
+    setCarregandoHist(true);
+    try {
+      const [selos, cb] = await Promise.all([
+        fetch(`${BASE}/clientes/${cliente.id}/fidelidade/ajustes`, { headers: authH() }).then(r => r.ok ? r.json() : []),
+        fetch(`${BASE}/cashback/historico/${cliente.telefone}`, { headers: authH() }).then(r => r.ok ? r.json() : []),
+      ]);
+      const unificado = [
+        ...selos.map(a => ({ tipo: 'selo', delta: a.delta, motivo: a.motivo, data: a.created_at })),
+        ...cb.filter(t => t.tipo === 'manual' || t.tipo === 'estorno')
+             .map(t => ({ tipo: 'cashback', delta: t.tipo === 'estorno' ? -t.valor : t.valor, motivo: t.descricao, data: t.created_at })),
+      ].sort((a, b) => new Date(b.data) - new Date(a.data));
+      setHistoricoAjustes(unificado);
+    } catch { setHistoricoAjustes([]); }
+    setCarregandoHist(false);
   }
 
   const perfil = dados?.perfil;
@@ -253,7 +334,7 @@ function ModalCliente({ cliente, onClose, onResgatar, onAtualizado }) {
 
           {aba !== 'dados' && loading ? (
             <div className="py-16 text-center t-dim text-sm animate-pulse">Carregando perfil…</div>
-          ) : aba !== 'dados' && !perfil ? (
+          ) : aba !== 'dados' && aba !== 'fidelidade' && !perfil ? (
             <div className="py-16 text-center t-dim text-sm">Nenhum pedido registrado ainda.</div>
           ) : aba !== 'dados' && (
 
@@ -553,6 +634,86 @@ function ModalCliente({ cliente, onClose, onResgatar, onAtualizado }) {
                   <p>Nenhuma promoção ativa para este cliente.</p>
                 </div>
               )}
+
+              {/* Ajuste manual — brindes do cartão fidelidade */}
+              <div className="rounded-2xl p-4" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+                <p className="text-[10px] font-black tracking-widest t-dim mb-3">AJUSTE MANUAL — BRINDES</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <input type="number" min={1} value={ajusteQtd} onChange={e => setAjusteQtd(e.target.value)}
+                    className="w-16 px-2 py-2 rounded-lg text-sm text-center"
+                    style={{ background: 'var(--space-elev-2)', border: '1px solid var(--hairline)', color: 'var(--txt-strong)' }} />
+                  <input value={ajusteMotivo} onChange={e => setAjusteMotivo(e.target.value)} placeholder="Motivo (obrigatório)"
+                    className="flex-1 px-3 py-2 rounded-lg text-sm"
+                    style={{ background: 'var(--space-elev-2)', border: '1px solid var(--hairline)', color: 'var(--txt-strong)' }} />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => ajustarFidelidade(1)} disabled={ajustando}
+                    className="flex-1 py-2 rounded-lg text-xs font-black disabled:opacity-50"
+                    style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
+                    + Conceder
+                  </button>
+                  <button onClick={() => ajustarFidelidade(-1)} disabled={ajustando || (fid?.recompensas_disponiveis || 0) < 1}
+                    className="flex-1 py-2 rounded-lg text-xs font-black disabled:opacity-50"
+                    style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+                    − Revogar
+                  </button>
+                </div>
+              </div>
+
+              {/* Cashback */}
+              <div className="rounded-2xl p-4" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] font-black tracking-widest" style={{ color: '#f59e0b' }}>CASHBACK</p>
+                  <p className="text-lg font-black" style={{ color: '#f59e0b' }}>{brl(cashbackSaldo?.saldo || 0)}</p>
+                </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <input type="number" min={0} step="0.01" value={cbValor} onChange={e => setCbValor(e.target.value)} placeholder="Valor"
+                    className="w-24 px-2 py-2 rounded-lg text-sm"
+                    style={{ background: 'var(--space-elev-2)', border: '1px solid var(--hairline)', color: 'var(--txt-strong)' }} />
+                  <input value={cbMotivo} onChange={e => setCbMotivo(e.target.value)} placeholder="Motivo (obrigatório)"
+                    className="flex-1 px-3 py-2 rounded-lg text-sm"
+                    style={{ background: 'var(--space-elev-2)', border: '1px solid var(--hairline)', color: 'var(--txt-strong)' }} />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => ajustarCashback('creditar')} disabled={cbOperando}
+                    className="flex-1 py-2 rounded-lg text-xs font-black disabled:opacity-50"
+                    style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
+                    + Adicionar
+                  </button>
+                  <button onClick={() => ajustarCashback('remover')} disabled={cbOperando}
+                    className="flex-1 py-2 rounded-lg text-xs font-black disabled:opacity-50"
+                    style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+                    − Remover
+                  </button>
+                </div>
+              </div>
+
+              {/* Histórico de ajustes manuais */}
+              <div>
+                <button onClick={abrirHistoricoAjustes} className="text-xs font-bold t-dim flex items-center gap-1.5">
+                  <ChevronRight size={12} style={{ transform: historicoAjustes !== null ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }} />
+                  Histórico de ajustes manuais
+                </button>
+                {carregandoHist && <p className="text-xs t-dim mt-2">Carregando…</p>}
+                {historicoAjustes !== null && !carregandoHist && (
+                  <div className="mt-2 space-y-1.5">
+                    {historicoAjustes.length === 0
+                      ? <p className="text-xs t-dim">Nenhum ajuste manual ainda.</p>
+                      : historicoAjustes.map((h, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs p-2 rounded-lg" style={{ background: 'var(--space-elev)' }}>
+                          <div>
+                            <span className="font-bold" style={{ color: h.delta > 0 ? '#10b981' : '#ef4444' }}>
+                              {h.tipo === 'selo' ? `${h.delta > 0 ? '+' : ''}${h.delta} brinde${Math.abs(h.delta) > 1 ? 's' : ''}` : brl(h.delta)}
+                            </span>
+                            <span className="t-dim ml-2">{h.motivo}</span>
+                          </div>
+                          <span className="t-faint shrink-0 ml-2">{new Date(h.data).toLocaleDateString('pt-BR')}</span>
+                        </div>
+                      ))
+                    }
+                  </div>
+                )}
+              </div>
             </>)
           )}
         </div>
@@ -749,7 +910,7 @@ export default function Clientes() {
   const ehNovo        = c => (c.created_at || '').slice(0, 7) === mesAtual;
   const ehRecorrente  = c => c.total_pedidos > 1;
   const ehVip         = c => c.total_pedidos >= 10;
-  const ehComBrinde   = c => (c.recompensas_ganhas - c.recompensas_usadas) > 0;
+  const ehComBrinde   = c => (c.fidelidade?.recompensas_disponiveis || 0) > 0;
   const ehInativo     = c => c.total_pedidos > 0 && diasDesde(c.updated_at) > 30;
 
   const SEGMENTOS = [
@@ -914,7 +1075,7 @@ export default function Clientes() {
           <p className="text-xs text-zinc-600 px-1">Mostrando {Math.min(mostrarQtd, filtrados.length)} de {filtrados.length}</p>
           {filtrados.slice(0, mostrarQtd).map(c => {
             const fid = c.fidelidade || {};
-            const temBrinde = (c.recompensas_ganhas - c.recompensas_usadas) > 0;
+            const temBrinde = (fid.recompensas_disponiveis || 0) > 0;
             return (
               <button key={c.id} onClick={() => setClienteSelecionado(c)}
                 className="w-full text-left rounded-2xl p-4 transition-all active:scale-[0.99]"
