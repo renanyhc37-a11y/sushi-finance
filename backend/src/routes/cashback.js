@@ -140,10 +140,14 @@ router.post('/usar', (req, res) => {
 router.post('/estornar', (req, res) => {
   const { telefone, valor, descricao } = req.body;
   const tel = (telefone || '').replace(/\D/g, '');
-  upsertSaldo(tel, null);
-  db.prepare(`UPDATE cashback_saldo SET saldo=MAX(0,saldo-?), updated_at=datetime('now') WHERE telefone=?`).run(Number(valor), tel);
+  if (!tel || !valor || isNaN(valor) || valor <= 0) return res.status(400).json({ erro: 'Telefone e valor obrigatórios' });
+
+  const row = db.prepare('SELECT saldo FROM cashback_saldo WHERE telefone=?').get(tel);
+  if (!row || Number(valor) > row.saldo) return res.status(400).json({ erro: 'Valor maior que saldo disponível' });
+
+  db.prepare(`UPDATE cashback_saldo SET saldo=saldo-?, total_usado=total_usado+?, updated_at=datetime('now') WHERE telefone=?`).run(Number(valor), Number(valor), tel);
   db.prepare(`INSERT INTO cashback_transacoes(telefone, tipo, valor, descricao) VALUES(?,?,?,?)`).run(tel, 'estorno', Number(valor), descricao || 'Estorno');
-  res.json({ ok: true });
+  res.json({ ok: true, saldo: db.prepare('SELECT saldo FROM cashback_saldo WHERE telefone=?').get(tel).saldo });
 });
 
 // ── GET /api/cashback/historico/:telefone ─────────────────────

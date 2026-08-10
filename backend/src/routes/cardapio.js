@@ -191,11 +191,11 @@ try {
 const PEDIDOS_POR_RECOMPENSA = 10;
 const RECOMPENSA_DESCRICAO   = '1 Temaki Salmão grátis no próximo pedido! 🎁';
 
-function calcFidelidade(total_pedidos, recompensas_ganhas, recompensas_usadas) {
-  const recompensas_disponiveis = recompensas_ganhas - recompensas_usadas;
+function calcFidelidade(total_pedidos, recompensas_ganhas, recompensas_usadas, recompensas_bonus = 0) {
+  const recompensas_disponiveis = (recompensas_ganhas + recompensas_bonus) - recompensas_usadas;
   const pedidos_no_ciclo = total_pedidos % PEDIDOS_POR_RECOMPENSA;
   const proximo_em = PEDIDOS_POR_RECOMPENSA - pedidos_no_ciclo;
-  return { total_pedidos, recompensas_ganhas, recompensas_usadas, recompensas_disponiveis, pedidos_no_ciclo, proximo_em };
+  return { total_pedidos, recompensas_ganhas, recompensas_usadas, recompensas_bonus, recompensas_disponiveis, pedidos_no_ciclo, proximo_em };
 }
 
 function normalizarTelefone(tel) {
@@ -433,7 +433,7 @@ router.get('/cliente/:telefone', (req, res) => {
   const cliente = db.prepare('SELECT * FROM clientes WHERE telefone = ?').get(tel);
   if (!cliente) return res.status(404).json({ erro: 'Cliente não encontrado' });
 
-  res.json({ ...cliente, fidelidade: calcFidelidade(cliente.total_pedidos, cliente.recompensas_ganhas, cliente.recompensas_usadas) });
+  res.json({ ...cliente, fidelidade: calcFidelidade(cliente.total_pedidos, cliente.recompensas_ganhas, cliente.recompensas_usadas, cliente.recompensas_bonus || 0) });
 });
 
 // ── POST /api/cardapio/pedido ────────────────────────────────
@@ -596,7 +596,7 @@ router.post('/pedido', (req, res) => {
       `).run(cliente_nome.trim(), cliente_endereco.trim(), novo_total, novo_ganhas, anivMMDD, tel);
 
       const atualizado = db.prepare('SELECT * FROM clientes WHERE telefone = ?').get(tel);
-      fidelidade = calcFidelidade(atualizado.total_pedidos, atualizado.recompensas_ganhas, atualizado.recompensas_usadas);
+      fidelidade = calcFidelidade(atualizado.total_pedidos, atualizado.recompensas_ganhas, atualizado.recompensas_usadas, atualizado.recompensas_bonus || 0);
     } else {
       // Cria novo cliente
       db.prepare(`

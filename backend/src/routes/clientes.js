@@ -297,7 +297,7 @@ router.post('/:id/fidelidade/ajustar', (req, res) => {
 // GET /api/clientes/:id/fidelidade/ajustes — histórico de ajustes manuais
 router.get('/:id/fidelidade/ajustes', (req, res) => {
   const ajustes = db.prepare(
-    'SELECT * FROM clientes_fidelidade_ajustes WHERE cliente_id = ? ORDER BY created_at DESC LIMIT 50'
+    'SELECT * FROM clientes_fidelidade_ajustes WHERE cliente_id = ? ORDER BY created_at DESC, id DESC LIMIT 50'
   ).all(req.params.id);
   res.json(ajustes);
 });

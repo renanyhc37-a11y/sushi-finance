@@ -193,7 +193,7 @@ function ModalCliente({ cliente, onClose, onResgatar, onAtualizado }) {
         ...selos.map(a => ({ tipo: 'selo', delta: a.delta, motivo: a.motivo, data: a.created_at })),
         ...cb.filter(t => t.tipo === 'manual' || t.tipo === 'estorno')
              .map(t => ({ tipo: 'cashback', delta: t.tipo === 'estorno' ? -t.valor : t.valor, motivo: t.descricao, data: t.created_at })),
-      ].sort((a, b) => new Date(b.data) - new Date(a.data));
+      ].sort((a, b) => new Date(b.data + 'Z') - new Date(a.data + 'Z'));
       setHistoricoAjustes(unificado);
     } catch { setHistoricoAjustes([]); }
     setCarregandoHist(false);
@@ -707,7 +707,7 @@ function ModalCliente({ cliente, onClose, onResgatar, onAtualizado }) {
                             </span>
                             <span className="t-dim ml-2">{h.motivo}</span>
                           </div>
-                          <span className="t-faint shrink-0 ml-2">{new Date(h.data).toLocaleDateString('pt-BR')}</span>
+                          <span className="t-faint shrink-0 ml-2">{new Date(h.data + 'Z').toLocaleDateString('pt-BR')}</span>
                         </div>
                       ))
                     }
