@@ -1,14 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { getToken } from '../hooks/useAuth';
 import toast, { Toaster } from 'react-hot-toast';
 import {
   Coins, Search, RefreshCw, Settings, PlusCircle, History,
   Trophy, TrendingUp, Users, X, ChevronDown, ChevronUp, ToggleLeft, ToggleRight
 } from 'lucide-react';
-
-const BASE = import.meta.env.VITE_API_URL || '/api';
-const H = () => ({ Authorization: `Bearer ${getToken()}` });
-const J = () => ({ ...H(), 'Content-Type': 'application/json' });
+import { api } from '../api/client';
 
 function fmt(v) { return `R$ ${Number(v || 0).toFixed(2)}`; }
 
@@ -21,18 +17,19 @@ export default function Cashback() {
   const [expandido, setExpandido] = useState(null);
   const [historico, setHistorico] = useState([]);
   const [modalCredito, setModalCredito] = useState(null);
+  const [modoCredito, setModoCredito] = useState('creditar'); // 'creditar' | 'remover'
   const [creditoForm, setCreditoForm] = useState({ telefone: '', nome: '', valor: '', descricao: '' });
   const [consultaTel, setConsultaTel] = useState('');
   const [consultaResult, setConsultaResult] = useState(null);
 
   const carregarConfig = useCallback(async () => {
-    const r = await fetch(`${BASE}/cashback/config`, { headers: H() });
-    if (r.ok) setConfig(await r.json());
+    try { setConfig(await api.get('/cashback/config')); } catch { /* mantém config atual */ }
   }, []);
 
   const carregarClientes = useCallback(async () => {
-    const r = await fetch(`${BASE}/cashback/todos?busca=${encodeURIComponent(busca)}`, { headers: H() });
-    if (r.ok) setClientes(await r.json());
+    try {
+      setClientes(await api.get(`/cashback/todos?busca=${encodeURIComponent(busca)}`));
+    } catch { /* mantém lista atual */ }
   }, [busca]);
 
   useEffect(() => { carregarConfig(); }, [carregarConfig]);
@@ -40,33 +37,44 @@ export default function Cashback() {
 
   async function salvarConfig() {
     setSalvandoCfg(true);
-    const r = await fetch(`${BASE}/cashback/config`, { method: 'PUT', headers: J(), body: JSON.stringify(config) });
-    if (r.ok) { setConfig(await r.json()); toast.success('Configuração salva!'); }
-    else toast.error('Erro ao salvar');
+    try {
+      setConfig(await api.put('/cashback/config', config));
+      toast.success('Configuração salva!');
+    } catch {
+      toast.error('Erro ao salvar');
+    }
     setSalvandoCfg(false);
   }
 
   async function abrirHistorico(tel) {
     if (expandido === tel) { setExpandido(null); return; }
     setExpandido(tel);
-    const r = await fetch(`${BASE}/cashback/historico/${tel}`, { headers: H() });
-    if (r.ok) setHistorico(await r.json());
+    try { setHistorico(await api.get(`/cashback/historico/${tel}`)); } catch { /* ignora */ }
   }
 
-  async function creditar() {
+  async function salvarOperacao() {
     const { telefone, nome, valor, descricao } = creditoForm;
     if (!telefone || !valor) return toast.error('Preencha telefone e valor');
-    const r = await fetch(`${BASE}/cashback/creditar`, { method: 'POST', headers: J(), body: JSON.stringify({ telefone, nome, valor: parseFloat(valor), descricao }) });
-    const d = await r.json();
-    if (d.ok) { toast.success('Cashback creditado!'); setModalCredito(false); setCreditoForm({ telefone: '', nome: '', valor: '', descricao: '' }); carregarClientes(); }
-    else toast.error(d.erro || 'Erro');
+    const endpoint = modoCredito === 'creditar' ? '/cashback/creditar' : '/cashback/estornar';
+    try {
+      const d = await api.post(endpoint, { telefone, nome, valor: parseFloat(valor), descricao });
+      if (d.erro) { toast.error(d.erro); return; }
+      toast.success(modoCredito === 'creditar' ? 'Cashback creditado!' : 'Cashback removido!');
+      setModalCredito(false);
+      setCreditoForm({ telefone: '', nome: '', valor: '', descricao: '' });
+      carregarClientes();
+    } catch (e) {
+      toast.error(e.message || 'Erro');
+    }
   }
 
   async function consultarSaldo() {
     if (!consultaTel.trim()) return;
-    const r = await fetch(`${BASE}/cashback/saldo/${consultaTel.replace(/\D/g, '')}`, { headers: H() });
-    if (r.ok) setConsultaResult(await r.json());
-    else toast.error('Erro ao consultar');
+    try {
+      setConsultaResult(await api.get(`/cashback/saldo/${consultaTel.replace(/\D/g, '')}`));
+    } catch {
+      toast.error('Erro ao consultar');
+    }
   }
 
   const stats = {
@@ -92,8 +100,8 @@ export default function Cashback() {
             {config.ativo ? 'ATIVO' : 'PAUSADO'}
           </span>
         </div>
-        <button onClick={() => setModalCredito(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, background: '#f59e0b', color: '#000', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
-          <PlusCircle size={15} /> Creditar manual
+        <button onClick={() => { setModoCredito('creditar'); setModalCredito(true); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, background: '#f59e0b', color: '#000', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+          <PlusCircle size={15} /> Ajustar manualmente
         </button>
       </div>
 
@@ -298,15 +306,27 @@ export default function Cashback() {
           <div onClick={e => e.stopPropagation()} style={{ width: 400, background: '#1e293b', borderRadius: 16, padding: 24, border: '1px solid #334155', boxShadow: '0 20px 60px rgba(0,0,0,0.7)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontWeight: 700, fontSize: 16, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <PlusCircle size={18} style={{ color: '#f59e0b' }} /> Creditar cashback
+                <PlusCircle size={18} style={{ color: '#f59e0b' }} /> Ajuste manual de cashback
               </div>
               <button onClick={() => setModalCredito(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
             </div>
+
+            <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+              {[['creditar', 'Creditar'], ['remover', 'Remover']].map(([id, label]) => (
+                <button key={id} onClick={() => setModoCredito(id)} style={{
+                  flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  background: modoCredito === id ? (id === 'creditar' ? '#16a34a' : '#dc2626') : '#0f172a',
+                  color: modoCredito === id ? '#fff' : '#64748b',
+                  border: modoCredito === id ? 'none' : '1px solid #334155',
+                }}>{label}</button>
+              ))}
+            </div>
+
             {[
               { key: 'telefone', label: 'TELEFONE', placeholder: '44999887766' },
               { key: 'nome', label: 'NOME (opcional)', placeholder: 'Nome do cliente' },
               { key: 'valor', label: 'VALOR (R$)', placeholder: '0.00', type: 'number' },
-              { key: 'descricao', label: 'DESCRIÇÃO (opcional)', placeholder: 'Ex: Cortesia aniversário' },
+              { key: 'descricao', label: 'MOTIVO', placeholder: 'Ex: Cortesia aniversário' },
             ].map(f => (
               <div key={f.key} style={{ marginBottom: 12 }}>
                 <label style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, display: 'block', marginBottom: 4 }}>{f.label}</label>
@@ -314,8 +334,8 @@ export default function Cashback() {
                   style={{ width: '100%', padding: '9px 12px', background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#e2e8f0', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
               </div>
             ))}
-            <button onClick={creditar} style={{ width: '100%', padding: '12px', borderRadius: 8, fontWeight: 700, fontSize: 14, background: '#f59e0b', color: '#000', border: 'none', cursor: 'pointer', marginTop: 8 }}>
-              Creditar
+            <button onClick={salvarOperacao} style={{ width: '100%', padding: '12px', borderRadius: 8, fontWeight: 700, fontSize: 14, background: modoCredito === 'creditar' ? '#f59e0b' : '#ef4444', color: modoCredito === 'creditar' ? '#000' : '#fff', border: 'none', cursor: 'pointer', marginTop: 8 }}>
+              {modoCredito === 'creditar' ? 'Creditar' : 'Remover'}
             </button>
           </div>
         </div>
