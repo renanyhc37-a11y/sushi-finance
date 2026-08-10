@@ -6,15 +6,15 @@ const router = Router();
 
 const PEDIDOS_POR_RECOMPENSA = 10;
 
-function calcFidelidade(total_pedidos, recompensas_ganhas, recompensas_usadas) {
-  const recompensas_disponiveis = recompensas_ganhas - recompensas_usadas;
+function calcFidelidade(total_pedidos, recompensas_ganhas, recompensas_usadas, recompensas_bonus = 0) {
+  const recompensas_disponiveis = (recompensas_ganhas + recompensas_bonus) - recompensas_usadas;
   const pedidos_no_ciclo = total_pedidos % PEDIDOS_POR_RECOMPENSA;
   const proximo_em = PEDIDOS_POR_RECOMPENSA - pedidos_no_ciclo;
-  return { total_pedidos, recompensas_ganhas, recompensas_usadas, recompensas_disponiveis, pedidos_no_ciclo, proximo_em };
+  return { total_pedidos, recompensas_ganhas, recompensas_usadas, recompensas_bonus, recompensas_disponiveis, pedidos_no_ciclo, proximo_em };
 }
 
 function comFidelidade(c) {
-  return { ...c, fidelidade: calcFidelidade(c.total_pedidos, c.recompensas_ganhas, c.recompensas_usadas) };
+  return { ...c, fidelidade: calcFidelidade(c.total_pedidos, c.recompensas_ganhas, c.recompensas_usadas, c.recompensas_bonus || 0) };
 }
 
 // GET /api/clientes — lista todos
@@ -250,7 +250,7 @@ router.post('/:id/resgatar', (req, res) => {
   const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(req.params.id);
   if (!cliente) return res.status(404).json({ erro: 'Cliente não encontrado' });
 
-  const disponiveis = cliente.recompensas_ganhas - cliente.recompensas_usadas;
+  const disponiveis = (cliente.recompensas_ganhas + (cliente.recompensas_bonus || 0)) - cliente.recompensas_usadas;
   if (disponiveis <= 0) return res.status(400).json({ erro: 'Nenhum brinde disponível' });
 
   db.prepare('UPDATE clientes SET recompensas_usadas = recompensas_usadas + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?')

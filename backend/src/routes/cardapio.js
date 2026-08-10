@@ -138,6 +138,7 @@ try { db.exec('ALTER TABLE pdv_pedidos ADD COLUMN utm_medium TEXT'); } catch {}
 try { db.exec('ALTER TABLE pdv_pedidos ADD COLUMN utm_campaign TEXT'); } catch {}
 try { db.exec('ALTER TABLE clientes ADD COLUMN aniversario TEXT'); } catch {}
 try { db.exec('ALTER TABLE clientes ADD COLUMN aniversario_enviado_ano INTEGER'); } catch {}
+try { db.exec('ALTER TABLE clientes ADD COLUMN recompensas_bonus INTEGER DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE cardapio_itens ADD COLUMN foto TEXT'); } catch {}
 try { db.exec('ALTER TABLE cardapio_categorias ADD COLUMN descricao TEXT'); } catch {}
 try { db.exec('ALTER TABLE cardapio_itens ADD COLUMN is_sugestao INTEGER DEFAULT 0'); } catch {}
