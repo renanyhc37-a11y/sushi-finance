@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { getToken } from '../hooks/useAuth';
+import { BANNER_ASPECT, elStyleBase, BannerBg, parseDesign } from '../components/bannerStyle';
 import {
   GlassWater, Boxes, IceCreamCone, Flame, Fish, CircleDot, Soup, Salad,
   Star, UtensilsCrossed, ShoppingCart, Settings, Pause, Circle, Leaf,
@@ -12,6 +13,13 @@ import {
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 const brl = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+// Endereço de entrega precisa ter número da casa (rejeita "s/n" e endereços sem dígito).
+function temNumeroCasa(endereco) {
+  const e = (endereco || '').toLowerCase();
+  if (/\bs\/?n[°º]?\b|\bsem\s*n[uú]mero\b|\bsn\b/.test(e)) return false;
+  return /\d/.test(e);
+}
 
 // ── Tráfego pago: pixels de conversão + UTM ──────────────────
 // Captura os parâmetros de campanha (?utm_source=...) da URL e guarda no
@@ -78,49 +86,11 @@ function iconeCategoria(nome) {
 }
 
 // ── Banners do carrossel ──────────────────────────────────────
-// Edite aqui para personalizar as promoções
-const BANNERS = [
-  {
-    id: 1,
-    tag: '🔥 Promoção',
-    titulo: 'Combo Família',
-    subtitulo: '4 temakis + 2 missoshiru por apenas R$ 89,90',
-    cor1: '#7c2d12', cor2: '#9a3412',
-    destaque: 'R$ 89,90',
-    emoji: '🍣',
-    img: 'https://images.unsplash.com/photo-1617196034183-421b4040ed20?w=800&q=80',
-  },
-  {
-    id: 2,
-    tag: '🚚 Frete',
-    titulo: 'Entrega Grátis',
-    subtitulo: 'Em pedidos acima de R$ 80,00 no raio de 5km',
-    cor1: '#064e3b', cor2: '#065f46',
-    destaque: 'Grátis',
-    emoji: '🛵',
-    img: 'https://images.unsplash.com/photo-1559410545-0bdcd187e0a6?w=800&q=80',
-  },
-  {
-    id: 3,
-    tag: '✨ Novidade',
-    titulo: 'Hot Roll Especial',
-    subtitulo: 'Salmão grelhado, cream cheese e cebolinha crocante',
-    cor1: '#1e1b4b', cor2: '#312e81',
-    destaque: 'Novo!',
-    emoji: '🔥',
-    img: 'https://images.unsplash.com/photo-1611143669185-af224c5e3252?w=800&q=80',
-  },
-  {
-    id: 4,
-    tag: '⭐ Destaque',
-    titulo: 'Sashimi Premium',
-    subtitulo: 'Salmão, atum e robalo fresquinhos toda sexta e sábado',
-    cor1: '#1a1a2e', cor2: '#16213e',
-    destaque: 'Sab & Dom',
-    emoji: '🐟',
-    img: 'https://images.unsplash.com/photo-1553621042-f6e147245754?w=800&q=80',
-  },
-];
+// Os banners vêm SEMPRE do banco (/api/cardapio/banners), gerenciados no admin.
+// Não existe fallback hardcoded: um array de demonstração aqui piscava
+// promoções falsas ("Combo Família R$ 89,90") para o cliente real no instante
+// entre o primeiro render e a resposta da API. Enquanto carrega, mostramos um
+// skeleton neutro — sem texto e sem preço.
 
 // ── BannerModal — detalhe do banner ao clicar ─────────────────
 function BannerModal({ banner, onClose, onVerCardapio, onAbrirItem }) {
@@ -220,30 +190,34 @@ function Carrossel({ onBannerClick }) {
   const [atual, setAtual] = useState(0);
   const [arrastando, setArrastando] = useState(false);
   const [bannersDB, setBannersDB] = useState([]);
+  const [carregando, setCarregando] = useState(true);
   const xInicioRef = useRef(null);
   const timerRef = useRef(null);
 
-  // Carrega banners do banco; usa BANNERS hardcoded como fallback
+  // Carrega banners do banco (única fonte — sem fallback hardcoded).
   // Polling a cada 90s para refletir alterações sem o cliente precisar atualizar
   useEffect(() => {
     const carregar = () =>
       fetch(`${BASE}/cardapio/banners`)
         .then(r => r.ok ? r.json() : [])
-        .then(data => { if (data.length > 0) setBannersDB(data); })
-        .catch(() => {});
+        .then(data => { if (Array.isArray(data)) setBannersDB(data); })
+        .catch(() => {})
+        .finally(() => setCarregando(false));
     carregar();
     const t = setInterval(carregar, 90_000);
     return () => clearInterval(t);
   }, []);
 
-  const lista = bannersDB.length > 0 ? bannersDB : BANNERS;
+  const lista = bannersDB;
 
   const irPara = useCallback((idx) => {
-    setAtual((idx + lista.length) % lista.length);
+    // Guarda contra lista vazia: `% 0` daria NaN e nenhum slide renderizaria
+    setAtual(lista.length ? (idx + lista.length) % lista.length : 0);
   }, [lista.length]);
 
   const resetTimer = useCallback(() => {
     clearInterval(timerRef.current);
+    if (lista.length < 2) return; // 0 slides: `% 0` = NaN · 1 slide: nada a girar
     timerRef.current = setInterval(() => setAtual(a => (a + 1) % lista.length), 4500);
   }, [lista.length]);
 
@@ -264,11 +238,19 @@ function Carrossel({ onBannerClick }) {
     setArrastando(false); xInicioRef.current = null;
   };
 
-  if (lista.length === 0) return null;
+  // Placeholder neutro enquanto a API responde: reserva o espaço (sem pulo de
+  // layout) sem inventar promoção nenhuma. Sem banners ativos, some de vez.
+  if (lista.length === 0) {
+    if (!carregando) return null;
+    return (
+      <div className="relative overflow-hidden animate-pulse"
+        style={{ borderRadius: 24, aspectRatio: BANNER_ASPECT, background: 'rgba(255,255,255,0.04)' }} />
+    );
+  }
 
   return (
     <div className="relative overflow-hidden select-none"
-      style={{ borderRadius: 24, height: 220 }}
+      style={{ borderRadius: 24, aspectRatio: BANNER_ASPECT, containerType: 'inline-size' }}
       onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
       onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={() => setArrastando(false)}>
 
@@ -283,26 +265,12 @@ function Carrossel({ onBannerClick }) {
             pointerEvents: i === atual ? 'auto' : 'none',
           }}>
 
-          {/* Foto de fundo (se houver) */}
-          {banner.img && (
-            <img src={banner.img} alt="" draggable={false}
-              className="absolute inset-0 w-full h-full object-cover"
-              style={{ userSelect: 'none' }} />
-          )}
-
-          {/* Gradiente de cor — sem imagem sempre; com imagem só se usar_gradiente=1 */}
-          {(!banner.img || banner.usar_gradiente) && (
-            <div className="absolute inset-0"
-              style={{ background: `linear-gradient(110deg, ${banner.cor1}f0 0%, ${banner.cor2}cc 60%, ${banner.cor2}88 100%)` }} />
-          )}
-
-          {/* Sombra inferior para legibilidade do texto */}
-          <div className="absolute inset-0"
-            style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.2) 55%, transparent 100%)' }} />
+          {/* Fundo — renderização compartilhada com o editor (WYSIWYG) */}
+          <BannerBg banner={banner} ds={parseDesign(banner.design)} />
 
           {/* Conteúdo — layout livre se design salvo, senão layout padrão */}
           {(() => {
-            const d = banner.design ? (typeof banner.design === 'string' ? JSON.parse(banner.design) : banner.design) : null;
+            const d = parseDesign(banner.design);
             const els = d?.elementos;
             const _rawOps = banner.opcoes_escolha
               ? (() => { try { return typeof banner.opcoes_escolha === 'string' ? JSON.parse(banner.opcoes_escolha) : banner.opcoes_escolha; } catch { return []; } })()
@@ -311,24 +279,11 @@ function Carrossel({ onBannerClick }) {
 
             if (els) {
               // ── Layout customizado pelo editor visual ──
-              const elStyle = (key, extra = {}) => {
+              // Mesmo estilo do editor (WYSIWYG) — fonte escala com o tamanho.
+              const elStyle = (key) => {
                 const e = els[key];
                 if (!e || e.oculto) return null;
-                return {
-                  position: 'absolute',
-                  left: `${e.x}%`, top: `${e.y}%`,
-                  fontSize: e.size, color: e.cor,
-                  fontWeight: e.negrito ? 900 : 400,
-                  textAlign: e.align || 'left',
-                  background: e.bg || undefined,
-                  borderRadius: (key === 'tag' || key === 'destaque') ? 999 : undefined,
-                  padding: (key === 'tag' || key === 'destaque') ? '3px 10px' : undefined,
-                  backdropFilter: key === 'tag' ? 'blur(12px)' : undefined,
-                  textShadow: (key === 'titulo' || key === 'subtitulo') ? '0 2px 8px rgba(0,0,0,0.7)' : undefined,
-                  pointerEvents: 'none',
-                  maxWidth: '90%',
-                  ...extra,
-                };
+                return { ...elStyleBase(e, key), pointerEvents: 'none', maxWidth: '92%' };
               };
               return (
                 <div className="absolute inset-0">
@@ -542,7 +497,7 @@ function ItemModal({ item, onClose, carrinho, onConfirm }) {
           {/* Foto ou emoji hero */}
           {item.foto ? (
             <div className="relative w-full shrink-0" style={{ height: 220 }}>
-              <img src={item.foto} alt={item.nome} className="w-full h-full object-cover" />
+              <img src={item.foto} alt={item.nome} decoding="async" className="w-full h-full object-cover" />
               <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(17,17,17,0.9) 0%, transparent 60%)' }} />
               {item.promo_ativa === 1 && item.promo_tag && (
                 <div className="absolute top-3 left-3">
@@ -740,6 +695,8 @@ export default function Cardapio() {
   const [bannerModal, setBannerModal] = useState(null); // banner selecionado
   const menuRef = useRef(null);
   const [clienteEncontrado, setClienteEncontrado] = useState(null);
+  const [usarEnderecoSalvo, setUsarEnderecoSalvo] = useState(true);
+  const [editandoEndereco, setEditandoEndereco] = useState(false);
   const [buscandoCliente, setBuscandoCliente] = useState(false);
   const [etapaCheckout, setEtapaCheckout] = useState('telefone'); // 'telefone' | 'confirmar' | 'novo_cliente'
   const [cupomCodigo, setCupomCodigo] = useState('');
@@ -919,6 +876,8 @@ export default function Cardapio() {
       if (res.ok) {
         const data = await res.json();
         setClienteEncontrado(data);
+        setUsarEnderecoSalvo(!!(data.endereco));
+        setEditandoEndereco(!data.endereco);
         setForm(p => ({ ...p, nome: data.nome, endereco: data.endereco || '', bairro: data.bairro || '' }));
         setEtapaCheckout('confirmar');
       } else {
@@ -929,6 +888,18 @@ export default function Cardapio() {
       setEtapaCheckout('novo_cliente');
     }
     setBuscandoCliente(false);
+  }
+
+  async function salvarEnderecoCliente(telefone, endereco, bairro) {
+    const digits = telefone.replace(/\D/g, '');
+    if (digits.length < 8) return;
+    try {
+      await fetch(`${BASE}/cardapio/cliente/${digits}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endereco, bairro }),
+      });
+    } catch {}
   }
 
   function onTelefoneChange(val) {
@@ -972,9 +943,31 @@ export default function Cardapio() {
   async function finalizarPedido(e) {
     e.preventDefault();
     if (!form.nome.trim()) return toast.error('Informe seu nome');
-    if (!ehRetirada && !form.endereco.trim()) return toast.error('Informe a rua de entrega');
-    if (!ehRetirada && !form.numero.trim()) return toast.error('Informe o número da residência');
+    const usandoEnderecoSalvo = !editandoEndereco && clienteEncontrado?.endereco;
+    if (!ehRetirada && !usandoEnderecoSalvo && !form.endereco.trim()) return toast.error('Informe a rua de entrega');
+    if (!ehRetirada && !usandoEnderecoSalvo && !form.numero.trim()) return toast.error('Informe o número da residência');
+    // Endereço salvo antigo pode estar sem número → obriga completar antes de seguir
+    if (!ehRetirada && usandoEnderecoSalvo && !temNumeroCasa(clienteEncontrado.endereco)) {
+      setEditandoEndereco(true);
+      setForm(p => ({ ...p, endereco: clienteEncontrado.endereco }));
+      return toast.error('Seu endereço salvo está sem o número da casa. Informe o número para a entrega chegar certinho.');
+    }
     if (!form.pagamento) return toast.error('Selecione a forma de pagamento');
+    // Endereço final: salvo do cadastro ou digitado agora
+    const enderecoFinal = ehRetirada ? '' : (
+      usandoEnderecoSalvo
+        ? clienteEncontrado.endereco
+        : [form.endereco, form.numero, form.complemento].filter(Boolean).join(', ')
+    );
+    const bairroFinal = ehRetirada ? null : (
+      usandoEnderecoSalvo && clienteEncontrado?.bairro && !form.bairro
+        ? clienteEncontrado.bairro
+        : (form.bairro || null)
+    );
+    // Salva endereço novo no cadastro do cliente (sem esperar)
+    if (!ehRetirada && clienteEncontrado && editandoEndereco && form.endereco.trim()) {
+      salvarEnderecoCliente(form.telefone, [form.endereco, form.numero, form.complemento].filter(Boolean).join(', '), form.bairro);
+    }
     setEnviando(true);
     try {
       const res = await fetch(`${BASE}/cardapio/pedido`, {
@@ -983,12 +976,12 @@ export default function Cardapio() {
         body: JSON.stringify({
           cliente_nome: form.nome,
           cliente_telefone: form.telefone,
-          cliente_endereco: ehRetirada ? '' : [form.endereco, form.numero, form.complemento].filter(Boolean).join(', '),
+          cliente_endereco: enderecoFinal,
           tipo_entrega: form.tipo_entrega,
           observacao: form.observacao,
           forma_pagamento: form.pagamento,
           troco_para: form.pagamento === 'dinheiro' && form.troco_para ? Number(String(form.troco_para).replace(',', '.')) : null,
-          bairro: ehRetirada ? null : (form.bairro || null),
+          bairro: bairroFinal,
           aniversario: form.aniversario || null,
           agendado_para: form.agendar && form.agendado_para ? new Date(form.agendado_para).toISOString() : null,
           cupom_codigo: cupomAplicado?.codigo || null,
@@ -1000,7 +993,7 @@ export default function Cardapio() {
       if (!res.ok) throw new Error(data.erro || 'Erro');
       // Tráfego pago: dispara o evento de compra nos pixels (Meta/Google)
       dispararCompra(data.total, data.id);
-      setPedidoFeito({ id: data.id, numero: data.numero, total: data.total, desconto: calcDesconto(), telefone: form.telefone, pagamento: form.pagamento, fidelidade: data.fidelidade, ganhou_recompensa: data.ganhou_recompensa, recompensa_descricao: data.recompensa_descricao });
+      setPedidoFeito({ id: data.id, numero: data.numero, total: data.total, desconto: calcDesconto(), telefone: form.telefone, pagamento: form.pagamento, fidelidade: data.fidelidade, ganhou_recompensa: data.ganhou_recompensa, brinde_resgatado: data.brinde_resgatado });
       // Salva o pedido no dispositivo pra o cliente conseguir voltar e
       // acompanhar mesmo depois de fechar a aba.
       try {
@@ -1107,47 +1100,84 @@ export default function Cardapio() {
             </a>
           )}
 
-          {/* Card recompensa ganha */}
-          {pedidoFeito.ganhou_recompensa && (
+          {/* Card brinde resgatado automaticamente */}
+          {pedidoFeito.brinde_resgatado && (
             <div className="rounded-2xl p-4 mb-3 text-center"
               style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.15), rgba(245,158,11,0.08))', border: '2px solid rgba(251,191,36,0.4)', boxShadow: '0 0 24px rgba(251,191,36,0.15)' }}>
               <div className="flex justify-center mb-2 text-yellow-400"><Gift size={34} strokeWidth={1.6} /></div>
-              <p className="font-black text-yellow-400 text-base">Parabéns! Você ganhou um brinde!</p>
-              <p className="text-xs text-yellow-300/70 mt-1">{pedidoFeito.recompensa_descricao}</p>
-              <p className="text-[10px] text-zinc-500 mt-2">Informe ao atendente ao receber o pedido</p>
+              <p className="font-black text-yellow-400 text-base">
+                {pedidoFeito.ganhou_recompensa ? 'Parabéns! Você completou o ciclo e ganhou um brinde!' : 'Você tinha um brinde disponível!'}
+              </p>
+              <p className="text-xs text-yellow-300/70 mt-1">{pedidoFeito.brinde_resgatado.nome} grátis — já incluso no seu pedido 🎁</p>
             </div>
           )}
 
           {/* Card fidelidade */}
-          {fid && !pedidoFeito.ganhou_recompensa && (
-            <div className="rounded-2xl p-4 mb-3"
-              style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.25)' }}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-violet-400"><Star size={19} strokeWidth={1.75} /></span>
+          {fid && !pedidoFeito.brinde_resgatado && (
+            <div className="rounded-2xl mb-3 overflow-hidden"
+              style={{ background: 'linear-gradient(135deg, #1a1033 0%, #110d20 100%)', border: '1px solid rgba(139,92,246,0.3)', boxShadow: '0 4px 24px rgba(139,92,246,0.12)' }}>
+              {/* Cabeçalho */}
+              <div className="flex items-center justify-between px-4 pt-4 pb-3"
+                style={{ borderBottom: '1px solid rgba(139,92,246,0.15)' }}>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center"
+                    style={{ background: 'linear-gradient(135deg, #7c3aed, #5b21b6)', boxShadow: '0 2px 8px rgba(124,58,237,0.4)' }}>
+                    <Star size={15} strokeWidth={2} className="text-white" />
+                  </div>
                   <div>
-                    <p className="text-sm font-black text-white leading-none">Fidelidade</p>
-                    <p className="text-[10px] text-violet-400 mt-0.5">A cada 10 pedidos, ganhe um brinde!</p>
+                    <p className="text-sm font-black text-white leading-none">Cartão Fidelidade</p>
+                    <p className="text-[10px] mt-0.5" style={{ color: '#a78bfa' }}>A cada 10 pedidos, ganhe um brinde</p>
                   </div>
                 </div>
-                <span className="text-xs font-black text-violet-400">{fid.pedidos_no_ciclo}/{TOTAL_SELOS}</span>
+                <div className="text-right">
+                  <p className="text-xl font-black leading-none" style={{ color: '#c4b5fd' }}>{fid.pedidos_no_ciclo}</p>
+                  <p className="text-[10px]" style={{ color: 'rgba(167,139,250,0.5)' }}>de 10</p>
+                </div>
               </div>
               {/* Selos */}
-              <div className="flex gap-1.5 flex-wrap">
-                {Array.from({ length: TOTAL_SELOS }).map((_, i) => (
-                  <div key={i} className="w-7 h-7 rounded-lg flex items-center justify-center text-sm transition-all"
-                    style={{
-                      background: i < fid.pedidos_no_ciclo ? 'rgba(139,92,246,0.5)' : 'rgba(255,255,255,0.05)',
-                      border: `1.5px solid ${i < fid.pedidos_no_ciclo ? 'rgba(139,92,246,0.8)' : 'rgba(255,255,255,0.08)'}`,
-                    }}>
-                    {i < fid.pedidos_no_ciclo ? <Fish size={14} strokeWidth={1.75} className="text-violet-200" /> : '·'}
-                  </div>
-                ))}
+              <div className="px-4 py-3">
+                <div className="grid grid-cols-5 gap-2">
+                  {Array.from({ length: TOTAL_SELOS }).map((_, i) => {
+                    const preenchido = i < fid.pedidos_no_ciclo;
+                    const esteAtual = i === fid.pedidos_no_ciclo - 1;
+                    return (
+                      <div key={i} className="flex flex-col items-center gap-1">
+                        <div className="w-full aspect-square rounded-xl flex items-center justify-center relative transition-all"
+                          style={{
+                            background: preenchido
+                              ? 'linear-gradient(135deg, rgba(124,58,237,0.7), rgba(91,33,182,0.5))'
+                              : 'rgba(255,255,255,0.04)',
+                            border: preenchido
+                              ? '1.5px solid rgba(167,139,250,0.6)'
+                              : '1.5px solid rgba(255,255,255,0.07)',
+                            boxShadow: esteAtual ? '0 0 12px rgba(139,92,246,0.6)' : 'none',
+                          }}>
+                          {preenchido
+                            ? <span style={{ fontSize: 16, lineHeight: 1 }}>🍣</span>
+                            : <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.12)' }} />
+                          }
+                        </div>
+                        <p className="text-[9px] font-bold" style={{ color: preenchido ? '#a78bfa' : 'rgba(255,255,255,0.15)' }}>
+                          {i + 1}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              <p className="text-[10px] text-zinc-600 mt-2">
-                Faltam <span className="text-violet-400 font-bold">{fid.proximo_em} pedido{fid.proximo_em !== 1 ? 's' : ''}</span> para o próximo brinde
-                {fid.recompensas_disponiveis > 0 && <span className="text-yellow-400 font-bold ml-1">· {fid.recompensas_disponiveis} brinde{fid.recompensas_disponiveis > 1 ? 's' : ''} disponível!</span>}
-              </p>
+              {/* Rodapé progresso */}
+              <div className="px-4 pb-4">
+                <div className="h-1.5 rounded-full w-full" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                  <div className="h-1.5 rounded-full transition-all duration-700"
+                    style={{ width: `${(fid.pedidos_no_ciclo / TOTAL_SELOS) * 100}%`, background: 'linear-gradient(90deg, #7c3aed, #a78bfa)' }} />
+                </div>
+                <p className="text-[10px] mt-2 text-center" style={{ color: 'rgba(167,139,250,0.6)' }}>
+                  {fid.proximo_em === 0
+                    ? <span style={{ color: '#fbbf24', fontWeight: 700 }}>🎁 Brinde disponível!</span>
+                    : <><span style={{ color: '#c4b5fd', fontWeight: 700 }}>{fid.proximo_em} pedido{fid.proximo_em !== 1 ? 's' : ''}</span> para ganhar um brinde</>
+                  }
+                </p>
+              </div>
             </div>
           )}
 
@@ -1244,7 +1274,7 @@ export default function Cardapio() {
     ];
     const stepAtual = etapaCheckout === 'telefone' ? 0 : etapaCheckout === 'confirmar' ? 1 : 2;
 
-    const PagamentoSelector = () => (
+    const pagamentoSelectorJsx = (
       <div>
         <label className="text-xs text-zinc-600 font-medium flex items-center gap-1.5 mb-2">
           <CreditCard size={13} strokeWidth={1.75} />Forma de pagamento *
@@ -1269,48 +1299,41 @@ export default function Cardapio() {
             );
           })}
         </div>
-
-        {/* Troco — só para dinheiro */}
         {form.pagamento === 'dinheiro' && (
-          <TrocoInput
-            aPagar={totalValor - calcDesconto()}
-            onBlurChange={onTrocoBlur}
-          />
+          <TrocoInput aPagar={totalValor - calcDesconto()} onBlurChange={onTrocoBlur} />
         )}
       </div>
     );
 
     // Seletor de bairro / frete (só aparece se a loja configurou bairros)
     // Seletor Entrega x Retirada (só aparece se a loja habilitou retirada)
-    const TipoEntregaSelector = () => {
-      if (!retiradaAtiva) return null;
-      const Opcao = ({ val, Icon, titulo, sub }) => (
-        <button type="button" onClick={() => setForm(p => ({ ...p, tipo_entrega: val }))}
-          className="flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl transition-all active:scale-95"
-          style={{ background: form.tipo_entrega === val ? 'rgba(var(--accent-rgb),0.14)' : '#1a1a1a', border: `1px solid ${form.tipo_entrega === val ? 'var(--accent)' : 'rgba(255,255,255,0.08)'}` }}>
-          <Icon size={20} strokeWidth={1.75} style={{ color: form.tipo_entrega === val ? 'var(--accent)' : '#888' }} />
-          <span className="text-xs font-black" style={{ color: form.tipo_entrega === val ? 'var(--accent)' : '#aaa' }}>{titulo}</span>
-          <span className="text-[10px]" style={{ color: '#666' }}>{sub}</span>
-        </button>
-      );
-      return (
-        <div className="rounded-3xl p-4" style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
-          <label className="text-xs text-zinc-600 font-medium flex items-center gap-1.5 mb-2.5">Como você quer receber?</label>
-          <div className="flex gap-2.5">
-            <Opcao val="entrega" Icon={Truck} titulo="Entrega" sub="No seu endereço" />
-            <Opcao val="retirada" Icon={ShoppingBag} titulo="Retirada" sub="Buscar no balcão" />
-          </div>
-          {ehRetirada && (
-            <div className="mt-3 px-3 py-2.5 rounded-xl flex items-start gap-2" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
-              <MapPin size={14} strokeWidth={1.75} className="text-green-400 shrink-0 mt-0.5" />
-              <p className="text-xs text-green-300/90 leading-snug">
-                Retirada no balcão — sem frete.{enderecoLoja ? <> Endereço: <span className="font-bold">{enderecoLoja}</span></> : ''}
-              </p>
-            </div>
-          )}
+    const tipoEntregaJsx = retiradaAtiva ? (
+      <div className="rounded-3xl p-4" style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <label className="text-xs text-zinc-600 font-medium flex items-center gap-1.5 mb-2.5">Como você quer receber?</label>
+        <div className="flex gap-2.5">
+          {[
+            { val: 'entrega',  Icon: Truck,        titulo: 'Entrega',  sub: 'No seu endereço' },
+            { val: 'retirada', Icon: ShoppingBag,  titulo: 'Retirada', sub: 'Buscar no balcão' },
+          ].map(op => (
+            <button key={op.val} type="button" onClick={() => setForm(p => ({ ...p, tipo_entrega: op.val }))}
+              className="flex-1 flex flex-col items-center gap-1 py-3 rounded-2xl transition-all active:scale-95"
+              style={{ background: form.tipo_entrega === op.val ? 'rgba(var(--accent-rgb),0.14)' : '#1a1a1a', border: `1px solid ${form.tipo_entrega === op.val ? 'var(--accent)' : 'rgba(255,255,255,0.08)'}` }}>
+              <op.Icon size={20} strokeWidth={1.75} style={{ color: form.tipo_entrega === op.val ? 'var(--accent)' : '#888' }} />
+              <span className="text-xs font-black" style={{ color: form.tipo_entrega === op.val ? 'var(--accent)' : '#aaa' }}>{op.titulo}</span>
+              <span className="text-[10px]" style={{ color: '#666' }}>{op.sub}</span>
+            </button>
+          ))}
         </div>
-      );
-    };
+        {ehRetirada && (
+          <div className="mt-3 px-3 py-2.5 rounded-xl flex items-start gap-2" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}>
+            <MapPin size={14} strokeWidth={1.75} className="text-green-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-green-300/90 leading-snug">
+              Retirada no balcão — sem frete.{enderecoLoja ? <> Endereço: <span className="font-bold">{enderecoLoja}</span></> : ''}
+            </p>
+          </div>
+        )}
+      </div>
+    ) : null;
 
     // BairroSelector como JSX inline para evitar re-mount a cada keystroke
     const bairroSelectorJsx = (!ehRetirada && temBairros) ? (() => {
@@ -1340,20 +1363,18 @@ export default function Cardapio() {
     })() : null;
 
     // Aniversário (mimo) + agendamento do pedido
-    const ExtrasPedido = () => (
+    const extrasPedidoJsx = (
       <div className="space-y-3">
-        {/* Pergunta o aniversário só uma vez: se o cliente já tem data
-            cadastrada, não pede de novo. */}
         {!clienteEncontrado?.aniversario && (
-        <div>
-          <label className="text-xs text-zinc-600 font-medium flex items-center gap-1.5 mb-2">
-            <Gift size={13} strokeWidth={1.75} /> Seu aniversário <span className="text-zinc-700 font-normal">(ganhe um mimo!)</span>
-          </label>
-          <input type="date" value={form.aniversario}
-            onChange={e => setForm(p => ({ ...p, aniversario: e.target.value }))}
-            className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
-            style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }} />
-        </div>
+          <div>
+            <label className="text-xs text-zinc-600 font-medium flex items-center gap-1.5 mb-2">
+              <Gift size={13} strokeWidth={1.75} /> Seu aniversário <span className="text-zinc-700 font-normal">(ganhe um mimo!)</span>
+            </label>
+            <input type="date" value={form.aniversario}
+              onChange={e => setForm(p => ({ ...p, aniversario: e.target.value }))}
+              className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
+              style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }} />
+          </div>
         )}
         <div>
           <button type="button" onClick={() => setForm(p => ({ ...p, agendar: !p.agendar }))}
@@ -1376,277 +1397,479 @@ export default function Cardapio() {
       </div>
     );
 
+    // ── helpers visuais do checkout ──────────────────────────────
+    const inputCls = "w-full px-4 py-3 rounded-2xl text-sm text-white outline-none transition-all";
+    const inputStyle = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' };
+    const onFocusInput = e => e.target.style.borderColor = 'var(--accent)';
+    const onBlurInput  = e => e.target.style.borderColor = 'rgba(255,255,255,0.08)';
+
+    const SecaoLabel = ({ icon: Icon, label, sub }) => (
+      <div className="flex items-center gap-2 mb-4">
+        <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: 'rgba(var(--accent-rgb),0.1)', border: '1px solid rgba(var(--accent-rgb),0.18)' }}>
+          <Icon size={14} strokeWidth={1.75} style={{ color: 'var(--accent)' }} />
+        </div>
+        <div>
+          <p className="text-sm font-black text-white leading-none">{label}</p>
+          {sub && <p className="text-[11px] text-zinc-600 mt-0.5">{sub}</p>}
+        </div>
+      </div>
+    );
+
+    const mkField = (fieldKey, Icon, label, placeholder, type = 'text', list, inputMode) => (
+      <div>
+        <label className="text-[11px] text-zinc-500 font-semibold flex items-center gap-1.5 mb-1.5 uppercase tracking-wider">
+          <Icon size={11} strokeWidth={2} />{label}
+        </label>
+        <input type={type} placeholder={placeholder} list={list} inputMode={inputMode}
+          value={form[fieldKey]} onChange={e => setForm(p => ({ ...p, [fieldKey]: e.target.value }))}
+          className={inputCls} style={{ ...inputStyle }}
+          onFocus={onFocusInput} onBlur={onBlurInput} />
+      </div>
+    );
+
+    const BotaoConfirmar = ({ label }) => (
+      <button type="submit" disabled={enviando || foraDeArea || abaixoMinimo}
+        className="w-full py-4 rounded-2xl font-black text-white text-base disabled:opacity-40 active:scale-[0.98] transition-all"
+        style={{ background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%)', boxShadow: '0 8px 32px rgba(var(--accent-rgb),0.35)' }}>
+        {enviando
+          ? <span className="flex items-center justify-center gap-2"><Loader2 size={18} strokeWidth={2} className="animate-spin" /> Enviando...</span>
+          : <span className="flex items-center justify-center gap-2"><CheckCircle2 size={18} strokeWidth={2} /> {label || 'Confirmar pedido'} · {brl(Math.max(0, totalValor - calcDesconto()) + calcFrete())}</span>}
+      </button>
+    );
+
     return (
-      <div className="min-h-screen flex flex-col" style={{ background: 'radial-gradient(130% 110% at 50% -10%, #0d1320 0%, #05070d 72%)' }}>
+      <div className="min-h-screen flex flex-col" style={{ background: '#07080f' }}>
         <Toaster />
 
-        {/* Header */}
-        <div className="sticky top-0 z-10 px-4 py-4 flex items-center gap-3"
-          style={{ background: 'rgba(7,7,7,0.95)', backdropFilter: 'blur(16px)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-          <button onClick={() => {
-              if (etapaCheckout !== 'telefone') { setEtapaCheckout('telefone'); setClienteEncontrado(null); }
-              else setTela('carrinho');
-            }}
-            className="w-10 h-10 flex items-center justify-center rounded-xl text-zinc-400 transition-all active:scale-90"
-            style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}><ArrowLeft size={20} strokeWidth={1.75} /></button>
-          <div className="flex-1">
-            <h1 className="font-black text-white text-lg leading-none">Finalizar Pedido</h1>
-            <p className="text-xs text-zinc-600 mt-0.5">{totalItens} {totalItens === 1 ? 'item' : 'itens'} · {brl(totalValor)}</p>
+        {/* ── Header ─────────────────────────────────────────────── */}
+        <div className="sticky top-0 z-20 px-4 pt-4 pb-3"
+          style={{ background: 'rgba(5,5,12,0.97)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <div className="flex items-center gap-3 max-w-lg mx-auto">
+            <button onClick={() => {
+                if (etapaCheckout !== 'telefone') { setEtapaCheckout('telefone'); setClienteEncontrado(null); }
+                else setTela('carrinho');
+              }}
+              className="w-10 h-10 flex items-center justify-center rounded-2xl text-zinc-400 active:scale-90 transition-transform shrink-0"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <ArrowLeft size={19} strokeWidth={1.75} />
+            </button>
+            <div className="flex-1 min-w-0">
+              <h1 className="font-black text-white text-base leading-none">Finalizar Pedido</h1>
+              <p className="text-[11px] text-zinc-600 mt-0.5">{totalItens} {totalItens === 1 ? 'item' : 'itens'} · {brl(totalValor)}</p>
+            </div>
+            {/* Step tracker */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {steps.map((s, i) => (
+                <React.Fragment key={i}>
+                  <div className="relative flex items-center justify-center transition-all"
+                    style={{
+                      width: i === stepAtual ? 28 : 22, height: i === stepAtual ? 28 : 22,
+                      borderRadius: 10,
+                      background: i < stepAtual ? 'rgba(34,197,94,0.2)' : i === stepAtual ? 'rgba(var(--accent-rgb),0.2)' : 'rgba(255,255,255,0.04)',
+                      border: `1.5px solid ${i < stepAtual ? 'rgba(34,197,94,0.5)' : i === stepAtual ? 'rgba(var(--accent-rgb),0.5)' : 'rgba(255,255,255,0.08)'}`,
+                    }}>
+                    {i < stepAtual
+                      ? <Check size={11} strokeWidth={2.5} className="text-green-400" />
+                      : <s.Icon size={i === stepAtual ? 13 : 11} strokeWidth={2}
+                          style={{ color: i === stepAtual ? 'var(--accent)' : '#444' }} />}
+                  </div>
+                  {i < steps.length - 1 && (
+                    <div className="w-4 h-px rounded-full transition-all"
+                      style={{ background: i < stepAtual ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.07)' }} />
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
           </div>
-
-          {/* Step pills */}
-          <div className="flex items-center gap-1">
-            {steps.map((s, i) => (
-              <React.Fragment key={i}>
-                <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold transition-all"
-                  style={{
-                    background: i === stepAtual ? 'rgba(var(--accent-rgb),0.2)' : 'transparent',
-                    color: i === stepAtual ? 'var(--accent)' : i < stepAtual ? '#71717a' : '#333',
-                    border: `1px solid ${i === stepAtual ? 'rgba(var(--accent-rgb),0.4)' : 'transparent'}`,
-                  }}>
-                  <s.Icon size={14} strokeWidth={2} />
-                </div>
-                {i < steps.length - 1 && (
-                  <div className="w-3 h-px" style={{ background: i < stepAtual ? 'rgba(var(--accent-rgb),0.4)' : 'rgba(255,255,255,0.1)' }} />
-                )}
-              </React.Fragment>
-            ))}
+          {/* Barra de progresso linear */}
+          <div className="mt-3 max-w-lg mx-auto rounded-full overflow-hidden" style={{ height: 2, background: 'rgba(255,255,255,0.05)' }}>
+            <div className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${((stepAtual + 1) / steps.length) * 100}%`, background: 'linear-gradient(90deg, var(--accent), var(--accent-2))' }} />
           </div>
         </div>
 
-        <div className="flex-1 px-4 py-5 max-w-lg w-full mx-auto space-y-4">
+        <div className="flex-1 px-4 py-5 max-w-lg w-full mx-auto space-y-3 pb-10">
 
-          {/* Resumo do pedido — sempre visível */}
-          <div className="rounded-3xl overflow-hidden" style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
-            <div className="px-4 py-2.5 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-              <p className="text-xs font-bold tracking-widest text-zinc-600">SEU PEDIDO</p>
-              <button onClick={() => setTela('carrinho')} className="text-[10px] text-orange-500 font-bold">Editar</button>
+          {/* ── Resumo do pedido ─────────────────────────────────── */}
+          <div className="rounded-3xl overflow-hidden" style={{ background: '#0f0f14', border: '1px solid rgba(255,255,255,0.07)' }}>
+            {/* Cabeçalho */}
+            <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <div className="flex items-center gap-2">
+                <ShoppingBag size={13} strokeWidth={1.75} className="text-zinc-600" />
+                <p className="text-[11px] font-bold tracking-widest text-zinc-600">SEU PEDIDO</p>
+              </div>
+              <button onClick={() => setTela('carrinho')}
+                className="text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all active:scale-95"
+                style={{ color: 'var(--accent)', background: 'rgba(var(--accent-rgb),0.1)', border: '1px solid rgba(var(--accent-rgb),0.15)' }}>
+                Editar
+              </button>
             </div>
-            <div className="px-4 py-3 space-y-1.5">
+            {/* Itens */}
+            <div className="px-4 py-3 space-y-2">
               {carrinho.map(i => (
-                <div key={i.id} className="flex justify-between items-center text-sm">
-                  <span className="text-zinc-400 flex items-center gap-2"><UtensilsCrossed size={13} strokeWidth={1.75} className="text-zinc-600 shrink-0" /><span>{i.qty}× {i.nome}</span></span>
-                  <span className="text-white font-semibold">{brl(i.preco * i.qty)}</span>
+                <div key={i.id} className="flex justify-between items-center">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[11px] font-black text-zinc-600 w-5 text-center">{i.qty}×</span>
+                    <span className="text-sm text-zinc-300">{i.nome}</span>
+                  </div>
+                  <span className="text-sm font-bold text-white">{brl(i.preco * i.qty)}</span>
                 </div>
               ))}
             </div>
-            <div className="px-4 py-3 flex justify-between items-center" style={{ background: '#161616', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-              <span className="font-bold text-white">Total</span>
+            {/* Total */}
+            <div className="mx-3 mb-3 px-4 py-3 rounded-2xl flex items-center justify-between"
+              style={{ background: 'rgba(var(--accent-rgb),0.08)', border: '1px solid rgba(var(--accent-rgb),0.14)' }}>
+              <span className="text-sm font-bold text-zinc-400">Total do pedido</span>
               <span className="text-xl font-black" style={{ color: 'var(--accent)' }}>{brl(totalValor)}</span>
             </div>
           </div>
 
-          {/* ── ETAPA 1: TELEFONE ── */}
+          {/* ── ETAPA 1: TELEFONE ─────────────────────────────────── */}
           {etapaCheckout === 'telefone' && (
-            <div className="rounded-3xl overflow-hidden" style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div className="px-4 pt-6 pb-4 text-center">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 text-orange-400"
-                  style={{ background: 'rgba(var(--accent-rgb),0.12)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}><Smartphone size={28} strokeWidth={1.6} /></div>
-                <h2 className="text-lg font-black text-white mb-1">Qual é o seu WhatsApp?</h2>
-                <p className="text-xs text-zinc-500">Usamos para buscar seu cadastro e enviar atualizações do pedido</p>
+            <div className="rounded-3xl overflow-hidden" style={{ background: '#0f0f14', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <div className="px-5 pt-8 pb-5 text-center">
+                {/* Ícone */}
+                <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5 relative"
+                  style={{ background: 'linear-gradient(135deg, rgba(var(--accent-rgb),0.15), rgba(var(--accent-rgb),0.06))', border: '1.5px solid rgba(var(--accent-rgb),0.25)' }}>
+                  <Smartphone size={32} strokeWidth={1.5} style={{ color: 'var(--accent)' }} />
+                  <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center"
+                    style={{ background: '#22c55e', border: '2px solid #07080f' }}>
+                    <Check size={11} strokeWidth={3} className="text-white" />
+                  </div>
+                </div>
+                <h2 className="text-xl font-black text-white mb-1.5 leading-tight">Qual é o seu WhatsApp?</h2>
+                <p className="text-xs text-zinc-500 leading-relaxed">Buscamos seu cadastro e enviamos<br/>atualizações do pedido por lá</p>
               </div>
-              <div className="px-4 pb-6">
+              <div className="px-5 pb-7">
                 <input
                   ref={telInputRef}
                   type="tel"
-                  placeholder="(44) 99999-9999"
+                  placeholder="(00) 00000-0000"
                   value={form.telefone}
                   onChange={e => onTelefoneChange(e.target.value)}
                   autoFocus
-                  className="w-full px-4 py-4 rounded-2xl text-lg font-bold text-white outline-none text-center tracking-widest"
-                  style={{ background: '#1a1a1a', border: '1.5px solid var(--accent)', letterSpacing: 2 }}
+                  className="w-full px-5 py-4 rounded-2xl text-xl font-black text-white outline-none text-center"
+                  style={{ background: 'rgba(var(--accent-rgb),0.07)', border: '2px solid rgba(var(--accent-rgb),0.35)', letterSpacing: 3 }}
                 />
                 {buscandoCliente && (
-                  <div className="flex items-center justify-center gap-2 mt-3 text-violet-400 text-sm">
-                    <Loader2 size={15} strokeWidth={2} className="animate-spin" /> Buscando cadastro...
+                  <div className="flex items-center justify-center gap-2 mt-4 text-zinc-500 text-xs">
+                    <Loader2 size={13} strokeWidth={2} className="animate-spin" /> Buscando cadastro...
                   </div>
                 )}
                 {!buscandoCliente && form.telefone.replace(/\D/g,'').length >= 10 && (
                   <button
                     onClick={() => buscarCliente(form.telefone)}
                     className="w-full mt-3 py-4 rounded-2xl font-black text-white text-base active:scale-95 transition-transform"
-                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 8px 24px rgba(var(--accent-rgb),0.25)' }}>
-                    <span className="flex items-center justify-center gap-2">Continuar <ArrowRight size={17} strokeWidth={2} /></span>
+                    style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 8px 28px rgba(var(--accent-rgb),0.3)' }}>
+                    <span className="flex items-center justify-center gap-2">Continuar <ArrowRight size={17} strokeWidth={2.5} /></span>
                   </button>
                 )}
+                <div className="flex items-center gap-3 mt-4">
+                  <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                  <span className="text-[11px] text-zinc-700">ou</span>
+                  <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                </div>
                 <button onClick={() => setEtapaCheckout('novo_cliente')}
-                  className="w-full mt-2 py-3 rounded-2xl text-sm font-semibold text-zinc-600 active:scale-95 transition-transform"
-                  style={{ background: 'transparent' }}>
+                  className="w-full mt-3 py-3 rounded-2xl text-xs font-bold text-zinc-600 active:scale-95 transition-transform"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                   Continuar sem cadastro
                 </button>
               </div>
             </div>
           )}
 
-          {/* ── ETAPA 2A: CLIENTE ENCONTRADO ── */}
+          {/* ── ETAPA 2A: CLIENTE ENCONTRADO ──────────────────────── */}
           {etapaCheckout === 'confirmar' && clienteEncontrado && (
-            <form onSubmit={finalizarPedido} className="space-y-4">
+            <form onSubmit={finalizarPedido} className="space-y-3">
 
-              {/* Card boas-vindas + fidelidade */}
+              {/* Boas-vindas */}
               <div className="rounded-3xl overflow-hidden"
-                style={{ background: 'linear-gradient(135deg, #0f1a0a, #111)', border: '1px solid rgba(34,197,94,0.3)' }}>
+                style={{ background: 'linear-gradient(145deg, #0b180e, #0f0f14)', border: '1px solid rgba(34,197,94,0.2)' }}>
                 <div className="px-4 pt-4 pb-3 flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 text-green-400"
-                    style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.25)' }}><Hand size={26} strokeWidth={1.6} /></div>
-                  <div className="flex-1">
-                    <p className="font-black text-white text-xl leading-none">Olá, {clienteEncontrado.nome.split(' ')[0]}!</p>
-                    <p className="text-xs text-green-400 mt-1 flex items-center gap-1"><Check size={12} strokeWidth={2.5} /> Cadastro encontrado</p>
-                    {clienteEncontrado.endereco && <p className="text-xs text-zinc-600 mt-0.5 truncate flex items-center gap-1"><MapPin size={11} strokeWidth={1.75} className="shrink-0" /> {clienteEncontrado.endereco}</p>}
+                  {/* Avatar com inicial */}
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 font-black text-xl text-green-300"
+                    style={{ background: 'rgba(34,197,94,0.12)', border: '1.5px solid rgba(34,197,94,0.2)' }}>
+                    {clienteEncontrado.nome.charAt(0).toUpperCase()}
                   </div>
-                  <button type="button" onClick={() => { setForm(p => ({ ...p, telefone: '' })); setEtapaCheckout('telefone'); setClienteEncontrado(null); }}
-                    className="text-xs text-zinc-700 shrink-0 p-2"><X size={17} strokeWidth={2} /></button>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black text-white text-[22px] leading-none">Olá, {clienteEncontrado.nome.split(' ')[0]}!</p>
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full"
+                        style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                        <Check size={10} strokeWidth={2.5} className="text-green-400" />
+                        <span className="text-[10px] font-bold text-green-400">Cadastro encontrado</span>
+                      </div>
+                    </div>
+                    {clienteEncontrado.endereco && (
+                      <p className="text-[11px] text-zinc-600 mt-1 truncate flex items-center gap-1">
+                        <MapPin size={10} strokeWidth={1.75} className="shrink-0" /> {clienteEncontrado.endereco}
+                      </p>
+                    )}
+                  </div>
+                  <button type="button"
+                    onClick={() => { setForm(p => ({ ...p, telefone: '' })); setEtapaCheckout('telefone'); setClienteEncontrado(null); }}
+                    className="w-8 h-8 flex items-center justify-center rounded-xl shrink-0 text-zinc-700 active:scale-90 transition-transform"
+                    style={{ background: 'rgba(255,255,255,0.04)' }}>
+                    <X size={15} strokeWidth={2} />
+                  </button>
                 </div>
 
                 {/* Fidelidade */}
                 {fid && (
-                  <div className="mx-4 mb-4 rounded-2xl p-3" style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)' }}>
-                    <div className="flex items-center justify-between mb-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-violet-300"><Star size={14} strokeWidth={1.75} /></span>
-                        <span className="text-xs font-black text-violet-300">Cartão Fidelidade</span>
+                  <div className="mx-3 mb-3 rounded-2xl overflow-hidden relative"
+                    style={{ background: 'linear-gradient(160deg, #1a1430 0%, #14101f 60%, #0f0d18 100%)', border: '1px solid rgba(167,139,250,0.18)' }}>
+                    {/* Brilho sutil no topo */}
+                    <div className="absolute top-0 left-0 right-0 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(167,139,250,0.5), transparent)' }} />
+
+                    {/* Header */}
+                    <div className="px-4 pt-3.5 pb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Star size={13} strokeWidth={2} style={{ color: '#a78bfa' }} fill="rgba(167,139,250,0.25)" />
+                        <span className="text-[13px] font-semibold tracking-wide" style={{ color: '#ddd6fe' }}>Cartão Fidelidade</span>
                       </div>
-                      <span className="text-xs text-zinc-500">{fid.total_pedidos} pedido{fid.total_pedidos !== 1 ? 's' : ''} no total</span>
-                    </div>
-                    {/* Selos */}
-                    <div className="flex gap-1.5 mb-2">
-                      {Array.from({ length: 10 }).map((_, i) => (
-                        <div key={i} className="flex-1 h-8 rounded-lg flex items-center justify-center text-sm transition-all"
-                          style={{
-                            background: i < fid.pedidos_no_ciclo ? 'rgba(139,92,246,0.5)' : 'rgba(255,255,255,0.04)',
-                            border: `1.5px solid ${i < fid.pedidos_no_ciclo ? 'rgba(139,92,246,0.8)' : 'rgba(255,255,255,0.07)'}`,
-                          }}>
-                          {i < fid.pedidos_no_ciclo ? <Fish size={15} strokeWidth={1.75} className="text-violet-200" /> : ''}
+                      {fid.recompensas_disponiveis > 0 ? (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+                          style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.3)' }}>
+                          <Gift size={10} strokeWidth={2} style={{ color: '#fbbf24' }} />
+                          <span className="text-[10px] font-bold tracking-wide" style={{ color: '#fbbf24' }}>Brinde liberado</span>
                         </div>
-                      ))}
+                      ) : (
+                        <span className="text-[13px] font-light" style={{ color: 'rgba(221,214,254,0.55)' }}>
+                          <span className="font-bold" style={{ color: '#c4b5fd' }}>{fid.pedidos_no_ciclo}</span> / 10
+                        </span>
+                      )}
                     </div>
-                    {fid.recompensas_disponiveis > 0
-                      ? <p className="text-xs text-yellow-400 font-bold flex items-center gap-1.5"><Gift size={13} strokeWidth={1.75} /> Você tem {fid.recompensas_disponiveis} brinde disponível! Informe ao atendente.</p>
-                      : <p className="text-[11px] text-zinc-600">Faltam <span className="text-violet-400 font-bold">{fid.proximo_em}</span> pedido{fid.proximo_em !== 1 ? 's' : ''} para ganhar um brinde</p>
-                    }
+
+                    {/* Selos circulares 5+5 */}
+                    <div className="px-4 pb-3.5">
+                      <div className="grid grid-cols-5 gap-y-2.5 gap-x-2 justify-items-center">
+                        {Array.from({ length: 10 }).map((_, i) => {
+                          const marcado = i < fid.pedidos_no_ciclo;
+                          const ehProximo = i === fid.pedidos_no_ciclo;
+                          const ehBrinde = i === 9;
+                          return (
+                            <div key={i} className="w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300"
+                              style={{
+                                background: marcado
+                                  ? 'linear-gradient(145deg, #8b5cf6, #6d28d9)'
+                                  : ehBrinde
+                                    ? 'rgba(251,191,36,0.06)'
+                                    : 'rgba(255,255,255,0.025)',
+                                border: marcado
+                                  ? '1px solid rgba(196,181,253,0.5)'
+                                  : ehProximo
+                                    ? '1.5px solid rgba(167,139,250,0.5)'
+                                    : ehBrinde
+                                      ? '1px dashed rgba(251,191,36,0.4)'
+                                      : '1px solid rgba(255,255,255,0.07)',
+                                boxShadow: marcado
+                                  ? '0 2px 10px rgba(124,58,237,0.35), inset 0 1px 1px rgba(255,255,255,0.2)'
+                                  : ehProximo ? '0 0 0 3px rgba(167,139,250,0.1)' : 'none',
+                              }}>
+                              {marcado
+                                ? <Fish size={15} strokeWidth={2} className="text-white" />
+                                : ehBrinde
+                                  ? <Gift size={13} strokeWidth={1.75} style={{ color: 'rgba(251,191,36,0.6)' }} />
+                                  : <span className="text-[11px] font-medium" style={{ color: ehProximo ? '#a78bfa' : 'rgba(255,255,255,0.18)' }}>{i + 1}</span>
+                              }
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Status */}
+                    <div className="px-4 pb-4">
+                      {fid.recompensas_disponiveis > 0 ? (
+                        <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
+                          style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.12), rgba(245,158,11,0.06))', border: '1px solid rgba(251,191,36,0.25)' }}>
+                          <Gift size={14} strokeWidth={1.75} style={{ color: '#fbbf24' }} className="shrink-0" />
+                          <p className="text-[11px] font-medium leading-snug" style={{ color: '#fde68a' }}>
+                            {clienteEncontrado?.brinde_item_nome
+                              ? <>Seu brinde <strong>{clienteEncontrado.brinde_item_nome}</strong> entra automático no seu pedido! 🎁</>
+                              : 'Você tem um brinde disponível! Ele será resgatado automaticamente assim que a loja configurar o item.'}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                            <div className="h-full rounded-full transition-all duration-700"
+                              style={{ width: `${(fid.pedidos_no_ciclo / 10) * 100}%`, background: 'linear-gradient(90deg, #6d28d9, #a78bfa)' }} />
+                          </div>
+                          <span className="text-[10px] font-light shrink-0 tracking-wide" style={{ color: 'rgba(196,181,253,0.6)' }}>
+                            falta{fid.proximo_em !== 1 ? 'm' : ''} <span className="font-semibold" style={{ color: '#c4b5fd' }}>{fid.proximo_em}</span> p/ brinde
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Como receber: entrega ou retirada */}
-              <TipoEntregaSelector />
+              {/* Tipo de entrega */}
+              {tipoEntregaJsx}
 
-              {/* Endereço de entrega — sempre visível para entrega */}
+              {/* Endereço */}
               {!ehRetirada && (
-                <div className="rounded-3xl p-4 space-y-3" style={{ background: '#111', border: `1px solid ${clienteEncontrado.endereco ? 'rgba(255,255,255,0.06)' : 'rgba(var(--accent-rgb),0.3)'}` }}>
-                  <p className="text-xs font-bold tracking-widest text-zinc-600 flex items-center gap-1.5">
-                    <MapPin size={12} strokeWidth={1.75} /> ENDEREÇO DE ENTREGA
-                    {!clienteEncontrado.endereco && <span className="text-orange-400 font-normal normal-case">(primeira vez)</span>}
-                  </p>
-                  {[
-                    { key: 'endereco',    Icon: MapPin,        label: 'Rua *',       placeholder: 'Nome da rua ou avenida' },
-                    { key: 'numero',      Icon: Hash,          label: 'Número *',    placeholder: 'Ex: 123' },
-                    { key: 'complemento', Icon: MessageSquare, label: 'Complemento', placeholder: 'Apto, casa, bloco... (opcional)' },
-                  ].map(({ key, Icon, label, placeholder }) => (
-                    <div key={key}>
-                      <label className="text-xs text-zinc-600 font-medium flex items-center gap-1.5 mb-1.5"><Icon size={13} strokeWidth={1.75} />{label}</label>
-                      <input type="text" placeholder={placeholder}
-                        value={form[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
-                        className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
-                        style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}
-                        onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                        onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
+                <div className="rounded-3xl overflow-hidden" style={{ background: '#0f0f14', border: `1px solid ${!editandoEndereco && clienteEncontrado.endereco ? 'rgba(34,197,94,0.25)' : 'rgba(var(--accent-rgb),0.25)'}` }}>
+                  {/* Header */}
+                  <div className="px-4 pt-4 pb-3 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0"
+                        style={{ background: !editandoEndereco && clienteEncontrado.endereco ? 'rgba(34,197,94,0.12)' : 'rgba(var(--accent-rgb),0.1)', border: `1px solid ${!editandoEndereco && clienteEncontrado.endereco ? 'rgba(34,197,94,0.2)' : 'rgba(var(--accent-rgb),0.18)'}` }}>
+                        <MapPin size={14} strokeWidth={1.75} style={{ color: !editandoEndereco && clienteEncontrado.endereco ? '#4ade80' : 'var(--accent)' }} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-white leading-none">Endereço de entrega</p>
+                        <p className="text-[11px] mt-0.5" style={{ color: !editandoEndereco && clienteEncontrado.endereco ? '#4ade80' : '#666' }}>
+                          {!editandoEndereco && clienteEncontrado.endereco ? '✓ Salvo no seu cadastro' : clienteEncontrado.endereco ? 'Informar novo endereço' : 'Primeiro pedido — informe seu endereço'}
+                        </p>
+                      </div>
                     </div>
-                  ))}
+                    {clienteEncontrado.endereco && (
+                      <button type="button"
+                        onClick={() => setEditandoEndereco(v => !v)}
+                        className="text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all"
+                        style={{ color: editandoEndereco ? '#4ade80' : '#f97316', background: editandoEndereco ? 'rgba(74,222,128,0.1)' : 'rgba(249,115,22,0.1)', border: `1px solid ${editandoEndereco ? 'rgba(74,222,128,0.2)' : 'rgba(249,115,22,0.15)'}` }}>
+                        {editandoEndereco ? '← Usar salvo' : 'Trocar'}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="px-4 py-3 space-y-3">
+                    {/* Endereço salvo */}
+                    {!editandoEndereco && clienteEncontrado.endereco ? (
+                      <div className="flex items-start gap-3 px-3 py-3 rounded-2xl"
+                        style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(34,197,94,0.12)' }}>
+                          <MapPin size={14} strokeWidth={1.75} className="text-green-400" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-green-300 font-bold leading-snug">{clienteEncontrado.endereco}</p>
+                          {(clienteEncontrado.bairro || form.bairro) && (
+                            <p className="text-[11px] text-green-400/60 mt-0.5">{clienteEncontrado.bairro || form.bairro}</p>
+                          )}
+                        </div>
+                        <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: '#22c55e' }}>
+                          <Check size={11} strokeWidth={3} className="text-white" />
+                        </div>
+                      </div>
+                    ) : (
+                      /* Formulário de novo endereço */
+                      <>
+                        {mkField('endereco', MapPin, 'Rua *', 'Nome da rua ou avenida')}
+                        <div className="grid grid-cols-2 gap-3">
+                          {mkField('numero', Hash, 'Número *', 'Ex: 123', 'text', undefined, 'numeric')}
+                          {mkField('complemento', MessageSquare, 'Complemento', 'Apto, casa...')}
+                        </div>
+                        {bairroSelectorJsx}
+                        {clienteEncontrado.endereco && form.endereco.trim() && (
+                          <p className="text-[11px] text-zinc-500 flex items-center gap-1.5 pt-1">
+                            <Check size={10} strokeWidth={2.5} className="text-green-400" />
+                            Este endereço será salvo no seu cadastro
+                          </p>
+                        )}
+                      </>
+                    )}
+
+                    {/* Bairro: seletor quando usando endereço salvo sem bairro */}
+                    {!editandoEndereco && clienteEncontrado.endereco && !clienteEncontrado.bairro && bairroSelectorJsx}
+                  </div>
                 </div>
               )}
 
-              {/* Observações */}
-              <div className="rounded-3xl p-4" style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <label className="text-xs text-zinc-600 font-medium flex items-center gap-1.5 mb-2">
-                  <MessageSquare size={13} strokeWidth={1.75} />Alguma observação?
-                </label>
-                <input type="text" placeholder="Sem cebola, porta da frente..."
-                  value={form.observacao} onChange={e => setForm(p => ({ ...p, observacao: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
-                  style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}
-                  onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                  onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
-              </div>
+              {/* Observação + Pagamento + Extras num card */}
+              <div className="rounded-3xl p-4 space-y-4" style={{ background: '#0f0f14', border: '1px solid rgba(255,255,255,0.07)' }}>
 
-              {/* Bairro / Pagamento */}
-              <div className="rounded-3xl p-4 space-y-4" style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
-                {bairroSelectorJsx}
-                <PagamentoSelector />
-                <ExtrasPedido />
+
+                {/* Observação */}
+                <div>
+                  <label className="text-[11px] text-zinc-500 font-semibold flex items-center gap-1.5 mb-1.5 uppercase tracking-wider">
+                    <MessageSquare size={11} strokeWidth={2} />Observações
+                  </label>
+                  <input type="text" placeholder="Sem cebola, porta da frente..."
+                    value={form.observacao} onChange={e => setForm(p => ({ ...p, observacao: e.target.value }))}
+                    className={inputCls} style={inputStyle} onFocus={onFocusInput} onBlur={onBlurInput} />
+                </div>
+
+                {pagamentoSelectorJsx}
+                {extrasPedidoJsx}
               </div>
 
               {/* Cupom */}
               <CupomInput cupomCodigo={cupomCodigo} setCupomCodigo={setCupomCodigo} cupomAplicado={cupomAplicado} setCupomAplicado={setCupomAplicado} cupomBuscando={cupomBuscando} aplicarCupom={aplicarCupom} />
 
-              {/* Resumo */}
+              {/* Resumo de valores */}
               <ResumoValores totalValor={totalValor} desconto={calcDesconto()} cupomAplicado={cupomAplicado} frete={calcFrete()} />
 
-              {abaixoMinimo && <p className="text-xs text-amber-400 text-center flex items-center justify-center gap-1.5"><AlertTriangle size={13} strokeWidth={2} /> Pedido mínimo de {brl(entrega.pedido_minimo)} (sem frete)</p>}
-              <button type="submit" disabled={enviando || foraDeArea || abaixoMinimo}
-                className="w-full py-4 rounded-2xl font-black text-white text-lg disabled:opacity-50 active:scale-95 transition-transform"
-                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 8px 32px rgba(var(--accent-rgb),0.3)' }}>
-                {enviando ? <span className="flex items-center justify-center gap-2"><Loader2 size={18} strokeWidth={2} className="animate-spin" /> Enviando...</span> : <span className="flex items-center justify-center gap-2"><UtensilsCrossed size={18} strokeWidth={1.75} /> Confirmar pedido · {brl(Math.max(0, totalValor - calcDesconto()) + calcFrete())}</span>}
-              </button>
+              {abaixoMinimo && (
+                <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl"
+                  style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.15)' }}>
+                  <AlertTriangle size={13} strokeWidth={2} className="text-amber-400 shrink-0" />
+                  <p className="text-xs text-amber-400">Pedido mínimo de {brl(entrega.pedido_minimo)} (sem frete)</p>
+                </div>
+              )}
+              <BotaoConfirmar />
             </form>
           )}
 
-          {/* ── ETAPA 2B: NOVO CLIENTE ── */}
+          {/* ── ETAPA 2B: NOVO CLIENTE ────────────────────────────── */}
           {etapaCheckout === 'novo_cliente' && (
-            <form onSubmit={finalizarPedido} className="space-y-4">
-              {/* Como receber: entrega ou retirada */}
-              <TipoEntregaSelector />
+            <form onSubmit={finalizarPedido} className="space-y-3">
 
-              <div className="rounded-3xl overflow-hidden" style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <p className="text-xs font-bold tracking-widest text-zinc-600">SEUS DADOS</p>
-                  {form.telefone && <p className="text-xs text-zinc-700 mt-0.5 flex items-center gap-1"><Smartphone size={11} strokeWidth={1.75} /> {form.telefone} · novo cadastro</p>}
+              {tipoEntregaJsx}
+
+              {/* Dados pessoais */}
+              <div className="rounded-3xl p-4 space-y-3" style={{ background: '#0f0f14', border: '1px solid rgba(255,255,255,0.07)' }}>
+                <SecaoLabel icon={User} label="Seus dados"
+                  sub={form.telefone ? `WhatsApp: ${form.telefone}` : 'Novo cadastro'} />
+                {mkField('nome', User, 'Nome completo *', 'Ex: João Silva')}
+                {!ehRetirada && <>
+                  {mkField('endereco', MapPin, 'Rua *', 'Nome da rua ou avenida')}
+                  <div className="grid grid-cols-2 gap-3">
+                    {mkField('numero', Hash, 'Número *', 'Ex: 123', 'text', undefined, 'numeric')}
+                    {mkField('complemento', MessageSquare, 'Complemento', 'Apto, casa...')}
+                  </div>
+                </>}
+
+                {/* Bairro inline */}
+                {!ehRetirada && temBairros && (
+                  <div>
+                    <label className="text-[11px] text-zinc-500 font-semibold flex items-center gap-1.5 mb-1.5 uppercase tracking-wider">
+                      <MapPin size={11} strokeWidth={2} />Bairro *
+                    </label>
+                    <input list="bairros-list" value={form.bairro}
+                      onChange={e => setForm(p => ({ ...p, bairro: e.target.value }))}
+                      placeholder="Digite ou selecione seu bairro"
+                      className={inputCls}
+                      style={{ ...inputStyle, borderColor: foraDeArea ? '#f87171' : 'rgba(255,255,255,0.08)' }}
+                      onFocus={onFocusInput} onBlur={onBlurInput} />
+                    <datalist id="bairros-list">
+                      {entrega.bairros.map(b => <option key={b.nome} value={b.nome} />)}
+                    </datalist>
+                    {foraDeArea
+                      ? <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertTriangle size={11} strokeWidth={2} /> Não entregamos nesse bairro.</p>
+                      : form.bairro
+                        ? <p className="text-xs mt-1.5" style={{ color: calcFrete() > 0 ? '#a78bfa' : '#4ade80' }}>
+                            Frete: {calcFrete() > 0 ? brl(calcFrete()) : 'Grátis'}{!bairroSel && entrega.aceita_fora && ' (taxa padrão)'}
+                          </p>
+                        : null}
+                  </div>
+                )}
+
+                {/* Observação */}
+                <div>
+                  <label className="text-[11px] text-zinc-500 font-semibold flex items-center gap-1.5 mb-1.5 uppercase tracking-wider">
+                    <MessageSquare size={11} strokeWidth={2} />Observações
+                  </label>
+                  <input type="text" placeholder="Sem cebola, porta da frente..."
+                    value={form.observacao} onChange={e => setForm(p => ({ ...p, observacao: e.target.value }))}
+                    className={inputCls} style={inputStyle} onFocus={onFocusInput} onBlur={onBlurInput} />
                 </div>
-                <div className="p-4 space-y-3">
-                  {[
-                    { key: 'nome',     Icon: User,          label: 'Nome completo *',       placeholder: 'Ex: João Silva',          type: 'text' },
-                    ...(ehRetirada ? [] : [
-                  { key: 'endereco',    Icon: MapPin,      label: 'Rua *',         placeholder: 'Nome da rua ou avenida',          type: 'text' },
-                  { key: 'numero',      Icon: Hash,        label: 'Número *',      placeholder: 'Ex: 123',                         type: 'text' },
-                  { key: 'complemento', Icon: MessageSquare, label: 'Complemento', placeholder: 'Apto, casa, bloco... (opcional)', type: 'text' },
-                ]),
-                    { key: 'observacao',Icon: MessageSquare, label: 'Observações',           placeholder: 'Sem cebola...',           type: 'text' },
-                  ].map(({ key, Icon, label, placeholder, type }) => (
-                    <div key={key}>
-                      <label className="text-xs text-zinc-600 font-medium flex items-center gap-1.5 mb-1.5"><Icon size={13} strokeWidth={1.75} />{label}</label>
-                      <input type={type} placeholder={placeholder}
-                        value={form[key]} onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
-                        className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
-                        style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}
-                        onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                        onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.08)'} />
-                    </div>
-                  ))}
-                  {/* Bairro inline (evita re-mount por componente definido no render) */}
-                  {!ehRetirada && temBairros && (
-                    <div>
-                      <label className="text-xs text-zinc-600 font-medium flex items-center gap-1.5 mb-2">
-                        <MapPin size={13} strokeWidth={1.75} /> Bairro de entrega *
-                      </label>
-                      <input list="bairros-list" value={form.bairro}
-                        onChange={e => setForm(p => ({ ...p, bairro: e.target.value }))}
-                        placeholder="Digite ou selecione seu bairro"
-                        className="w-full px-4 py-3 rounded-xl text-sm text-white outline-none"
-                        style={{ background: '#1a1a1a', border: `1px solid ${foraDeArea ? '#f87171' : 'rgba(255,255,255,0.08)'}` }} />
-                      <datalist id="bairros-list">
-                        {entrega.bairros.map(b => <option key={b.nome} value={b.nome} />)}
-                      </datalist>
-                      {foraDeArea ? (
-                        <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertTriangle size={12} strokeWidth={2} /> Não entregamos nesse bairro.</p>
-                      ) : form.bairro ? (
-                        <p className="text-xs mt-1.5" style={{ color: calcFrete() > 0 ? '#a78bfa' : '#4ade80' }}>
-                          Frete: {calcFrete() > 0 ? brl(calcFrete()) : 'Grátis'}{!bairroSel && entrega.aceita_fora && ' (taxa padrão)'}
-                        </p>
-                      ) : null}
-                    </div>
-                  )}
-                  <PagamentoSelector />
-                  <ExtrasPedido />
-                </div>
+
+                {pagamentoSelectorJsx}
+                {extrasPedidoJsx}
               </div>
 
               {/* Cupom */}
@@ -1655,12 +1878,14 @@ export default function Cardapio() {
               {/* Resumo */}
               <ResumoValores totalValor={totalValor} desconto={calcDesconto()} cupomAplicado={cupomAplicado} frete={calcFrete()} />
 
-              {abaixoMinimo && <p className="text-xs text-amber-400 text-center flex items-center justify-center gap-1.5"><AlertTriangle size={13} strokeWidth={2} /> Pedido mínimo de {brl(entrega.pedido_minimo)} (sem frete)</p>}
-              <button type="submit" disabled={enviando || foraDeArea || abaixoMinimo}
-                className="w-full py-4 rounded-2xl font-black text-white text-lg disabled:opacity-50 active:scale-95 transition-transform"
-                style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', boxShadow: '0 8px 32px rgba(var(--accent-rgb),0.3)' }}>
-                {enviando ? <span className="flex items-center justify-center gap-2"><Loader2 size={18} strokeWidth={2} className="animate-spin" /> Enviando...</span> : <span className="flex items-center justify-center gap-2"><UtensilsCrossed size={18} strokeWidth={1.75} /> Confirmar pedido · {brl(Math.max(0, totalValor - calcDesconto()) + calcFrete())}</span>}
-              </button>
+              {abaixoMinimo && (
+                <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl"
+                  style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.15)' }}>
+                  <AlertTriangle size={13} strokeWidth={2} className="text-amber-400 shrink-0" />
+                  <p className="text-xs text-amber-400">Pedido mínimo de {brl(entrega.pedido_minimo)} (sem frete)</p>
+                </div>
+              )}
+              <BotaoConfirmar />
             </form>
           )}
         </div>
@@ -1711,7 +1936,7 @@ export default function Cardapio() {
             <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden shrink-0 flex items-center justify-center relative"
               style={{ background: '#1a1a1a' }}>
               {item.foto ? (
-                <img src={item.foto} alt={item.nome} className="w-full h-full object-cover" />
+                <img src={item.foto} alt={item.nome} loading="lazy" decoding="async" className="w-full h-full object-cover" />
               ) : (
                 <span style={{ color: 'rgba(251,146,60,0.85)' }}><UtensilsCrossed size={28} strokeWidth={1.5} /></span>
               )}
@@ -1771,7 +1996,7 @@ export default function Cardapio() {
                         {/* Foto */}
                         <div className="relative w-full flex items-center justify-center" style={{ aspectRatio: '4/3', background: '#1a1a1a' }}>
                           {item.foto
-                            ? <img src={item.foto} alt={item.nome} className="w-full h-full object-cover" />
+                            ? <img src={item.foto} alt={item.nome} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                             : <span className="text-3xl">{item.emoji || '🍱'}</span>}
                           {badges && (
                             <span className="absolute top-1.5 left-1.5 text-[9px] font-black text-white px-1.5 py-0.5 rounded-md"
@@ -1834,7 +2059,6 @@ export default function Cardapio() {
           </div>
         );
       })()}
-      )}
     </div>
   );
 
@@ -2175,6 +2399,7 @@ export default function Cardapio() {
                             style={{ height: 165, borderRadius: '16px 16px 0 0', background: '#181818' }}>
                             {item.foto ? (
                               <img src={item.foto} alt={item.nome}
+                                loading="lazy" decoding="async"
                                 className="w-full h-full object-cover"
                                 style={{ transform: isAnim ? 'scale(1.05)' : 'scale(1)', transition: 'transform 0.3s' }} />
                             ) : (
@@ -2276,7 +2501,7 @@ export default function Cardapio() {
                             <span className="transition-transform duration-300"
                               style={{ color: qty > 0 ? 'var(--accent)' : 'rgba(161,161,170,0.5)', transform: isAnim ? 'scale(1.3) rotate(-8deg)' : 'scale(1)' }}>
                               {item.foto
-                                ? <img src={item.foto} alt={item.nome} className="w-12 h-12 object-cover rounded-xl" />
+                                ? <img src={item.foto} alt={item.nome} loading="lazy" decoding="async" className="w-12 h-12 object-cover rounded-xl" />
                                 : <CatI size={28} strokeWidth={1.5} />
                               }
                             </span>
