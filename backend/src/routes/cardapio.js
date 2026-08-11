@@ -669,6 +669,24 @@ router.post('/pedido', (req, res) => {
   };
   notificarWhatsApp(pedidoCompleto);
 
+  if (forma_pagamento === 'pix' && cliente_telefone?.trim()) {
+    try {
+      const chavePix = getCfg('pix_chave');
+      if (chavePix) {
+        const codigoPix = gerarPixPayload({
+          chave: chavePix,
+          nome: getCfg('pix_nome') || getCfg('nome_restaurante') || 'Recebedor',
+          cidade: getCfg('pix_cidade') || 'Cidade',
+          valor: total,
+          txid: `PED${numero}`,
+        });
+        require('../services/whatsapp').notificarPix(pedidoCompleto, codigoPix, chavePix);
+      }
+    } catch (err) {
+      console.error('[cardapio] Falha ao notificar Pix:', err.message);
+    }
+  }
+
   res.status(201).json({ id: pedidoId, numero, total, fidelidade, ganhou_recompensa, brinde_resgatado });
 });
 
