@@ -884,6 +884,11 @@ export default function Clientes() {
   const [modalAniversarios, setModalAniversarios] = useState(false);
   const [aba, setAba] = useState('geral'); // 'geral' | 'lista'
   const [mostrarQtd, setMostrarQtd] = useState(50); // paginação client-side da lista (bases grandes travavam o navegador)
+  const [fidConfig, setFidConfig] = useState(null);
+  const [trocandoBrinde, setTrocandoBrinde] = useState(false);
+  const [itensCardapio, setItensCardapio] = useState(null);
+  const [buscaItemBrinde, setBuscaItemBrinde] = useState('');
+  const [salvandoBrinde, setSalvandoBrinde] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -899,11 +904,45 @@ export default function Clientes() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  const carregarFidConfig = useCallback(async () => {
+    try {
+      const r = await fetch(`${BASE}/fidelidade/config`, { headers: authH() });
+      if (r.ok) setFidConfig(await r.json());
+    } catch {}
+  }, []);
+
+  useEffect(() => { carregar(); carregarFidConfig(); }, [carregar, carregarFidConfig]);
 
   function handleResgatar(clienteAtualizado) {
     setClientes(cs => cs.map(c => c.id === clienteAtualizado.id ? { ...c, ...clienteAtualizado } : c));
     setClienteSelecionado(c => c ? { ...c, ...clienteAtualizado } : c);
+  }
+
+  async function abrirTrocaBrinde() {
+    setTrocandoBrinde(true);
+    if (itensCardapio === null) {
+      try {
+        const r = await fetch(`${BASE}/cardapio/itens`, { headers: authH() });
+        setItensCardapio(r.ok ? await r.json() : []);
+      } catch { setItensCardapio([]); }
+    }
+  }
+
+  async function escolherBrinde(item) {
+    setSalvandoBrinde(true);
+    try {
+      const r = await fetch(`${BASE}/fidelidade/config`, {
+        method: 'PUT', headers: authH(),
+        body: JSON.stringify({ item_id: item.id, ativo: 1 }),
+      });
+      if (r.ok) {
+        setFidConfig(await r.json());
+        toast.success('Brinde atualizado!');
+        setTrocandoBrinde(false);
+        setBuscaItemBrinde('');
+      } else toast.error('Erro ao salvar');
+    } catch { toast.error('Erro ao salvar'); }
+    setSalvandoBrinde(false);
   }
 
   // Segmentação
@@ -966,6 +1005,51 @@ export default function Clientes() {
             {t.label}
           </button>
         ))}
+      </div>
+
+      {/* Configuração do brinde de fidelidade */}
+      <div className="rounded-2xl p-4" style={{ background: '#111', border: '1px solid #1a1a1a' }}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black tracking-widest text-zinc-600">BRINDE DE FIDELIDADE</p>
+            {fidConfig?.item_nome ? (
+              <p className="text-sm font-bold t-strong mt-0.5 truncate">{fidConfig.item_nome}</p>
+            ) : (
+              <p className="text-xs mt-0.5" style={{ color: '#f97316' }}>⚠️ Nenhum brinde configurado — resgate automático desligado</p>
+            )}
+          </div>
+          <button onClick={abrirTrocaBrinde}
+            className="px-3 py-2 rounded-xl text-xs font-bold shrink-0"
+            style={{ background: 'rgba(var(--accent-rgb),0.1)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
+            Trocar
+          </button>
+        </div>
+
+        {trocandoBrinde && (
+          <div className="mt-3 pt-3" style={{ borderTop: '1px solid #1a1a1a' }}>
+            <div className="relative mb-2">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+              <input value={buscaItemBrinde} onChange={e => setBuscaItemBrinde(e.target.value)}
+                placeholder="Buscar item do cardápio..."
+                className="w-full pl-8 pr-3 py-2 rounded-lg text-sm"
+                style={{ background: '#0a0a0a', border: '1px solid #1a1a1a', color: '#fff' }} />
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-1">
+              {itensCardapio === null ? (
+                <p className="text-xs t-dim py-2 text-center">Carregando…</p>
+              ) : itensCardapio.filter(i => i.nome.toLowerCase().includes(buscaItemBrinde.toLowerCase())).slice(0, 30).map(i => (
+                <button key={i.id} onClick={() => escolherBrinde(i)} disabled={salvandoBrinde}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between disabled:opacity-50"
+                  style={{ background: i.id === fidConfig?.item_id ? 'rgba(var(--accent-rgb),0.12)' : '#0a0a0a' }}>
+                  <span className="truncate">{i.emoji} {i.nome}</span>
+                  {i.id === fidConfig?.item_id && <CheckCircle2 size={14} style={{ color: 'var(--accent)' }} />}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => { setTrocandoBrinde(false); setBuscaItemBrinde(''); }}
+              className="w-full text-center py-2 mt-2 text-xs t-dim">Cancelar</button>
+          </div>
+        )}
       </div>
 
       {aba === 'lista' && (<>
