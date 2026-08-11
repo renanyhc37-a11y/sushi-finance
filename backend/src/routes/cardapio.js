@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('../db/database');
 const { requireAuth } = require('../middleware/requireAuth');
+const { getConfigComItem } = require('./fidelidade');
 
 // ── Upload de imagens (multer) ────────────────────────────────
 let upload;
@@ -195,7 +196,6 @@ try {
 
 // ── Helpers fidelidade ────────────────────────────────────────
 const PEDIDOS_POR_RECOMPENSA = 10;
-const RECOMPENSA_DESCRICAO   = '1 Temaki Salmão grátis no próximo pedido! 🎁';
 
 // Mantém a mesma fórmula de backend/src/routes/clientes.js — selos_bonus é
 // ajuste manual em PONTOS, soma no total efetivo do ciclo (não é mais
@@ -444,7 +444,12 @@ router.get('/cliente/:telefone', (req, res) => {
   const cliente = db.prepare('SELECT * FROM clientes WHERE telefone = ?').get(tel);
   if (!cliente) return res.status(404).json({ erro: 'Cliente não encontrado' });
 
-  res.json({ ...cliente, fidelidade: calcFidelidade(cliente.total_pedidos, cliente.recompensas_ganhas, cliente.recompensas_usadas, cliente.selos_bonus || 0) });
+  const brindeCfg = getConfigComItem();
+  res.json({
+    ...cliente,
+    fidelidade: calcFidelidade(cliente.total_pedidos, cliente.recompensas_ganhas, cliente.recompensas_usadas, cliente.selos_bonus || 0),
+    brinde_item_nome: brindeCfg.ativo ? brindeCfg.item_nome : null,
+  });
 });
 
 // ── POST /api/cardapio/pedido ────────────────────────────────
@@ -584,6 +589,7 @@ router.post('/pedido', (req, res) => {
   // ── Fidelidade ──────────────────────────────────────────────
   let fidelidade = null;
   let ganhou_recompensa = false;
+  let brinde_resgatado = null;
 
   // Aniversário no formato MM-DD (a partir de uma data YYYY-MM-DD)
   const anivMMDD = (typeof aniversario === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(aniversario))
@@ -617,6 +623,21 @@ router.post('/pedido', (req, res) => {
 
       fidelidade = calcFidelidade(1, 0, 0);
     }
+
+    // ── Resgate automático de brinde ──────────────────────────
+    // No máximo 1 por pedido, mesmo com saldo acumulado. Sem item
+    // configurado/ativo/disponível: não decrementa nada, o saldo fica
+    // guardado pro próximo pedido — nunca falha o checkout por isso.
+    if (fidelidade.recompensas_disponiveis > 0) {
+      const brindeCfg = getConfigComItem();
+      if (brindeCfg.ativo && brindeCfg.item_id && brindeCfg.item_nome) {
+        insItem.run(pedidoId, `${brindeCfg.item_nome} (Brinde fidelidade 🎁)`, 1, 0, null);
+        db.prepare('UPDATE clientes SET recompensas_usadas = recompensas_usadas + 1, updated_at = CURRENT_TIMESTAMP WHERE telefone = ?').run(tel);
+        const clienteFinal = db.prepare('SELECT * FROM clientes WHERE telefone = ?').get(tel);
+        fidelidade = calcFidelidade(clienteFinal.total_pedidos, clienteFinal.recompensas_ganhas, clienteFinal.recompensas_usadas, clienteFinal.selos_bonus || 0);
+        brinde_resgatado = { item_id: brindeCfg.item_id, nome: brindeCfg.item_nome };
+      }
+    }
   }
 
   // Notifica PDV
@@ -639,7 +660,7 @@ router.post('/pedido', (req, res) => {
   };
   notificarWhatsApp(pedidoCompleto);
 
-  res.status(201).json({ id: pedidoId, numero, total, fidelidade, ganhou_recompensa, recompensa_descricao: ganhou_recompensa ? RECOMPENSA_DESCRICAO : null });
+  res.status(201).json({ id: pedidoId, numero, total, fidelidade, ganhou_recompensa, brinde_resgatado });
 });
 
 // ══════════════════════════════════════════════════════════════
