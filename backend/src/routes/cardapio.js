@@ -627,15 +627,20 @@ router.post('/pedido', (req, res) => {
     // ── Resgate automático de brinde ──────────────────────────
     // No máximo 1 por pedido, mesmo com saldo acumulado. Sem item
     // configurado/ativo/disponível: não decrementa nada, o saldo fica
-    // guardado pro próximo pedido — nunca falha o checkout por isso.
+    // guardado pro próximo pedido. Envolvido em try/catch: um erro aqui
+    // não deve derrubar um pedido que já foi criado e pago com sucesso.
     if (fidelidade.recompensas_disponiveis > 0) {
-      const brindeCfg = getConfigComItem();
-      if (brindeCfg.ativo && brindeCfg.item_id && brindeCfg.item_nome) {
-        insItem.run(pedidoId, `${brindeCfg.item_nome} (Brinde fidelidade 🎁)`, 1, 0, null);
-        db.prepare('UPDATE clientes SET recompensas_usadas = recompensas_usadas + 1, updated_at = CURRENT_TIMESTAMP WHERE telefone = ?').run(tel);
-        const clienteFinal = db.prepare('SELECT * FROM clientes WHERE telefone = ?').get(tel);
-        fidelidade = calcFidelidade(clienteFinal.total_pedidos, clienteFinal.recompensas_ganhas, clienteFinal.recompensas_usadas, clienteFinal.selos_bonus || 0);
-        brinde_resgatado = { item_id: brindeCfg.item_id, nome: brindeCfg.item_nome };
+      try {
+        const brindeCfg = getConfigComItem();
+        if (brindeCfg.ativo && brindeCfg.item_id && brindeCfg.item_nome) {
+          insItem.run(pedidoId, brindeCfg.item_nome, 1, 0, 'Brinde fidelidade 🎁');
+          db.prepare('UPDATE clientes SET recompensas_usadas = recompensas_usadas + 1, updated_at = CURRENT_TIMESTAMP WHERE telefone = ?').run(tel);
+          const clienteFinal = db.prepare('SELECT * FROM clientes WHERE telefone = ?').get(tel);
+          fidelidade = calcFidelidade(clienteFinal.total_pedidos, clienteFinal.recompensas_ganhas, clienteFinal.recompensas_usadas, clienteFinal.selos_bonus || 0);
+          brinde_resgatado = { item_id: brindeCfg.item_id, nome: brindeCfg.item_nome };
+        }
+      } catch (err) {
+        console.error('[cardapio] Falha ao resgatar brinde automático:', err.message);
       }
     }
   }
@@ -651,12 +656,16 @@ router.post('/pedido', (req, res) => {
   });
 
   // WhatsApp
+  const itensParaWhatsApp = itensValidados.map(i => ({ quantidade: i.quantidade, item_nome: i.item_nome, valor_unitario: i.valor_unitario }));
+  if (brinde_resgatado) {
+    itensParaWhatsApp.push({ quantidade: 1, item_nome: `${brinde_resgatado.nome} (Brinde fidelidade 🎁)`, valor_unitario: 0 });
+  }
   const pedidoCompleto = {
     id: pedidoId, numero, total,
     cliente_nome: cliente_nome.trim(),
     cliente_telefone: cliente_telefone?.trim() || null,
     cliente_endereco: cliente_endereco.trim(),
-    itens: itensValidados.map(i => ({ quantidade: i.quantidade, item_nome: i.item_nome, valor_unitario: i.valor_unitario })),
+    itens: itensParaWhatsApp,
   };
   notificarWhatsApp(pedidoCompleto);
 
