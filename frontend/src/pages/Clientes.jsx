@@ -1037,7 +1037,7 @@ export default function Clientes() {
             <div className="max-h-48 overflow-y-auto space-y-1">
               {itensCardapio === null ? (
                 <p className="text-xs t-dim py-2 text-center">Carregando…</p>
-              ) : itensCardapio.filter(i => i.nome.toLowerCase().includes(buscaItemBrinde.toLowerCase())).slice(0, 30).map(i => (
+              ) : itensCardapio.filter(i => i.disponivel && i.nome.toLowerCase().includes(buscaItemBrinde.toLowerCase())).slice(0, 30).map(i => (
                 <button key={i.id} onClick={() => escolherBrinde(i)} disabled={salvandoBrinde}
                   className="w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between disabled:opacity-50"
                   style={{ background: i.id === fidConfig?.item_id ? 'rgba(var(--accent-rgb),0.12)' : '#0a0a0a' }}>

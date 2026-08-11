@@ -1172,7 +1172,7 @@ export default function Cardapio() {
                     style={{ width: `${(fid.pedidos_no_ciclo / TOTAL_SELOS) * 100}%`, background: 'linear-gradient(90deg, #7c3aed, #a78bfa)' }} />
                 </div>
                 <p className="text-[10px] mt-2 text-center" style={{ color: 'rgba(167,139,250,0.6)' }}>
-                  {fid.proximo_em === 0
+                  {fid.recompensas_disponiveis > 0
                     ? <span style={{ color: '#fbbf24', fontWeight: 700 }}>🎁 Brinde disponível!</span>
                     : <><span style={{ color: '#c4b5fd', fontWeight: 700 }}>{fid.proximo_em} pedido{fid.proximo_em !== 1 ? 's' : ''}</span> para ganhar um brinde</>
                   }

@@ -18,6 +18,7 @@ db.exec(`
 // públicas do checkout) e pelas rotas admin abaixo.
 function getConfigComItem() {
   const cfg = db.prepare('SELECT * FROM fidelidade_config WHERE id = 1').get();
+  if (!cfg) return { id: 1, item_id: null, ativo: 1, item_nome: null };
   if (!cfg.item_id) return { ...cfg, item_nome: null };
   const item = db.prepare('SELECT nome, disponivel FROM cardapio_itens WHERE id = ?').get(cfg.item_id);
   return { ...cfg, item_nome: item && item.disponivel ? item.nome : null };
