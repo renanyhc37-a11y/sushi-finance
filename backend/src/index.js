@@ -37,6 +37,7 @@ const campanhasRouter = require('./routes/campanhas');
 const caixaRouter = require('./routes/caixa');
 const producaoRouter = require('./routes/producao');
 const cashbackRouter = require('./routes/cashback');
+const fidelidadeRouter = require('./routes/fidelidade');
 const { requireAuth } = require('./middleware/requireAuth');
 const wa = require('./services/whatsapp');
 
@@ -168,6 +169,7 @@ app.use('/api/campanhas', campanhasRouter);
 app.use('/api/caixa', caixaRouter);
 app.use('/api/producao', producaoRouter);
 app.use('/api/cashback', cashbackRouter);
+app.use('/api/fidelidade', fidelidadeRouter);
 
 // SPA fallback
 if (fs.existsSync(FRONTEND_DIST)) {
