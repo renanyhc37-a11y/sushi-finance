@@ -145,6 +145,15 @@ ${p.itens.map(i => `  • ${i.quantidade}x ${i.item_nome}`).join('\n')}
 👇 O código Pix (copia e cola) vem na mensagem a seguir, pra facilitar copiar.
 
 Assim que o pagamento cair, seu pedido entra em produção! 🙏`,
+
+  pixConfirmado: (p) =>
+`✅ *Pagamento confirmado!*
+
+Olá, *${p.cliente_nome}*! 😊
+
+Recebemos a confirmação do seu Pix — o pedido #${p.numero} está aprovado e já entra em produção. 🍣
+
+Obrigado pela preferência!`,
 };
 
 // ── HTTP para o whatsapp-service ──────────────────────────────
@@ -760,6 +769,15 @@ async function notificarPix(pedido, codigoPix, chave) {
   }
 }
 
+async function notificarPixConfirmado(pedido) {
+  if (!pedido.cliente_telefone) return;
+  try {
+    await enviar(pedido.cliente_telefone, MENSAGENS.pixConfirmado(pedido));
+  } catch (err) {
+    console.error('[WhatsApp] Erro em notificarPixConfirmado:', err.message);
+  }
+}
+
 module.exports = {
   iniciar: () => {
     console.log('[WhatsApp] Serviço externo na porta 8080 — inicie via watchdog.bat');
@@ -784,6 +802,7 @@ module.exports = {
   notificarMudancaStatus,
   notificarCashback,
   notificarPix,
+  notificarPixConfirmado,
   getStatus: () => ({ status: _status, qr: _qr }),
   getStatusLive,
   getNumero: () => _numero,
