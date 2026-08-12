@@ -396,7 +396,16 @@ async function receberMensagem({ telefone, telefoneReal, nome, corpo, waId, chat
     const assistenteDono = require('./assistenteDono');
     if (assistenteDono.ehDono(telefoneReal || telefone)) {
       assistenteDono.processarMensagemDono({
-        telefone: telefoneReal || telefone, corpo, tipo, mediaBase64, mediaMime, enviar,
+        telefone: telefoneReal || telefone, corpo, tipo, mediaBase64, mediaMime,
+        // Continua enviando pro telefoneReal (não pro chat_id/LID da conversa
+        // — é o que de fato funciona pra esse número), mas agora também
+        // grava em wa_mensagens e avisa o chat em tempo real, que antes
+        // ficava sem nenhuma resposta do assistente (só via() não fazia isso).
+        enviar: async (tel, msg, typingMs) => {
+          const ok = await enviar(tel, msg, typingMs);
+          salvarMensagemEnviada(conversa, msg, true);
+          return ok;
+        },
       }).catch(e => console.error('[assistenteDono] erro:', e.message));
       return;
     }
@@ -673,11 +682,12 @@ async function gerarRespostaIA(conversa, mensagem, cfg) {
   return textOut || null;
 }
 
-async function enviarEsalvar(conversa, corpo, isIa = false, typingMs = 0) {
-  if (!conversa.telefone.startsWith('TESTE_')) {
-    await enviar(conversa.chat_id || conversa.telefone, corpo, typingMs);
-  }
-
+// Grava no histórico (wa_mensagens/wa_conversas) e avisa o chat em tempo
+// real (socket.io) — sem enviar nada pelo WhatsApp. Separado de
+// enviarEsalvar() pra quem já mandou a mensagem por outro caminho (ex.:
+// assistenteDono, que precisa enviar pro telefoneReal, não pro chat_id/LID
+// da conversa) só precisar registrar o que já foi enviado.
+function salvarMensagemEnviada(conversa, corpo, isIa = false) {
   const row = db.prepare(`
     INSERT INTO wa_mensagens(conversa_id, de, corpo, de_mim, ia, lida)
     VALUES(?,?,?,1,?,1)
@@ -697,6 +707,13 @@ async function enviarEsalvar(conversa, corpo, isIa = false, typingMs = 0) {
   };
 
   if (io) io.emit('wa:mensagem', { conversa, mensagem });
+}
+
+async function enviarEsalvar(conversa, corpo, isIa = false, typingMs = 0) {
+  if (!conversa.telefone.startsWith('TESTE_')) {
+    await enviar(conversa.chat_id || conversa.telefone, corpo, typingMs);
+  }
+  salvarMensagemEnviada(conversa, corpo, isIa);
 }
 
 async function notificarMudancaStatus(pedido, novoStatus) {
@@ -794,6 +811,7 @@ module.exports = {
   },
   enviar,
   enviarEsalvar,
+  salvarMensagemEnviada,
   receberMensagem,
   sseStatus,
   atualizarStatus,
