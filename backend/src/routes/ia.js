@@ -4,14 +4,21 @@ const fs = require('fs');
 const db = require('../db/database');
 const Anthropic = require('@anthropic-ai/sdk');
 const { requireAuth } = require('../middleware/requireAuth');
+const { limiteIA, rateLimit } = require('../middleware/rateLimiter');
+const { otimizar } = require('../utils/otimizarImagem');
+
+// Rate limit específico para endpoints que disparam chamadas à API Anthropic
+const limiteSugestoes = rateLimit({ janela: 60_000, max: 5, chave: 'ia-sugestoes', msg: 'Limite de sugestões atingido. Aguarde um minuto.' });
+const limiteCriativo  = rateLimit({ janela: 60_000, max: 8, chave: 'ia-criativo',  msg: 'Limite de criativos atingido. Aguarde um momento.' });
+const limiteFicha     = rateLimit({ janela: 60_000, max: 25, chave: 'ia-ficha',    msg: 'Muitas sugestões de ficha. Aguarde um momento.' });
 
 const router = Router();
 
 // ── Upload de imagens para banners (multer) ────────────────────
+const BANNER_DIR = path.join(__dirname, '..', '..', '..', 'frontend', 'public', 'banners');
 let uploadBanner;
 try {
   const multer = require('multer');
-  const BANNER_DIR = path.join(__dirname, '..', '..', '..', 'frontend', 'public', 'banners');
   if (!fs.existsSync(BANNER_DIR)) fs.mkdirSync(BANNER_DIR, { recursive: true });
   const MIME_PERMITIDOS = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
   const EXT_SEGURAS = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
@@ -95,7 +102,7 @@ function getContextoDados() {
 }
 
 // ── POST /ia/sugestoes — gera sugestões com Claude ───────────
-router.post('/sugestoes', async (req, res) => {
+router.post('/sugestoes', limiteSugestoes, async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return res.status(400).json({
@@ -267,7 +274,7 @@ router.delete('/banners/:id', (req, res) => {
 // POST /ia/banners/:id/foto — upload de imagem do banner
 router.post('/banners/:id/foto', requireAuth, (req, res) => {
   if (!uploadBanner) return res.status(503).json({ erro: 'Upload não disponível. Instale multer: npm install multer' });
-  uploadBanner.single('foto')(req, res, (err) => {
+  uploadBanner.single('foto')(req, res, async (err) => {
     if (err) return res.status(400).json({ erro: err.message });
     if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
     const banner = db.prepare('SELECT * FROM banners_promocao WHERE id=?').get(req.params.id);
@@ -277,7 +284,8 @@ router.post('/banners/:id/foto', requireAuth, (req, res) => {
       const old = path.join(__dirname, '..', '..', '..', 'frontend', 'public', banner.img.replace(/^\//, ''));
       try { fs.unlinkSync(old); } catch {}
     }
-    const fotoUrl = `/banners/${req.file.filename}`;
+    const { arquivo } = await otimizar(BANNER_DIR, req.file.filename);
+    const fotoUrl = `/banners/${arquivo}`;
     db.prepare('UPDATE banners_promocao SET img = ? WHERE id = ?').run(fotoUrl, req.params.id);
     res.json({ img: fotoUrl });
   });
@@ -353,7 +361,7 @@ router.delete('/banners/:id/foto', requireAuth, (req, res) => {
 // ══════════════════════════════════════════════════════════════
 
 // POST /api/ia/criativo-social
-router.post('/criativo-social', async (req, res) => {
+router.post('/criativo-social', limiteCriativo, async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(400).json({ erro: 'ANTHROPIC_API_KEY não configurada.' });
 
@@ -416,14 +424,84 @@ Crie conteúdo EXTRAORDINÁRIO e IRRESISTÍVEL para um post que vai viralizar. R
   }
 });
 
+// POST /api/ia/sugerir-ficha
+// Recebe o nome de um item do cardápio e propõe a ficha técnica (ingredientes
+// + quantidades), usando SOMENTE o catálogo de ingredientes já cadastrado.
+router.post('/sugerir-ficha', requireAuth, limiteFicha, async (req, res) => {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return res.status(400).json({ erro: 'ANTHROPIC_API_KEY não configurada.' });
+
+  const { item_nome } = req.body;
+  if (!item_nome) return res.status(400).json({ erro: 'item_nome é obrigatório.' });
+
+  let ingredientes = [];
+  try {
+    ingredientes = db.prepare('SELECT id, nome, unidade_medida FROM ingredientes ORDER BY nome').all();
+  } catch {}
+  if (!ingredientes.length) {
+    return res.status(400).json({ erro: 'Nenhum ingrediente cadastrado. Cadastre os ingredientes primeiro na página Ingredientes/Insumos.' });
+  }
+
+  try {
+    const client = new Anthropic({ apiKey });
+    const prompt = `Você é um chef especialista em comida japonesa e em ficha técnica (receita de custo) de restaurantes de sushi/delivery.
+
+Item do cardápio: "${item_nome}"
+
+Catálogo de ingredientes disponíveis (use SOMENTE estes, escrevendo o nome EXATAMENTE como aparece):
+${ingredientes.map(i => `- ${i.nome} (unidade: ${i.unidade_medida})`).join('\n')}
+
+Estime a ficha técnica deste item: quais ingredientes do catálogo acima ele leva e a quantidade de cada um por PORÇÃO vendida, sempre na unidade indicada para aquele ingrediente. Seja realista para uma casa de sushi (ex.: um uramaki de 8 fatias usa ~90g de arroz, ~1 folha de nori, etc.).
+
+Regras:
+- Use APENAS ingredientes do catálogo. NÃO invente ingredientes que não estão na lista.
+- Se um ingrediente típico não existir no catálogo, simplesmente ignore-o.
+- Quantidade sempre numérica, na unidade do ingrediente.
+
+Retorne SOMENTE este JSON, sem markdown:
+{"itens":[{"ingrediente":"<nome exato do catálogo>","quantidade":<número>}]}`;
+
+    const message = await client.messages.create({
+      model: 'claude-opus-4-8',
+      max_tokens: 900,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const texto = message.content[0].text.trim();
+    const match = texto.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(match ? match[0] : texto);
+
+    // Mapeia nome do ingrediente → id (case/espaço-insensível)
+    const porNome = new Map(ingredientes.map(i => [i.nome.toLowerCase().trim(), i]));
+    const linhas = [];
+    const naoMapeados = [];
+    for (const it of (parsed.itens || [])) {
+      const chave = String(it.ingrediente || '').toLowerCase().trim();
+      const ing = porNome.get(chave);
+      const qtd = Number(it.quantidade);
+      if (ing && qtd > 0) {
+        linhas.push({ ingrediente_id: ing.id, ingrediente_nome: ing.nome, unidade_medida: ing.unidade_medida, quantidade: qtd });
+      } else if (it.ingrediente) {
+        naoMapeados.push(it.ingrediente);
+      }
+    }
+    res.json({ linhas, naoMapeados });
+  } catch (e) {
+    console.error('Erro sugerir-ficha:', e);
+    res.status(500).json({ erro: e.message });
+  }
+});
+
 // ══════════════════════════════════════════════════════════════
 // AGENTE DE VOZ — NinjaContrlol v3
 // ══════════════════════════════════════════════════════════════
 
-router.post('/agente', requireAuth, async (req, res) => {
+// Núcleo do agente NinjaContrlol — reutilizável (app de voz E WhatsApp do dono).
+// Recebe { comando, historico_conversa } e retorna o objeto de resposta
+// { resposta_voz, acao, parametros, ... } já executando a ação no banco.
+async function executarAgente({ comando, historico_conversa = [] }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  const { comando, historico_conversa = [] } = req.body;
-  if (!comando?.trim()) return res.status(400).json({ erro: 'Comando vazio' });
+  if (!comando?.trim()) return { erro: 'Comando vazio' };
 
   // ── Coleta contexto em tempo real ───────────────────────────
   let ctx = {};
@@ -519,7 +597,7 @@ router.post('/agente', requireAuth, async (req, res) => {
   }
 
   if (!apiKey) {
-    return res.json({ resposta_voz: 'Chave de IA não configurada.', acao: 'info', parametros: {} });
+    return { resposta_voz: 'Chave de IA não configurada.', acao: 'info', parametros: {} };
   }
 
   try {
@@ -534,7 +612,7 @@ router.post('/agente', requireAuth, async (req, res) => {
       ? ((ctx.faturamento_hoje?.total - ctx.faturamento_ontem?.total) / ctx.faturamento_ontem?.total * 100).toFixed(0)
       : null;
 
-    const systemPrompt = `Você é NinjaContrlol — o parceiro digital do delivery ${ctx.config_loja?.nome_restaurante || '37 Sushi'}. Você é ágil, inteligente, proativo e fala como um sócio de confiança, não como um robô. Responda SEMPRE em português brasileiro, de forma direta e calorosa (máx 2 frases para falar em voz alta). Quando registrar algo, confirme brevemente o que foi feito.
+    const systemPrompt = `Você é NinjaContrlol — assistente operacional do delivery ${ctx.config_loja?.nome_restaurante || '37 Sushi'}. Você executa comandos e informa dados. Responda SEMPRE em português brasileiro, de forma direta e objetiva (máx 2 frases). Nunca faça comentários, análises, elogios ou críticas sobre os números — apenas execute o que foi pedido e confirme o que foi feito. Não opine sobre vendas, desempenho ou situação do negócio.
 
 ## SITUAÇÃO ATUAL — ${horaAtual} de ${hoje}:
 
@@ -628,12 +706,20 @@ REGRAS:
       const match = texto.match(/\{[\s\S]*\}/);
       dados = JSON.parse(match ? match[0] : texto);
     } catch {
-      return res.json({ resposta_voz: 'Não entendi bem. Pode repetir de outro jeito?', acao: 'nenhuma', parametros: {}, tag: 'Info' });
+      return { resposta_voz: 'Não entendi bem. Pode repetir de outro jeito?', acao: 'nenhuma', parametros: {}, tag: 'Info' };
     }
 
     // ── Executa ações no banco ───────────────────────────────
     const p = dados.parametros || {};
 
+    if (dados.acao === 'lista_add' && p.item) {
+      // Faltava o handler: a ação já era documentada no prompt e o agente
+      // respondia "adicionado" com resposta_voz, mas nada era gravado.
+      try {
+        db.prepare('INSERT INTO lista_compras (nome, quantidade, unidade, observacao) VALUES (?,?,?,?)')
+          .run(p.item, 1, 'unidade', null);
+      } catch (e) { console.warn('[agente] lista_add:', e.message); }
+    }
     if (dados.acao === 'pausar_item' && p.item_id) {
       try { db.prepare('UPDATE cardapio_itens SET disponivel=0 WHERE id=?').run(p.item_id); } catch {}
     }
@@ -708,11 +794,20 @@ REGRAS:
 
     // Salva resposta raw para histórico de conversa
     dados.resposta_raw = texto;
-    res.json(dados);
+    return dados;
   } catch (e) {
     console.error('[agente] erro:', e.message);
-    res.status(500).json({ resposta_voz: 'Erro interno. Tente novamente.', acao: 'nenhuma', parametros: {}, tag: 'Info' });
+    return { resposta_voz: 'Erro interno. Tente novamente.', acao: 'nenhuma', parametros: {}, tag: 'Info' };
   }
+}
+
+// Rota do app de voz — casca fina sobre executarAgente.
+router.post('/agente', requireAuth, limiteIA, async (req, res) => {
+  const { comando, historico_conversa = [] } = req.body;
+  if (!comando?.trim()) return res.status(400).json({ erro: 'Comando vazio' });
+  const dados = await executarAgente({ comando, historico_conversa });
+  if (dados?.erro) return res.status(400).json(dados);
+  res.json(dados);
 });
 
 // ── Admins do relatório diário WhatsApp ──────────────────────────────────────
@@ -732,4 +827,5 @@ router.put('/relatorio-admins', requireAuth, (req, res) => {
   res.json({ ok: true, numeros: valor ? valor.split(',') : [] });
 });
 
+router.executarAgente = executarAgente;
 module.exports = router;
