@@ -667,6 +667,7 @@ Retorne EXATAMENTE este JSON (sem markdown, sem explicações):
 AÇÕES E PARÂMETROS:
 nav             → { "pagina": "/pdv" }
 lista_add       → { "item": "cebolinha" }
+listar_compras  → {}  (quando pedirem pra VER, MANDAR ou MOSTRAR a lista de compras — a lista formatada é montada automaticamente, não escreva os itens na resposta_voz)
 pausar_item     → { "item_id": 12, "nome": "Hot Roll" }
 ativar_item     → { "item_id": 12, "nome": "Hot Roll" }
 alterar_preco   → { "item_id": 12, "nome": "Hot Roll", "novo_preco": 29.90 }
@@ -720,6 +721,20 @@ REGRAS:
     // ── Executa ações no banco ───────────────────────────────
     const p = dados.parametros || {};
 
+    if (dados.acao === 'listar_compras') {
+      // Monta a resposta_voz aqui no código, não deixa pro texto livre da IA
+      // — o prompt limita a resposta a "máx 2 frases", incompatível com uma
+      // lista de verdade, e um LLM formatando lista em prosa é inconsistente.
+      try {
+        const itens = db.prepare(
+          `SELECT nome, quantidade, unidade FROM lista_compras WHERE comprado=0 ORDER BY created_at ASC`
+        ).all();
+        dados.resposta_voz = itens.length === 0
+          ? '📝 A lista de compras está vazia no momento.'
+          : `📝 *Lista de compras* (${itens.length} ${itens.length === 1 ? 'item' : 'itens'}):\n\n` +
+            itens.map(i => `• ${i.quantidade}x ${i.nome}${i.unidade !== 'unidade' ? ` (${i.unidade})` : ''}`).join('\n');
+      } catch (e) { console.warn('[agente] listar_compras:', e.message); }
+    }
     if (dados.acao === 'lista_add' && p.item) {
       // Faltava o handler: a ação já era documentada no prompt e o agente
       // respondia "adicionado" com resposta_voz, mas nada era gravado.
