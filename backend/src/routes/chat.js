@@ -164,16 +164,37 @@ router.get('/conversas/:id/pedidos', (req, res) => {
   if (!conv) return res.json([]);
   const tel = conv.telefone.replace(/\D/g,'');
   try {
+    // pdv_pedidos/pdv_itens é o catálogo REAL (cardápio online/PDV) — pedidos/
+    // pedido_itens é uma tabela legada e vazia (0 linhas), então esta consulta
+    // nunca retornava nada antes desse fix.
     const pedidos = db.prepare(`
       SELECT p.id, p.numero, p.status, p.total, p.created_at,
              GROUP_CONCAT(pi.quantidade || 'x ' || pi.item_nome, ', ') as itens
-      FROM pedidos p
-      LEFT JOIN pedido_itens pi ON pi.pedido_id = p.id
+      FROM pdv_pedidos p
+      LEFT JOIN pdv_itens pi ON pi.pedido_id = p.id
       WHERE REPLACE(REPLACE(p.cliente_telefone,'-',''),' ','') LIKE ?
       GROUP BY p.id ORDER BY p.created_at DESC LIMIT 10
     `).all(`%${tel.slice(-8)}%`);
     res.json(pedidos);
   } catch { res.json([]); }
+});
+
+// GET /api/chat/conversas/:id/cliente — dados de CRM (fidelidade, cashback,
+// endereço) do cliente da conversa, casando por telefone (últimos 8 dígitos,
+// mesma estratégia LID-safe do endpoint de pedidos acima). null se o
+// telefone da conversa não tiver cadastro em `clientes`.
+router.get('/conversas/:id/cliente', (req, res) => {
+  const conv = db.prepare('SELECT * FROM wa_conversas WHERE id=?').get(req.params.id);
+  if (!conv) return res.json(null);
+  const tel = (conv.telefone_real || conv.telefone).replace(/\D/g, '');
+  try {
+    const cliente = db.prepare(`SELECT * FROM clientes WHERE telefone LIKE ?`).get(`%${tel.slice(-8)}%`);
+    if (!cliente) return res.json(null);
+    const { calcFidelidade } = require('./clientes');
+    const fidelidade = calcFidelidade(cliente.total_pedidos, cliente.recompensas_ganhas, cliente.recompensas_usadas, cliente.selos_bonus || 0);
+    const cashbackSaldo = db.prepare('SELECT saldo FROM cashback_saldo WHERE telefone=?').get(cliente.telefone)?.saldo || 0;
+    res.json({ ...cliente, fidelidade, cashback_saldo: cashbackSaldo });
+  } catch { res.json(null); }
 });
 
 // GET /api/chat/metricas
