@@ -128,7 +128,7 @@ Por favor, entre em contato conosco para mais informações ou para realizar um 
 
 Pedimos desculpas pelo transtorno! 🙏`,
 
-  pixPendente: (p, codigo, chave) =>
+  pixPendente: (p, chave) =>
 `🍣 *Pedido #${p.numero} recebido!*
 
 Olá, *${p.cliente_nome}*! 😊
@@ -140,10 +140,9 @@ ${p.itens.map(i => `  • ${i.quantidade}x ${i.item_nome}`).join('\n')}
 
 💰 *Total:* ${brl(p.total)}
 
-💳 *Pague com Pix (copia e cola):*
-${codigo}
-
 🔑 *Chave Pix:* ${chave}
+
+👇 O código Pix (copia e cola) vem na mensagem a seguir, pra facilitar copiar.
 
 Assim que o pagamento cair, seu pedido entra em produção! 🙏`,
 };
@@ -752,7 +751,10 @@ async function notificarCashback(pedido, valorGanho, saldoTotal) {
 async function notificarPix(pedido, codigoPix, chave) {
   if (!pedido.cliente_telefone) return;
   try {
-    await enviar(pedido.cliente_telefone, MENSAGENS.pixPendente(pedido, codigoPix, chave));
+    await enviar(pedido.cliente_telefone, MENSAGENS.pixPendente(pedido, chave));
+    // Código copia-e-cola sozinho na própria mensagem: assim "copiar" no
+    // WhatsApp pega só o código, sem o texto do resumo do pedido junto.
+    await enviar(pedido.cliente_telefone, codigoPix);
   } catch (err) {
     console.error('[WhatsApp] Erro em notificarPix:', err.message);
   }
