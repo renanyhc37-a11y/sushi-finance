@@ -727,12 +727,12 @@ REGRAS:
       // lista de verdade, e um LLM formatando lista em prosa é inconsistente.
       try {
         const itens = db.prepare(
-          `SELECT nome, quantidade, unidade FROM lista_compras WHERE comprado=0 ORDER BY created_at ASC`
+          `SELECT nome FROM lista_compras WHERE comprado=0 ORDER BY created_at ASC`
         ).all();
         dados.resposta_voz = itens.length === 0
           ? '📝 A lista de compras está vazia no momento.'
           : `📝 *Lista de compras* (${itens.length} ${itens.length === 1 ? 'item' : 'itens'}):\n\n` +
-            itens.map(i => `• ${i.quantidade}x ${i.nome}${i.unidade !== 'unidade' ? ` (${i.unidade})` : ''}`).join('\n');
+            itens.map(i => `• ${i.nome}`).join('\n');
       } catch (e) { console.warn('[agente] listar_compras:', e.message); }
     }
     if (dados.acao === 'lista_add' && p.item) {
