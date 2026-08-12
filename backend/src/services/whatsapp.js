@@ -694,6 +694,9 @@ async function enviarEsalvar(conversa, corpo, isIa = false, typingMs = 0) {
 async function notificarMudancaStatus(pedido, novoStatus) {
   console.log(`[WhatsApp] notificarMudancaStatus — pedido #${pedido.numero} → ${novoStatus} | telefone: ${pedido.cliente_telefone || 'NENHUM'}`);
   if (!pedido.cliente_telefone) return;
+  // Pix: o resumo do pedido já foi enviado em notificarPix() na criação —
+  // a mensagem de aceite ficaria redundante (mesmos itens/total de novo).
+  if (pedido.forma_pagamento === 'pix' && (novoStatus === 'espera' || novoStatus === 'preparando')) return;
   // Fluxo novo: Aceitar leva direto para 'preparando'. Nesse aceite o cliente
   // recebe "foi aceito e logo entrará em produção" (MENSAGENS.espera), NÃO a de
   // "já está sendo preparado". 'pronto' = saiu para entrega.
