@@ -162,7 +162,12 @@ router.patch('/conversas/:id', (req, res) => {
 router.get('/conversas/:id/pedidos', (req, res) => {
   const conv = db.prepare('SELECT * FROM wa_conversas WHERE id=?').get(req.params.id);
   if (!conv) return res.json([]);
-  const tel = conv.telefone.replace(/\D/g,'');
+  // conv.telefone pode ser um LID (contato recebido via identificador de
+  // privacidade do WhatsApp, ex. "238242356027593") — usa o telefone_real
+  // quando disponível, senão o casamento por sufixo nunca bate com
+  // pdv_pedidos.cliente_telefone (mesma armadilha já documentada no
+  // contexto do pedido do cliente na IA).
+  const tel = (conv.telefone_real || conv.telefone).replace(/\D/g,'');
   try {
     // pdv_pedidos/pdv_itens é o catálogo REAL (cardápio online/PDV) — pedidos/
     // pedido_itens é uma tabela legada e vazia (0 linhas), então esta consulta
