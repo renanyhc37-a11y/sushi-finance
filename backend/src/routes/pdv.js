@@ -191,9 +191,11 @@ router.patch('/pedidos/:id/impresso', (req, res) => {
 
 // PATCH /api/pdv/pedidos/:id/pix-confirmado — atendente conferiu o crédito no banco
 router.patch('/pedidos/:id/pix-confirmado', (req, res) => {
-  const pedido = db.prepare('SELECT id FROM pdv_pedidos WHERE id = ?').get(req.params.id);
+  const pedido = db.prepare('SELECT * FROM pdv_pedidos WHERE id = ?').get(req.params.id);
   if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado' });
   db.prepare("UPDATE pdv_pedidos SET pix_confirmado_em = datetime('now') WHERE id = ?").run(req.params.id);
+  require('../services/whatsapp').notificarPixConfirmado(pedido)
+    .catch(err => console.error('[pdv] Erro ao notificar Pix confirmado:', err.message));
   res.json({ ok: true });
 });
 
