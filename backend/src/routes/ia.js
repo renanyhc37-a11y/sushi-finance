@@ -564,6 +564,11 @@ async function executarAgente({ comando, historico_conversa = [] }) {
       `SELECT slug, nome, unidade FROM insumo_catalogo WHERE ativo=1 ORDER BY ordem`
     ).all();
 
+    // Lista de compras: só os itens ainda não comprados (a lista "ativa")
+    ctx.lista_compras = db.prepare(
+      `SELECT nome, quantidade, unidade FROM lista_compras WHERE comprado=0 ORDER BY created_at ASC LIMIT 40`
+    ).all();
+
     // Últimas entradas de insumo para contexto de estoque
     ctx.ultimas_entradas = db.prepare(
       `SELECT e.insumo, c.nome, SUM(e.peso_util) as total, MAX(e.data) as ultima_compra
@@ -640,6 +645,9 @@ ${ctx.itens_cardapio?.map(i => `  [${i.id}] ${i.nome} ${brl(i.preco)} ${i.dispon
 
 ### CUPONS (${ctx.cupons?.length||0})
 ${ctx.cupons?.map(c => `  [${c.id}] ${c.codigo} ${c.tipo}=${c.valor}${c.tipo==='percentual'?'%':' reais'} ${c.ativo?'✅':'⛔desativado'} usos:${c.usos_atuais}/${c.usos_maximos||'∞'} validade:${c.validade||'sem limite'}`).join('\n') || '  Nenhum'}
+
+### LISTA DE COMPRAS ATUAL (${ctx.lista_compras?.length||0} itens pendentes)
+${ctx.lista_compras?.map(i => `  ${i.quantidade}${i.unidade!=='unidade'?' '+i.unidade:''} x ${i.nome}`).join('\n') || '  Lista vazia'}
 
 ### INSUMOS DISPONÍVEIS PARA REGISTRO
 ${ctx.insumo_catalogo?.map(i => `  ${i.slug} = ${i.nome} (${i.unidade})`).join('\n') || '  Sem catálogo'}
