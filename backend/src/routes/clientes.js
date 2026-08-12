@@ -383,3 +383,4 @@ router.get('/analise', (req, res) => {
 });
 
 module.exports = router;
+module.exports.calcFidelidade = calcFidelidade;
