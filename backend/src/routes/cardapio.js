@@ -4,6 +4,7 @@ const fs = require('fs');
 const db = require('../db/database');
 const { requireAuth } = require('../middleware/requireAuth');
 const { getConfigComItem } = require('./fidelidade');
+const { getSaldo: getCashbackSaldo, getConfig: getCashbackConfig, usarCashback } = require('./cashback');
 
 // ── Upload de imagens (multer) ────────────────────────────────
 let upload;
@@ -445,16 +446,21 @@ router.get('/cliente/:telefone', (req, res) => {
   if (!cliente) return res.status(404).json({ erro: 'Cliente não encontrado' });
 
   const brindeCfg = getConfigComItem();
+  const cashbackCfg = getCashbackConfig();
+  const cashbackSaldo = getCashbackSaldo(tel);
   res.json({
     ...cliente,
     fidelidade: calcFidelidade(cliente.total_pedidos, cliente.recompensas_ganhas, cliente.recompensas_usadas, cliente.selos_bonus || 0),
     brinde_item_nome: brindeCfg.ativo ? brindeCfg.item_nome : null,
+    cashback_saldo: cashbackSaldo.saldo || 0,
+    cashback_ativo: !!(cashbackCfg.ativo && cashbackSaldo.saldo >= cashbackCfg.minimo_resgate),
+    cashback_minimo_resgate: cashbackCfg.minimo_resgate,
   });
 });
 
 // ── POST /api/cardapio/pedido ────────────────────────────────
 router.post('/pedido', (req, res) => {
-  const { cliente_nome, cliente_telefone, cliente_endereco, observacao, forma_pagamento, itens, cupom_codigo, troco_para, bairro, aniversario, agendado_para, tipo_entrega, utm } = req.body;
+  const { cliente_nome, cliente_telefone, cliente_endereco, observacao, forma_pagamento, itens, cupom_codigo, troco_para, bairro, aniversario, agendado_para, tipo_entrega, utm, usar_cashback } = req.body;
 
   const ehRetirada = tipo_entrega === 'retirada';
   if (!cliente_nome?.trim())    return res.status(400).json({ erro: 'Nome é obrigatório' });
@@ -535,7 +541,20 @@ router.post('/pedido', (req, res) => {
     else return res.status(400).json({ erro: 'Endereço fora da nossa área de entrega.' });
   }
 
-  const total = Math.max(0, subtotal - desconto) + frete;
+  // Cashback: desconto opcional (tudo ou nada), validado contra o saldo
+  // real no banco — nunca confia em valor vindo do cliente.
+  let descontoCashback = 0;
+  let cashbackTel = null;
+  if (usar_cashback && cliente_telefone?.trim()) {
+    cashbackTel = normalizarTelefone(cliente_telefone.trim());
+    const cashbackCfg = getCashbackConfig();
+    const saldoCashback = getCashbackSaldo(cashbackTel);
+    if (cashbackCfg.ativo && saldoCashback.saldo >= cashbackCfg.minimo_resgate) {
+      descontoCashback = Math.min(saldoCashback.saldo, Math.max(0, subtotal - desconto));
+    }
+  }
+
+  const total = Math.max(0, subtotal - desconto - descontoCashback) + frete;
 
   // ── Numeração da comanda ────────────────────────────────────
   // Modo MANUAL: se o operador definiu um "próximo número" (config
@@ -584,6 +603,17 @@ router.post('/pedido', (req, res) => {
   // Atribuição de conversão de campanha (se esse cliente recebeu uma campanha)
   if (cliente_telefone?.trim()) {
     try { require('./campanhas').registrarConversao(cliente_telefone, pedidoId, total); } catch {}
+  }
+
+  // Debita o cashback usado (se aplicável). Feito após o pedido já criado
+  // pra registrar o pedido_id na transação; um erro aqui não deve derrubar
+  // um pedido que já foi criado e pago com sucesso.
+  if (descontoCashback > 0 && cashbackTel) {
+    try {
+      usarCashback(cashbackTel, descontoCashback, pedidoId, `Desconto no pedido #${numero}`);
+    } catch (err) {
+      console.error('[cardapio] Falha ao usar cashback:', err.message);
+    }
   }
 
   // ── Fidelidade ──────────────────────────────────────────────
@@ -687,7 +717,7 @@ router.post('/pedido', (req, res) => {
     }
   }
 
-  res.status(201).json({ id: pedidoId, numero, total, fidelidade, ganhou_recompensa, brinde_resgatado });
+  res.status(201).json({ id: pedidoId, numero, total, fidelidade, ganhou_recompensa, brinde_resgatado, desconto_cashback: descontoCashback });
 });
 
 // ══════════════════════════════════════════════════════════════
