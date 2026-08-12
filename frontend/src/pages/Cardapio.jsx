@@ -8,7 +8,7 @@ import {
   Star, UtensilsCrossed, ShoppingCart, Settings, Pause, Circle, Leaf,
   Pencil, X, MessageSquare, Trash2, Check, CheckCircle2, Bike, Tag, MapPin,
   PartyPopper, Lightbulb, Smartphone, Banknote, CreditCard, User, ArrowLeft,
-  ArrowRight, Gift, Hand, ShoppingBag, Phone, Truck, Loader2, AlertTriangle, Clock, Hash,
+  ArrowRight, Gift, Hand, ShoppingBag, Phone, Truck, Loader2, AlertTriangle, Clock, Hash, Wallet,
 } from 'lucide-react';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
@@ -414,9 +414,9 @@ function CupomInput({ cupomCodigo, setCupomCodigo, cupomAplicado, setCupomAplica
 }
 
 // ── ResumoValores ─────────────────────────────────────────────
-function ResumoValores({ totalValor, desconto, cupomAplicado, frete = 0 }) {
-  if (!cupomAplicado && !frete) return null;
-  const total = Math.max(0, totalValor - desconto) + frete;
+function ResumoValores({ totalValor, desconto, cupomAplicado, descontoCashback = 0, frete = 0 }) {
+  if (!cupomAplicado && !frete && !descontoCashback) return null;
+  const total = Math.max(0, totalValor - desconto - descontoCashback) + frete;
   return (
     <div className="rounded-2xl p-4 space-y-2" style={{ background: '#0d1a12', border: '1px solid rgba(16,185,129,0.2)' }}>
       <div className="flex justify-between text-sm">
@@ -429,6 +429,12 @@ function ResumoValores({ totalValor, desconto, cupomAplicado, frete = 0 }) {
           <span className="text-green-400 font-bold">- R$ {Number(desconto).toFixed(2).replace('.',',')}</span>
         </div>
       )}
+      {descontoCashback > 0 && (
+        <div className="flex justify-between text-sm">
+          <span className="text-green-500">Cashback usado</span>
+          <span className="text-green-400 font-bold">- R$ {Number(descontoCashback).toFixed(2).replace('.',',')}</span>
+        </div>
+      )}
       <div className="flex justify-between text-sm">
         <span className="text-zinc-500">Frete</span>
         <span className="text-zinc-300">{frete > 0 ? `R$ ${Number(frete).toFixed(2).replace('.',',')}` : 'Grátis'}</span>
@@ -437,6 +443,24 @@ function ResumoValores({ totalValor, desconto, cupomAplicado, frete = 0 }) {
         <span className="text-white">Total</span>
         <span className="text-green-400 text-lg">R$ {total.toFixed(2).replace('.',',')}</span>
       </div>
+    </div>
+  );
+}
+
+// ── CashbackToggle ────────────────────────────────────────────
+function CashbackToggle({ clienteEncontrado, usarCashback, setUsarCashback }) {
+  if (!clienteEncontrado?.cashback_ativo) return null;
+  return (
+    <div className="rounded-3xl p-4 flex items-center justify-between gap-3" style={{ background: '#111', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="min-w-0">
+        <p className="text-xs font-bold text-zinc-600 tracking-widest mb-1 flex items-center gap-1.5"><Wallet size={12} strokeWidth={1.75} /> CASHBACK</p>
+        <p className="text-sm text-zinc-300">Você tem <span className="font-bold text-green-400">R$ {Number(clienteEncontrado.cashback_saldo).toFixed(2).replace('.',',')}</span> disponível</p>
+      </div>
+      <button type="button" onClick={() => setUsarCashback(v => !v)} aria-pressed={usarCashback}
+        className="w-12 h-7 rounded-full relative transition-colors shrink-0"
+        style={{ background: usarCashback ? '#10b981' : 'rgba(255,255,255,0.12)' }}>
+        <span className="absolute top-1 w-5 h-5 rounded-full bg-white transition-all duration-200" style={{ left: usarCashback ? 26 : 4 }} />
+      </button>
     </div>
   );
 }
@@ -703,6 +727,7 @@ export default function Cardapio() {
   const [cupomAplicado, setCupomAplicado] = useState(null); // { codigo, tipo, valor, descricao }
   const [cupomBuscando, setCupomBuscando] = useState(false);
   const [cupomAtivo, setCupomAtivo] = useState(null); // cupom ativo para exibição pública
+  const [usarCashback, setUsarCashback] = useState(false);
   const [horarioStatus, setHorarioStatus] = useState(null); // { aberta, fecha, mensagem_fechado }
   const [nomeRestaurante, setNomeRestaurante] = useState('Sushi Control');
   const [fechamentoTemp, setFechamentoTemp] = useState(null);
@@ -928,6 +953,11 @@ export default function Cardapio() {
     return Math.min(cupomAplicado.valor, totalValor);
   }
 
+  function calcDescontoCashback() {
+    if (!usarCashback || !clienteEncontrado?.cashback_ativo) return 0;
+    return Math.min(clienteEncontrado.cashback_saldo, Math.max(0, totalValor - calcDesconto()));
+  }
+
   const ehRetirada = form.tipo_entrega === 'retirada';
   // Frete por bairro (ou taxa padrão se aceitar fora da área). Retirada = sem frete.
   const temBairros = entrega.bairros.length > 0;
@@ -985,6 +1015,7 @@ export default function Cardapio() {
           aniversario: form.aniversario || null,
           agendado_para: form.agendar && form.agendado_para ? new Date(form.agendado_para).toISOString() : null,
           cupom_codigo: cupomAplicado?.codigo || null,
+          usar_cashback: usarCashback,
           utm: getUTM(),
           itens: carrinho.map(c => ({ item_id: c.id, quantidade: c.qty, observacao: c.obs || null })),
         }),
@@ -993,7 +1024,7 @@ export default function Cardapio() {
       if (!res.ok) throw new Error(data.erro || 'Erro');
       // Tráfego pago: dispara o evento de compra nos pixels (Meta/Google)
       dispararCompra(data.total, data.id);
-      setPedidoFeito({ id: data.id, numero: data.numero, total: data.total, desconto: calcDesconto(), telefone: form.telefone, pagamento: form.pagamento, fidelidade: data.fidelidade, ganhou_recompensa: data.ganhou_recompensa, brinde_resgatado: data.brinde_resgatado });
+      setPedidoFeito({ id: data.id, numero: data.numero, total: data.total, desconto: calcDesconto(), descontoCashback: data.desconto_cashback || 0, telefone: form.telefone, pagamento: form.pagamento, fidelidade: data.fidelidade, ganhou_recompensa: data.ganhou_recompensa, brinde_resgatado: data.brinde_resgatado });
       // Salva o pedido no dispositivo pra o cliente conseguir voltar e
       // acompanhar mesmo depois de fechar a aba.
       try {
@@ -1012,6 +1043,7 @@ export default function Cardapio() {
       setCarrinho([]);
       setCupomAplicado(null);
       setCupomCodigo('');
+      setUsarCashback(false);
       setTela('sucesso');
     } catch (err) {
       toast.error(err.message);
@@ -1087,6 +1119,18 @@ export default function Cardapio() {
               <div>
                 <p className="text-sm font-bold text-green-400">Desconto aplicado!</p>
                 <p className="text-xs text-zinc-500 mt-0.5">Você economizou R$ {Number(pedidoFeito.desconto).toFixed(2).replace('.',',')}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Cashback usado */}
+          {pedidoFeito.descontoCashback > 0 && (
+            <div className="rounded-2xl p-4 mb-3 flex items-center gap-3"
+              style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)' }}>
+              <span className="text-green-400"><Wallet size={24} strokeWidth={1.75} /></span>
+              <div>
+                <p className="text-sm font-bold text-green-400">Cashback usado!</p>
+                <p className="text-xs text-zinc-500 mt-0.5">Você economizou R$ {Number(pedidoFeito.descontoCashback).toFixed(2).replace('.',',')} do seu saldo</p>
               </div>
             </div>
           )}
@@ -1300,7 +1344,7 @@ export default function Cardapio() {
           })}
         </div>
         {form.pagamento === 'dinheiro' && (
-          <TrocoInput aPagar={totalValor - calcDesconto()} onBlurChange={onTrocoBlur} />
+          <TrocoInput aPagar={totalValor - calcDesconto() - calcDescontoCashback()} onBlurChange={onTrocoBlur} />
         )}
       </div>
     );
@@ -1434,7 +1478,7 @@ export default function Cardapio() {
         style={{ background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%)', boxShadow: '0 8px 32px rgba(var(--accent-rgb),0.35)' }}>
         {enviando
           ? <span className="flex items-center justify-center gap-2"><Loader2 size={18} strokeWidth={2} className="animate-spin" /> Enviando...</span>
-          : <span className="flex items-center justify-center gap-2"><CheckCircle2 size={18} strokeWidth={2} /> {label || 'Confirmar pedido'} · {brl(Math.max(0, totalValor - calcDesconto()) + calcFrete())}</span>}
+          : <span className="flex items-center justify-center gap-2"><CheckCircle2 size={18} strokeWidth={2} /> {label || 'Confirmar pedido'} · {brl(Math.max(0, totalValor - calcDesconto() - calcDescontoCashback()) + calcFrete())}</span>}
       </button>
     );
 
@@ -1800,8 +1844,11 @@ export default function Cardapio() {
               {/* Cupom */}
               <CupomInput cupomCodigo={cupomCodigo} setCupomCodigo={setCupomCodigo} cupomAplicado={cupomAplicado} setCupomAplicado={setCupomAplicado} cupomBuscando={cupomBuscando} aplicarCupom={aplicarCupom} />
 
+              {/* Cashback */}
+              <CashbackToggle clienteEncontrado={clienteEncontrado} usarCashback={usarCashback} setUsarCashback={setUsarCashback} />
+
               {/* Resumo de valores */}
-              <ResumoValores totalValor={totalValor} desconto={calcDesconto()} cupomAplicado={cupomAplicado} frete={calcFrete()} />
+              <ResumoValores totalValor={totalValor} desconto={calcDesconto()} cupomAplicado={cupomAplicado} descontoCashback={calcDescontoCashback()} frete={calcFrete()} />
 
               {abaixoMinimo && (
                 <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl"
@@ -1875,8 +1922,11 @@ export default function Cardapio() {
               {/* Cupom */}
               <CupomInput cupomCodigo={cupomCodigo} setCupomCodigo={setCupomCodigo} cupomAplicado={cupomAplicado} setCupomAplicado={setCupomAplicado} cupomBuscando={cupomBuscando} aplicarCupom={aplicarCupom} />
 
+              {/* Cashback */}
+              <CashbackToggle clienteEncontrado={clienteEncontrado} usarCashback={usarCashback} setUsarCashback={setUsarCashback} />
+
               {/* Resumo */}
-              <ResumoValores totalValor={totalValor} desconto={calcDesconto()} cupomAplicado={cupomAplicado} frete={calcFrete()} />
+              <ResumoValores totalValor={totalValor} desconto={calcDesconto()} cupomAplicado={cupomAplicado} descontoCashback={calcDescontoCashback()} frete={calcFrete()} />
 
               {abaixoMinimo && (
                 <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl"
