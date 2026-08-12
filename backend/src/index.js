@@ -188,12 +188,15 @@ app.use((err, req, res, next) => {
 process.on('uncaughtException', (err) => { console.error('uncaughtException:', err); });
 process.on('unhandledRejection', (err) => { console.error('unhandledRejection:', err); });
 
-// Encerramento gracioso: fecha o Chrome do WhatsApp ao parar o servidor
-// (evita deixar processos zumbis travando a sessão no próximo boot)
+// Encerramento gracioso: NÃO chama wa.desconectar() aqui — essa função
+// herdada da arquitetura antiga (Chrome/Puppeteer no MESMO processo) hoje
+// desloga de verdade a sessão do WhatsApp no whatsapp-service, um processo
+// SEPARADO (pm2 id 1) que deve continuar conectado mesmo quando o backend
+// principal reinicia. Chamar isso aqui estava derrubando o WhatsApp real
+// em TODO restart/deploy do backend.
 let encerrando = false;
 async function encerrar() {
   if (encerrando) return; encerrando = true;
-  try { await wa.desconectar(); } catch {}
   process.exit(0);
 }
 process.on('SIGINT', encerrar);
