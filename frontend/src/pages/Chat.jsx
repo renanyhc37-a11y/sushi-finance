@@ -263,6 +263,7 @@ export default function Chat() {
   const [waStatus, setWaStatus]                 = useState('desconectado');
   const [mobileMostrarChat, setMobileMostrarChat] = useState(false);
   const [pedidosCliente, setPedidosCliente]     = useState([]);
+  const [clienteCRM, setClienteCRM]             = useState(null);
   const [mostrarPedidos, setMostrarPedidos]     = useState(false);
   const [mostrarRespostasRapidas, setMostrarRespostasRapidas] = useState(false);
   const [mostrarEmoji, setMostrarEmoji]         = useState(false);
@@ -393,10 +394,13 @@ export default function Chat() {
   async function abrirConversa(conv) {
     setConvAtiva(conv); setMobileMostrarChat(true); setMostrarInfo(false);
     setSugestao(''); setTexto(''); setMostrarPedidos(false); setMostrarTags(false); setMostrarRespostasRapidas(false);
+    setClienteCRM(null);
     const r = await fetch(`${BASE}/chat/conversas/${conv.id}/mensagens`, { headers: authH() });
     if (r.ok) { setMensagens(await r.json()); setConversas(prev => prev.map(c => c.id === conv.id ? { ...c, nao_lidas: 0 } : c)); }
     const rp = await fetch(`${BASE}/chat/conversas/${conv.id}/pedidos`, { headers: authH() });
     if (rp.ok) setPedidosCliente(await rp.json());
+    const rc = await fetch(`${BASE}/chat/conversas/${conv.id}/cliente`, { headers: authH() });
+    if (rc.ok) setClienteCRM(await rc.json());
     setTimeout(() => inputRef.current?.focus(), 100);
   }
 
@@ -1276,6 +1280,34 @@ export default function Chat() {
                 {convAtiva.assumida ? <><Hand size={14} style={{ color: WA.accent }} /> Atendimento humano</> : <><Bot size={14} style={{ color: '#0ea5e9' }} /> IA ativa</>}
               </div>
             </div>
+            {clienteCRM && (
+              <div style={{ borderRadius: 10, padding: '12px', background: WA.header, border: `1px solid ${WA.border}`, marginBottom: 10 }}>
+                <div style={{ fontSize: 11, color: WA.txtMeta, marginBottom: 8 }}>
+                  CLIENTE DESDE {new Date(clienteCRM.created_at).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}
+                </div>
+                {clienteCRM.endereco && (
+                  <div style={{ fontSize: 13, color: WA.txtPrimary, marginBottom: 8, lineHeight: 1.4 }}>
+                    📍 {clienteCRM.endereco}{clienteCRM.bairro ? ` — ${clienteCRM.bairro}` : ''}
+                  </div>
+                )}
+                <div style={{ fontSize: 13, color: WA.txtPrimary, marginBottom: 8 }}>
+                  🍣 {clienteCRM.total_pedidos} pedido{clienteCRM.total_pedidos !== 1 ? 's' : ''} no total
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: clienteCRM.cashback_saldo > 0 ? 8 : 0 }}>
+                  <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                    <div style={{ width: `${(clienteCRM.fidelidade.pedidos_no_ciclo / 10) * 100}%`, height: '100%', background: WA.accent }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: WA.txtMeta, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {clienteCRM.fidelidade.recompensas_disponiveis > 0 ? '🎁 brinde disponível' : `${clienteCRM.fidelidade.proximo_em} p/ brinde`}
+                  </span>
+                </div>
+                {clienteCRM.cashback_saldo > 0 && (
+                  <div style={{ fontSize: 13, color: '#f59e0b', fontWeight: 700 }}>
+                    💰 R$ {Number(clienteCRM.cashback_saldo).toFixed(2)} de cashback
+                  </div>
+                )}
+              </div>
+            )}
             {pedidosCliente.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 <div style={{ fontSize: 10, color: WA.txtMeta, fontWeight: 700, letterSpacing: 1, marginBottom: 8 }}>PEDIDOS ({pedidosCliente.length})</div>
