@@ -120,6 +120,16 @@ const notaFiscalTables = `
 `;
 try { raw.exec(notaFiscalTables); } catch(e) { console.error('notaFiscalTables migration:', e.message); }
 
+// Impede duas notas "ativas" (processando ou autorizada) pro mesmo pedido ao
+// mesmo tempo — é a trava real contra emissão duplicada sob concorrência
+// (dois cliques, retry do operador, múltiplas telas do PDV abertas).
+const notaFiscalIndiceUnico = `
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_notas_fiscais_pedido_ativa
+  ON notas_fiscais(pedido_id)
+  WHERE status IN ('processando', 'autorizada');
+`;
+try { raw.exec(notaFiscalIndiceUnico); } catch(e) { console.error('notaFiscalIndiceUnico migration:', e.message); }
+
 // ── Novas tabelas WhatsApp ────────────────────────────────────
 const waTables2 = `
   CREATE TABLE IF NOT EXISTS wa_respostas_rapidas (
