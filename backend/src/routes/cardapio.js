@@ -274,7 +274,16 @@ router.get('/debug-promo', requireAuth, (req, res) => {
 // GET /api/cardapio/admin — tudo (categorias + itens, inclusive inativos)
 // Lista plana de todos os itens (para selects de composição)
 router.get('/itens', requireAuth, (req, res) => {
-  const itens = db.prepare('SELECT id, nome, preco, emoji, categoria_id, disponivel FROM cardapio_itens ORDER BY nome').all();
+  // foto e categoria_nome faltavam — tela de novo pedido (PDV) nunca
+  // conseguia mostrar foto nem agrupar por categoria de verdade, tudo
+  // caía em "Outros" mesmo com os itens corretamente categorizados.
+  const itens = db.prepare(`
+    SELECT i.id, i.nome, i.preco, i.emoji, i.foto, i.categoria_id, i.disponivel,
+           c.nome as categoria_nome
+    FROM cardapio_itens i
+    LEFT JOIN cardapio_categorias c ON c.id = i.categoria_id
+    ORDER BY i.nome
+  `).all();
   res.json(itens);
 });
 
