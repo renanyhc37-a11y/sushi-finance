@@ -1875,11 +1875,18 @@ export default function PDV() {
       <div key={pedido.id} className="rounded-2xl overflow-hidden transition-all duration-200"
         style={{
           background: 'var(--space-elev)',
-          borderLeft: `4px solid ${accentColor}`,
-          border: `1.5px solid ${accentColor}66`,
+          // accentColor pode ser um hex literal (#10b981) OU uma CSS var
+          // (var(--accent-2), pra respeitar a cor de destaque personalizável)
+          // — o antigo truque de "cor + sufixo hex de opacidade" (`${accentColor}66`)
+          // só funciona pra hex literal; pra var() gera CSS inválido que o
+          // navegador descarta silenciosamente (a borda simplesmente sumia
+          // pros status que usam var(--accent-2), ex. "Preparando"). color-mix()
+          // funciona pros dois casos.
+          border: `1.5px solid color-mix(in srgb, ${accentColor} 40%, transparent)`,
           borderLeftWidth: 4,
+          borderLeftStyle: 'solid',
           borderLeftColor: accentColor,
-          boxShadow: `0 0 0 1px ${accentColor}33, ${eNovo ? `0 4px 24px ${accentColor}28` : `0 4px 16px ${accentColor}14`}, 0 2px 6px rgba(0,0,0,0.08)`,
+          boxShadow: `0 0 0 1px color-mix(in srgb, ${accentColor} 20%, transparent), ${eNovo ? `0 4px 24px color-mix(in srgb, ${accentColor} 16%, transparent)` : `0 4px 16px color-mix(in srgb, ${accentColor} 8%, transparent)`}, 0 2px 6px rgba(0,0,0,0.08)`,
         }}>
 
         {/* linha de luz no topo */}
