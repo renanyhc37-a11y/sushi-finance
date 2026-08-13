@@ -505,7 +505,9 @@ function ModalNovoPedido({ onClose, onCriado }) {
   const [painelAberto, setPainelAberto] = useState(false); // resumo/cliente no mobile
   const [cashbackSaldo, setCashbackSaldo] = useState(null);
   const [cashbackDesc, setCashbackDesc] = useState(0);
+  const [sugestoesCliente, setSugestoesCliente] = useState([]);
   const buscaRef = useRef(null);
+  const buscaClienteTimer = useRef(null);
 
   useEffect(() => {
     fetch(`${BASE}/cardapio/itens`, { headers: authH() })
@@ -552,6 +554,25 @@ function ModalNovoPedido({ onClose, onCriado }) {
       const r = await fetch(`${BASE}/cashback/saldo/${t}`, { headers: authH() });
       if (r.ok) { const d = await r.json(); setCashbackSaldo(d); }
     } catch {}
+  }
+
+  // Autocomplete de cliente — busca por nome OU telefone conforme o
+  // operador digita, com debounce pra não martelar o servidor a cada tecla.
+  function buscarClientes(termo) {
+    clearTimeout(buscaClienteTimer.current);
+    const t = (termo || '').trim();
+    if (t.length < 2) { setSugestoesCliente([]); return; }
+    buscaClienteTimer.current = setTimeout(async () => {
+      try {
+        const r = await fetch(`${BASE}/clientes?busca=${encodeURIComponent(t)}`, { headers: authH() });
+        if (r.ok) setSugestoesCliente(await r.json());
+      } catch {}
+    }, 350);
+  }
+  function selecionarCliente(c) {
+    setCliente({ nome: c.nome || '', telefone: c.telefone || '', endereco: c.endereco || '', bairro: c.bairro || '' });
+    setSugestoesCliente([]);
+    buscarCashback(c.telefone);
   }
 
   function aplicarCashback() {
@@ -661,17 +682,39 @@ function ModalNovoPedido({ onClose, onCriado }) {
         {/* Dados do cliente */}
         <div className="space-y-2">
           <p className="text-[10px] font-black uppercase tracking-wider t-dim">Cliente</p>
-          {[
-            { k: 'nome',     ph: 'Nome *',    type: 'text' },
-            { k: 'telefone', ph: 'Telefone',  type: 'tel', onBlur: e => buscarCashback(e.target.value) },
-            ...(tipoEntrega === 'entrega' ? [
-              { k: 'endereco', ph: 'Endereço', type: 'text' },
-              { k: 'bairro',   ph: 'Bairro',   type: 'text' },
-            ] : []),
-          ].map(({ k, ph, type, onBlur }) => (
-            <input key={k} type={type} placeholder={ph} value={cliente[k]}
+
+          <input type="text" placeholder="Nome *" value={cliente.nome}
+            onChange={e => { setCliente(prev => ({ ...prev, nome: e.target.value })); buscarClientes(e.target.value); }}
+            onBlur={() => setTimeout(() => setSugestoesCliente([]), 150)}
+            className="w-full text-xs rounded-xl px-3 py-2 outline-none"
+            style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
+
+          <input type="tel" placeholder="Telefone (busca cliente já cadastrado)" value={cliente.telefone}
+            onChange={e => { setCliente(prev => ({ ...prev, telefone: e.target.value })); buscarClientes(e.target.value); }}
+            onBlur={e => { buscarCashback(e.target.value); setTimeout(() => setSugestoesCliente([]), 150); }}
+            className="w-full text-xs rounded-xl px-3 py-2 outline-none"
+            style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
+
+          {/* Sugestões de clientes já cadastrados (busca por nome ou telefone) */}
+          {sugestoesCliente.length > 0 && (
+            <div className="rounded-xl overflow-hidden" style={{ background: 'var(--space-elev)', border: '1px solid var(--hairline)' }}>
+              {sugestoesCliente.map(c => (
+                <button key={c.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => selecionarCliente(c)}
+                  className="w-full text-left px-3 py-2 flex flex-col gap-0.5 transition-all last:border-0"
+                  style={{ borderBottom: '1px solid var(--hairline)' }}>
+                  <span className="text-xs font-bold t-strong truncate">{c.nome}</span>
+                  <span className="text-[10px] t-dim truncate">{c.telefone}{c.endereco ? ` · ${c.endereco}` : ''}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {tipoEntrega === 'entrega' && [
+            { k: 'endereco', ph: 'Endereço' },
+            { k: 'bairro',   ph: 'Bairro' },
+          ].map(({ k, ph }) => (
+            <input key={k} type="text" placeholder={ph} value={cliente[k]}
               onChange={e => setCliente(prev => ({ ...prev, [k]: e.target.value }))}
-              onBlur={onBlur}
               className="w-full text-xs rounded-xl px-3 py-2 outline-none"
               style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
           ))}
@@ -805,15 +848,19 @@ function ModalNovoPedido({ onClose, onCriado }) {
                     const qtd = qtdItem(item.id);
                     return (
                       <div key={item.id}
-                        className="flex items-center gap-2 px-3 py-2 rounded-xl transition-all"
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all"
                         style={{ background: qtd > 0 ? 'rgba(var(--accent-rgb),0.08)' : 'var(--space-elev)', border: `1px solid ${qtd > 0 ? 'rgba(var(--accent-rgb),0.25)' : 'transparent'}` }}>
+                        <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 flex items-center justify-center text-xl"
+                          style={{ background: 'var(--space-elev-2)' }}>
+                          {item.foto ? <img src={item.foto} alt="" className="w-full h-full object-cover" /> : (item.emoji || '🍣')}
+                        </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold t-strong leading-tight truncate">{item.nome}</p>
                           <p className="text-xs font-black" style={{ color: 'var(--accent)' }}>{brl(item.preco)}</p>
                         </div>
                         {qtd === 0 ? (
                           <button onClick={() => addItem(item)}
-                            className="w-8 h-8 flex items-center justify-center rounded-xl transition-all active:scale-90 shrink-0"
+                            className="w-9 h-9 flex items-center justify-center rounded-xl transition-all active:scale-90 shrink-0"
                             style={{ background: 'rgba(var(--accent-rgb),0.12)', color: 'var(--accent)', border: '1px solid rgba(var(--accent-rgb),0.2)' }}>
                             <Plus size={16} strokeWidth={2.5} />
                           </button>
