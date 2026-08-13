@@ -106,6 +106,16 @@ router.post('/pedidos/:id/nota-fiscal', async (req, res) => {
   const pedido = db.prepare('SELECT * FROM pdv_pedidos WHERE id = ?').get(req.params.id);
   if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado' });
 
+  // Nunca reprocessar uma nota já autorizada (duplo clique, retry do cliente
+  // após resposta lenta etc.) — reemitir geraria um segundo documento fiscal
+  // real pro mesmo pedido.
+  const notaExistente = db.prepare(
+    "SELECT id, status, link_danfe, mensagem_sefaz FROM notas_fiscais WHERE pedido_id = ? AND status = 'autorizada' ORDER BY id DESC LIMIT 1"
+  ).get(pedido.id);
+  if (notaExistente) {
+    return res.status(200).json({ id: notaExistente.id, status: notaExistente.status, link_danfe: notaExistente.link_danfe, mensagem_sefaz: notaExistente.mensagem_sefaz });
+  }
+
   const cnpjEmitente = process.env.FOCUS_NFE_CNPJ;
   if (!process.env.FOCUS_NFE_TOKEN || !cnpjEmitente) {
     return res.status(500).json({ erro: 'Integração fiscal não configurada (defina FOCUS_NFE_TOKEN e FOCUS_NFE_CNPJ no .env)' });
