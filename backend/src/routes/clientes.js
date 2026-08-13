@@ -37,8 +37,19 @@ function comFidelidade(c) {
   return { ...c, fidelidade: calcFidelidade(c.total_pedidos, c.recompensas_ganhas, c.recompensas_usadas, c.selos_bonus || 0) };
 }
 
-// GET /api/clientes — lista todos
+// GET /api/clientes — lista todos, ou busca por nome/telefone com ?busca=
+// (usado pelo autocomplete de cliente no Novo Pedido do PDV — sem busca,
+// comportamento inalterado, continua devolvendo a lista inteira)
 router.get('/', (req, res) => {
+  const busca = (req.query.busca || '').trim();
+  if (busca) {
+    const termo = `%${busca}%`;
+    const limite = Math.min(20, Number(req.query.limite) || 8);
+    const clientes = db.prepare(
+      'SELECT * FROM clientes WHERE nome LIKE ? OR telefone LIKE ? ORDER BY updated_at DESC LIMIT ?'
+    ).all(termo, termo, limite);
+    return res.json(clientes.map(comFidelidade));
+  }
   const clientes = db.prepare('SELECT * FROM clientes ORDER BY updated_at DESC').all();
   res.json(clientes.map(comFidelidade));
 });
