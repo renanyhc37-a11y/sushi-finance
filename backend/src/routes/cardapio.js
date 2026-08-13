@@ -5,12 +5,19 @@ const db = require('../db/database');
 const { requireAuth } = require('../middleware/requireAuth');
 const { getConfigComItem } = require('./fidelidade');
 const { getSaldo: getCashbackSaldo, getConfig: getCashbackConfig, usarCashback } = require('./cashback');
+const { otimizar, preservarAlta } = require('../utils/otimizarImagem');
 
 // ── Upload de imagens (multer) ────────────────────────────────
+const UPLOAD_DIR = path.join(__dirname, '..', '..', '..', 'frontend', 'public', 'cardapio');
+
+// Fotos em ALTA para uso criativo (posts/Stories). Fica em backend/uploads/ de
+// propósito: frontend/public/ é copiado para dist/ pelo Vite, então guardar
+// aqui evita inflar todo deploy com centenas de MB de foto.
+const ORIGINAIS_DIR = path.join(__dirname, '..', '..', 'uploads', 'fotos');
+
 let upload;
 try {
   const multer = require('multer');
-  const UPLOAD_DIR = path.join(__dirname, '..', '..', '..', 'frontend', 'public', 'cardapio');
   if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
   const MIME_PERMITIDOS = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
   const EXT_SEGURAS = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif', 'image/heic': '.heic', 'image/heif': '.heif' };
@@ -25,7 +32,7 @@ try {
     if (MIME_PERMITIDOS.includes(file.mimetype)) cb(null, true);
     else cb(new Error(`Tipo de arquivo não permitido: ${file.mimetype}. Use JPEG, PNG, WebP ou GIF.`));
   };
-  upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 }, fileFilter });
+  upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 }, fileFilter });
 } catch {
   upload = null;
   console.warn('[cardapio] multer não instalado — upload de fotos desativado. Rode: npm install multer');
@@ -414,7 +421,7 @@ router.post('/itens/reordenar', requireAuth, (req, res) => {
 // POST /api/cardapio/itens/:id/foto — upload de imagem
 router.post('/itens/:id/foto', requireAuth, (req, res) => {
   if (!upload) return res.status(503).json({ erro: 'Upload não disponível. Instale multer: npm install multer' });
-  upload.single('foto')(req, res, (err) => {
+  upload.single('foto')(req, res, async (err) => {
     if (err) return res.status(400).json({ erro: err.message });
     if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
 
@@ -427,9 +434,24 @@ router.post('/itens/:id/foto', requireAuth, (req, res) => {
       try { fs.unlinkSync(old); } catch {}
     }
 
-    const fotoUrl = `/cardapio/${req.file.filename}`;
+    // ORDEM IMPORTA: preservarAlta precisa rodar antes de otimizar(), que apaga
+    // o arquivo de origem.
+    const alta = await preservarAlta(UPLOAD_DIR, req.file.filename, ORIGINAIS_DIR);
+
+    // Comprime antes de publicar (1,6 MB → ~80 KB). Se o sharp não estiver
+    // instalado, devolve o arquivo original e o upload segue normalmente.
+    const { arquivo, antes, depois } = await otimizar(UPLOAD_DIR, req.file.filename);
+    if (depois < antes) {
+      console.log(`[imagem] ${req.file.filename} ${Math.round(antes / 1024)}KB → ${arquivo} ${Math.round(depois / 1024)}KB`);
+    }
+
+    const fotoUrl = `/cardapio/${arquivo}`;
     db.prepare('UPDATE cardapio_itens SET foto = ? WHERE id = ?').run(fotoUrl, req.params.id);
-    res.json({ foto: fotoUrl, item: db.prepare('SELECT * FROM cardapio_itens WHERE id = ?').get(req.params.id) });
+    res.json({
+      foto: fotoUrl,
+      alta: alta ? { arquivo: alta.arquivo, largura: alta.largura, altura: alta.altura } : null,
+      item: db.prepare('SELECT * FROM cardapio_itens WHERE id = ?').get(req.params.id),
+    });
   });
 });
 
