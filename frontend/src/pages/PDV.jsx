@@ -2197,13 +2197,18 @@ export default function PDV() {
                 </button>
               </div>
             ) : pedido.nota_fiscal?.status === 'processando' ? (
-              // Estado intermediário (SEFAZ lenta/contingência ou requisição
-              // concorrente ainda rodando) — não clicável, a rota resolve
-              // sozinha na próxima tentativa.
-              <div className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-black"
+              // Estado intermediário (SEFAZ lenta/contingência, requisição
+              // concorrente ainda rodando, OU uma tentativa anterior que
+              // nunca chegou a ser recebida pela Focus NFe por queda de
+              // conexão). PRECISA ser clicável: é o único jeito do operador
+              // reabrir o formulário de CPF e disparar uma nova tentativa —
+              // a rota resolve sozinha se for mesmo um caso recuperável
+              // (404 na consulta), mas só reage a uma nova requisição.
+              <button onClick={() => { setNotaEmCpf(pedido); setCpfDigitado(''); }}
+                className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-black"
                 style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', color: '#a16207' }}>
-                ⏳ Nota em processamento...
-              </div>
+                ⏳ Nota em processamento — verificar
+              </button>
             ) : (
               <button onClick={() => { setNotaEmCpf(pedido); setCpfDigitado(''); }}
                 className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-black"

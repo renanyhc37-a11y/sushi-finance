@@ -184,14 +184,22 @@ router.post('/pedidos/:id/nota-fiscal', async (req, res) => {
         // A tentativa anterior morreu rejeitada — deixa o fluxo continuar pros
         // passos seguintes, que vão tentar emitir uma nota nova (ref nova).
       } else if (consulta && consulta.httpStatus === 404) {
-        // NOVO: a Focus NFe nunca recebeu essa ref — a tentativa anterior
-        // falhou antes de chegar lá (exatamente o cenário de conexão caída
-        // no meio do POST). Diferente de "ainda processando": aqui já
-        // sabemos que não existe nenhuma nota real pendente na Focus NFe pra
-        // essa ref, então é seguro liberar uma nova tentativa em vez de
-        // travar o pedido pra sempre em 202 processando.
+        // A Focus NFe nunca recebeu essa ref — a tentativa anterior falhou
+        // antes de chegar lá (exatamente o cenário de conexão caída no meio
+        // do POST). Diferente de "ainda processando": aqui já sabemos que
+        // não existe nenhuma nota real pendente na Focus NFe pra essa ref,
+        // então é seguro liberar uma nova tentativa em vez de travar o
+        // pedido pra sempre em 202 processando.
         db.prepare("UPDATE notas_fiscais SET status = 'rejeitada', mensagem_sefaz = ? WHERE id = ?")
           .run('Tentativa anterior não chegou a ser recebida pela Focus NFe (falha de rede) — nova tentativa liberada.', notaAtiva.id);
+        // Deixa o fluxo continuar pros passos seguintes (nova ref, nova emissão).
+      } else if (consulta && (consulta.status === 'denegado' || consulta.status === 'cancelado')) {
+        // Status terminais da SEFAZ (não vão mudar numa consulta futura) que
+        // não são 'erro_autorizacao' mas também não são 'autorizado' — sem
+        // este caso, cairiam no else genérico e travariam o pedido em 202
+        // pra sempre, igual ao caso do 404 acima.
+        db.prepare("UPDATE notas_fiscais SET status = 'rejeitada', mensagem_sefaz = ? WHERE id = ?")
+          .run(consulta.mensagem_sefaz || `Nota ${consulta.status} na SEFAZ`, notaAtiva.id);
         // Deixa o fluxo continuar pros passos seguintes (nova ref, nova emissão).
       } else {
         // Ainda processando de verdade, ou a consulta falhou por outro

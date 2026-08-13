@@ -29,7 +29,10 @@ async function consultarNfce(ref) {
   const r = await fetch(`${baseUrl()}/v2/nfce/${encodeURIComponent(ref)}?completa=1`, {
     headers: { Authorization: authHeader() },
   });
-  const data = await r.json();
+  // Um proxy/gateway pode responder um 404 com corpo HTML em vez do JSON da
+  // Focus NFe — sem o fallback, isso lançaria e a reconciliação nunca veria
+  // o httpStatus real (cairia sempre no "ainda processando").
+  const data = await r.json().catch(() => ({}));
   return { httpStatus: r.status, ...data };
 }
 
