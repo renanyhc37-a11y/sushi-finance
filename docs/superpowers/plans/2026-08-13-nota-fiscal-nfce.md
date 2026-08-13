@@ -28,7 +28,7 @@ A spec (`docs/superpowers/specs/2026-08-13-nota-fiscal-nfce-design.md`) assumia 
   - `pis_situacao_tributaria` / `cofins_situacao_tributaria`: `99` (outras operações) — padrão de mercado para Simples Nacional.
   - NCM padrão dos itens: `21069090` ("outras preparações alimentícias") — padrão de mercado para refeição pronta de restaurante/delivery.
   - Forma de pagamento PIX mapeada para código `99` (outros) na Focus NFe — a doc oficial consultada não listava um código dedicado para Pix na tabela de formas de pagamento; confirmar com o contador/Focus NFe se existe código mais específico antes de produção.
-- Sem framework de testes no projeto (nenhum `jest`/`vitest` instalado). Usar `node:test` (nativo do Node 24, zero dependência nova) — adicionar `"test": "node --test src"` ao `backend/package.json`.
+- Sem framework de testes no projeto (nenhum `jest`/`vitest` instalado). Usar `node:test` (nativo do Node 24, zero dependência nova) — adicionar `"test": "node --test"` ao `backend/package.json`. **Atenção:** `node --test src` (com o diretório como argumento posicional) faz o Node resolver `src` como módulo (`src/index.js`) em vez de escanear recursivamente — sobe o servidor de verdade e trava/derruba em `EADDRINUSE`. Sem argumento, `node --test` faz a descoberta recursiva correta a partir do cwd (`backend/`). Corrigido durante a Task 1 (commit `f9579bd`) depois de descoberto ao vivo — documentado aqui pra quem reler o plano.
 - Sem certificado/conta Focus NFe configurados ainda neste momento (dono/contador precisa criar a conta e vincular o certificado A1 — fora do escopo deste plano). Por isso, a verificação **ao vivo contra a Focus NFe real** fica para depois que a conta existir; as tarefas abaixo verificam tudo o que dá pra verificar sem ela (testes unitários com `fetch` mockado, e um stub HTTP local que imita o formato de resposta da Focus NFe para exercitar o fluxo ponta a ponta).
 
 ---
@@ -154,7 +154,7 @@ export function formatarCpf(cpf) {
 Edite `backend/package.json`, adicione ao objeto `"scripts"`:
 
 ```json
-    "test": "node --test src",
+    "test": "node --test",
 ```
 
 - [ ] **Step 7: Rodar a suíte inteira (só este arquivo existe por enquanto) e commitar**
