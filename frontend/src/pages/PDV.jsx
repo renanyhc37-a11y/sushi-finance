@@ -1876,10 +1876,10 @@ export default function PDV() {
         style={{
           background: 'var(--space-elev)',
           borderLeft: `4px solid ${accentColor}`,
-          border: `0.5px solid ${accentColor}44`,
+          border: `1.5px solid ${accentColor}66`,
           borderLeftWidth: 4,
           borderLeftColor: accentColor,
-          boxShadow: `0 0 0 0.5px ${accentColor}22, ${eNovo ? `0 4px 24px ${accentColor}28` : `0 4px 16px ${accentColor}14`}, 0 2px 6px rgba(0,0,0,0.08)`,
+          boxShadow: `0 0 0 1px ${accentColor}33, ${eNovo ? `0 4px 24px ${accentColor}28` : `0 4px 16px ${accentColor}14`}, 0 2px 6px rgba(0,0,0,0.08)`,
         }}>
 
         {/* linha de luz no topo */}
