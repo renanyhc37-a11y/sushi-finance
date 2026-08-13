@@ -1827,7 +1827,16 @@ export default function PDV() {
         method: 'POST', headers: authH(), body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') }),
       });
       const data = await r.json();
-      if (!r.ok) { toast.error(data.erro || 'Erro ao emitir nota'); return; }
+      if (!r.ok) {
+        // A rota pode responder erro sem o campo `erro` (ex: rejeição da
+        // SEFAZ vem como { status: 'rejeitada', mensagem_sefaz }) — sem esse
+        // fallback, o toast sempre caía na mensagem genérica e o `return`
+        // saía antes de recarregar o card, escondendo o estado real (que
+        // agora oferece "tentar de novo").
+        toast.error(data.erro || (data.mensagem_sefaz ? `Nota rejeitada: ${data.mensagem_sefaz}` : 'Erro ao emitir nota'));
+        if (data.status === 'rejeitada') carregar(true);
+        return;
+      }
       if (data.status === 'processando') {
         // Nem sucesso nem erro definitivo — a rota resolve sozinha na
         // próxima tentativa (índice único + consultarNfce). Não fecha o
@@ -2158,7 +2167,11 @@ export default function PDV() {
         )}
 
         {/* ── Nota fiscal ── */}
-        {!['cancelado'].includes(pedido.status) && (
+        {/* O bloco continua escondido pra pedidos cancelados (esconde o
+            botão de EMITIR), mas não deve esconder o link de uma nota que
+            JÁ foi autorizada antes do pedido ser cancelado — senão o
+            operador perde acesso ao documento fiscal real que já existe. */}
+        {(!['cancelado'].includes(pedido.status) || pedido.nota_fiscal?.status === 'autorizada') && (
           <div className="px-3 pb-2.5 -mt-1">
             {pedido.nota_fiscal?.status === 'autorizada' ? (
               <a href={pedido.nota_fiscal.link_danfe} target="_blank" rel="noreferrer"

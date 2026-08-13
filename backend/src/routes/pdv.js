@@ -120,147 +120,192 @@ router.get('/pedidos/:id', (req, res) => {
 //       ler a resposta, a linha 'processando' fica durável no banco e é
 //       reconciliada via consultarNfce na próxima tentativa.
 router.post('/pedidos/:id/nota-fiscal', async (req, res) => {
-  const { cpf } = req.body || {};
-  if (!cpfValido(cpf)) return res.status(400).json({ erro: 'CPF inválido' });
+  // Rede de segurança de nível externo (defesa em profundidade): qualquer
+  // exceção não tratada por um try/catch mais específico abaixo (ex: a busca
+  // de notaAtiva, que não tinha proteção própria) cai aqui em vez de virar
+  // uma promise rejeitada não tratada — que no Express 4 pode derrubar o
+  // processo Node inteiro. Não muda o comportamento normal: os `return
+  // res.status(...)` dentro do try continuam funcionando igual.
+  try {
+    const { cpf } = req.body || {};
+    if (!cpfValido(cpf)) return res.status(400).json({ erro: 'CPF inválido' });
 
-  const pedido = db.prepare('SELECT * FROM pdv_pedidos WHERE id = ?').get(req.params.id);
-  if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado' });
+    const pedido = db.prepare('SELECT * FROM pdv_pedidos WHERE id = ?').get(req.params.id);
+    if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado' });
 
-  if (pedido.status === 'cancelado') {
-    return res.status(400).json({ erro: 'Pedido cancelado, não é possível emitir nota' });
-  }
+    // Nunca reprocessar uma nota já autorizada ou ainda em processamento sem
+    // antes resolver o estado real com a Focus NFe — reemitir sem checar
+    // geraria um segundo documento fiscal real pro mesmo pedido. Roda ANTES
+    // das checagens de "cancelado" e de config da Focus NFe: uma nota já
+    // autorizada tem que continuar acessível mesmo se o pedido foi cancelado
+    // depois de emitida, ou se FOCUS_NFE_TOKEN/CNPJ sumiram do .env nesse
+    // meio tempo — essas checagens só devem bloquear uma EMISSÃO NOVA.
+    const notaAtiva = db.prepare(
+      "SELECT * FROM notas_fiscais WHERE pedido_id = ? AND status IN ('processando','autorizada') ORDER BY id DESC LIMIT 1"
+    ).get(pedido.id);
 
-  const itensPedido = db.prepare('SELECT * FROM pdv_itens WHERE pedido_id = ?').all(pedido.id);
-  if (itensPedido.length === 0) {
-    return res.status(400).json({ erro: 'Pedido sem itens' });
-  }
+    if (notaAtiva) {
+      if (notaAtiva.status === 'autorizada') {
+        return res.status(200).json({ id: notaAtiva.id, status: notaAtiva.status, link_danfe: notaAtiva.link_danfe, mensagem_sefaz: notaAtiva.mensagem_sefaz });
+      }
 
-  const cnpjEmitente = process.env.FOCUS_NFE_CNPJ;
-  if (!process.env.FOCUS_NFE_TOKEN || !cnpjEmitente) {
-    return res.status(500).json({ erro: 'Integração fiscal não configurada (defina FOCUS_NFE_TOKEN e FOCUS_NFE_CNPJ no .env)' });
-  }
+      // status === 'processando': pode ser uma requisição concorrente ainda
+      // rodando, uma tentativa anterior que perdeu a resposta (conexão caiu
+      // depois da Focus NFe processar, mas antes da gente ler o resultado),
+      // ou uma tentativa que nunca CHEGOU a ser recebida pela Focus NFe
+      // (conexão caiu ANTES do POST completar — rede caiu, DNS falhou,
+      // conexão recusada). consultarNfce resolve os três casos direto na
+      // fonte.
+      let consulta = null;
+      try {
+        consulta = await consultarNfce(notaAtiva.ref);
+      } catch {
+        consulta = null;
+      }
 
-  // Nunca reprocessar uma nota já autorizada ou ainda em processamento sem
-  // antes resolver o estado real com a Focus NFe — reemitir sem checar
-  // geraria um segundo documento fiscal real pro mesmo pedido.
-  const notaAtiva = db.prepare(
-    "SELECT * FROM notas_fiscais WHERE pedido_id = ? AND status IN ('processando','autorizada') ORDER BY id DESC LIMIT 1"
-  ).get(pedido.id);
+      if (consulta && consulta.status === 'autorizado') {
+        const linkDanfe = linkCompleto(consulta.caminho_danfe);
+        db.prepare(`
+          UPDATE notas_fiscais SET status = 'autorizada', numero = ?, chave_nfe = ?, link_danfe = ?, qrcode_url = ?, mensagem_sefaz = ?
+          WHERE id = ?
+        `).run(consulta.numero || null, consulta.chave_nfe || null, linkDanfe, consulta.qrcode_url || null, consulta.mensagem_sefaz || null, notaAtiva.id);
 
-  if (notaAtiva) {
-    if (notaAtiva.status === 'autorizada') {
-      return res.status(200).json({ id: notaAtiva.id, status: notaAtiva.status, link_danfe: notaAtiva.link_danfe, mensagem_sefaz: notaAtiva.mensagem_sefaz });
+        if (pedido.cliente_telefone) {
+          const { notificarNotaFiscalAutorizada } = require('../services/whatsapp');
+          notificarNotaFiscalAutorizada(pedido, linkDanfe).catch(() => {});
+        }
+
+        return res.status(200).json({ id: notaAtiva.id, status: 'autorizada', link_danfe: linkDanfe, mensagem_sefaz: consulta.mensagem_sefaz || null });
+      }
+
+      if (consulta && consulta.status === 'erro_autorizacao') {
+        db.prepare("UPDATE notas_fiscais SET status = 'rejeitada', mensagem_sefaz = ? WHERE id = ?")
+          .run(consulta.mensagem_sefaz || null, notaAtiva.id);
+        // A tentativa anterior morreu rejeitada — deixa o fluxo continuar pros
+        // passos seguintes, que vão tentar emitir uma nota nova (ref nova).
+      } else if (consulta && consulta.httpStatus === 404) {
+        // NOVO: a Focus NFe nunca recebeu essa ref — a tentativa anterior
+        // falhou antes de chegar lá (exatamente o cenário de conexão caída
+        // no meio do POST). Diferente de "ainda processando": aqui já
+        // sabemos que não existe nenhuma nota real pendente na Focus NFe pra
+        // essa ref, então é seguro liberar uma nova tentativa em vez de
+        // travar o pedido pra sempre em 202 processando.
+        db.prepare("UPDATE notas_fiscais SET status = 'rejeitada', mensagem_sefaz = ? WHERE id = ?")
+          .run('Tentativa anterior não chegou a ser recebida pela Focus NFe (falha de rede) — nova tentativa liberada.', notaAtiva.id);
+        // Deixa o fluxo continuar pros passos seguintes (nova ref, nova emissão).
+      } else {
+        // Ainda processando de verdade, ou a consulta falhou por outro
+        // motivo — não libera retry (evita duplicar caso a Focus NFe já
+        // tenha recebido e esteja só demorando pra responder).
+        return res.status(202).json({ status: 'processando', mensagem: 'Nota em processamento, tente novamente em instantes' });
+      }
     }
 
-    // status === 'processando': pode ser uma requisição concorrente ainda
-    // rodando, OU uma tentativa anterior que perdeu a resposta (conexão caiu
-    // depois da Focus NFe processar, mas antes da gente ler o resultado).
-    // consultarNfce resolve os dois casos direto na fonte.
-    let consulta = null;
+    if (pedido.status === 'cancelado') {
+      return res.status(400).json({ erro: 'Pedido cancelado, não é possível emitir nota' });
+    }
+
+    const itensPedido = db.prepare('SELECT * FROM pdv_itens WHERE pedido_id = ?').all(pedido.id);
+    if (itensPedido.length === 0) {
+      return res.status(400).json({ erro: 'Pedido sem itens' });
+    }
+
+    const cnpjEmitente = process.env.FOCUS_NFE_CNPJ;
+    if (!process.env.FOCUS_NFE_TOKEN || !cnpjEmitente) {
+      return res.status(500).json({ erro: 'Integração fiscal não configurada (defina FOCUS_NFE_TOKEN e FOCUS_NFE_CNPJ no .env)' });
+    }
+
+    const { NCM_PADRAO } = require('../services/focusNfe');
+    const itens = itensPedido.map(item => {
+      const cItem = db.prepare('SELECT ncm FROM cardapio_itens WHERE nome = ? LIMIT 1').get(item.item_nome);
+      return { ...item, ncm: cItem?.ncm || NCM_PADRAO };
+    });
+
+    const cpfLimpo = String(cpf).replace(/\D/g, '');
+    const ref = `pedido-${pedido.id}-${Date.now()}`;
+    const payload = montarPayloadNfce({ pedido, itens, cpf: cpfLimpo, cnpjEmitente });
+
+    let notaId;
     try {
-      consulta = await consultarNfce(notaAtiva.ref);
-    } catch {
-      consulta = null;
+      const insert = db.prepare(`
+        INSERT INTO notas_fiscais (pedido_id, cpf_cliente, status, ref)
+        VALUES (?, ?, 'processando', ?)
+      `).run(pedido.id, cpfLimpo, ref);
+      notaId = insert.lastInsertRowid;
+    } catch (e) {
+      // Índice único violado = outra requisição venceu a corrida entre a
+      // checagem de notaAtiva acima e agora. Trata como "já tem uma ativa" —
+      // não é um erro real, é a trava de concorrência funcionando. Qualquer
+      // OUTRO erro (banco travado, disco cheio etc.) não é uma corrida de
+      // concorrência — relança pro try/catch externo tratar como erro
+      // genérico (500), em vez de mascará-lo como "processando" e deixar o
+      // operador preso num loop sem saber que o problema é outro.
+      if (String(e.message || '').includes('UNIQUE constraint failed')) {
+        return res.status(202).json({ status: 'processando', mensagem: 'Nota em processamento, tente novamente em instantes' });
+      }
+      throw e;
     }
 
-    if (consulta && consulta.status === 'autorizado') {
-      const linkDanfe = linkCompleto(consulta.caminho_danfe);
+    let resultado;
+    try {
+      resultado = await emitirNfce(ref, payload);
+    } catch (e) {
+      // NÃO apaga a linha 'processando' — ela é o registro durável que permite
+      // reconciliar depois via consultarNfce numa próxima tentativa (incluindo
+      // o novo caso de 404 acima, se essa falha de rede aconteceu antes da
+      // Focus NFe sequer receber a requisição).
+      return res.status(502).json({ erro: 'Falha ao comunicar com a Focus NFe: ' + e.message });
+    }
+
+    const linkDanfe = linkCompleto(resultado.caminho_danfe);
+
+    if (resultado.status === 'autorizado') {
       db.prepare(`
         UPDATE notas_fiscais SET status = 'autorizada', numero = ?, chave_nfe = ?, link_danfe = ?, qrcode_url = ?, mensagem_sefaz = ?
         WHERE id = ?
-      `).run(consulta.numero || null, consulta.chave_nfe || null, linkDanfe, consulta.qrcode_url || null, consulta.mensagem_sefaz || null, notaAtiva.id);
+      `).run(resultado.numero || null, resultado.chave_nfe || null, linkDanfe, resultado.qrcode_url || null, resultado.mensagem_sefaz || null, notaId);
 
       if (pedido.cliente_telefone) {
         const { notificarNotaFiscalAutorizada } = require('../services/whatsapp');
         notificarNotaFiscalAutorizada(pedido, linkDanfe).catch(() => {});
       }
 
-      return res.status(200).json({ id: notaAtiva.id, status: 'autorizada', link_danfe: linkDanfe, mensagem_sefaz: consulta.mensagem_sefaz || null });
+      return res.status(201).json({ id: notaId, status: 'autorizada', link_danfe: linkDanfe, mensagem_sefaz: resultado.mensagem_sefaz || null });
     }
 
-    if (consulta && consulta.status === 'erro_autorizacao') {
+    // Checa 'erro_autorizacao' ANTES do fallback genérico de httpStatus >= 400
+    // — a Focus NFe pode devolver um HTTP 4xx cujo corpo já vem no formato
+    // documentado de rejeição da SEFAZ ({status: 'erro_autorizacao',
+    // mensagem_sefaz}). Checar httpStatus primeiro perderia o mensagem_sefaz
+    // real e mostraria "Erro desconhecido da Focus NFe" no lugar do motivo
+    // verdadeiro.
+    if (resultado.status === 'erro_autorizacao') {
       db.prepare("UPDATE notas_fiscais SET status = 'rejeitada', mensagem_sefaz = ? WHERE id = ?")
-        .run(consulta.mensagem_sefaz || null, notaAtiva.id);
-      // A tentativa anterior morreu rejeitada — deixa o fluxo continuar pros
-      // passos seguintes, que vão tentar emitir uma nota nova (ref nova).
-    } else {
-      // Ainda processando, ou a própria consulta falhou — não tenta emitir
-      // uma nova nota agora (evita duplicar).
-      return res.status(202).json({ status: 'processando', mensagem: 'Nota em processamento, tente novamente em instantes' });
+        .run(resultado.mensagem_sefaz || null, notaId);
+      return res.status(201).json({ id: notaId, status: 'rejeitada', mensagem_sefaz: resultado.mensagem_sefaz || null });
     }
-  }
 
-  const { NCM_PADRAO } = require('../services/focusNfe');
-  const itens = itensPedido.map(item => {
-    const cItem = db.prepare('SELECT ncm FROM cardapio_itens WHERE nome = ? LIMIT 1').get(item.item_nome);
-    return { ...item, ncm: cItem?.ncm || NCM_PADRAO };
-  });
+    // Erro HTTP da própria Focus NFe que não é 'erro_autorizacao' (formato
+    // {codigo, mensagem, erros: [...]}, sem campo status reconhecido).
+    // Fallback genérico — só chega aqui quando resultado.status não é nem
+    // 'autorizado' nem 'erro_autorizacao'.
+    if (resultado.httpStatus >= 400) {
+      const mensagemErro = resultado.mensagem
+        || (resultado.erros && resultado.erros.map(e => e.mensagem).join('; '))
+        || 'Erro desconhecido da Focus NFe';
+      db.prepare("UPDATE notas_fiscais SET status = 'rejeitada', mensagem_sefaz = ? WHERE id = ?")
+        .run(mensagemErro, notaId);
+      return res.status(resultado.httpStatus || 422).json({ id: notaId, status: 'rejeitada', mensagem_sefaz: mensagemErro });
+    }
 
-  const cpfLimpo = String(cpf).replace(/\D/g, '');
-  const ref = `pedido-${pedido.id}-${Date.now()}`;
-  const payload = montarPayloadNfce({ pedido, itens, cpf: cpfLimpo, cnpjEmitente });
-
-  let notaId;
-  try {
-    const insert = db.prepare(`
-      INSERT INTO notas_fiscais (pedido_id, cpf_cliente, status, ref)
-      VALUES (?, ?, 'processando', ?)
-    `).run(pedido.id, cpfLimpo, ref);
-    notaId = insert.lastInsertRowid;
-  } catch {
-    // Índice único violado = outra requisição venceu a corrida entre a
-    // checagem de notaAtiva acima e agora. Trata como "já tem uma ativa" —
-    // não é um erro real, é a trava de concorrência funcionando.
-    return res.status(202).json({ status: 'processando', mensagem: 'Nota em processamento, tente novamente em instantes' });
-  }
-
-  let resultado;
-  try {
-    resultado = await emitirNfce(ref, payload);
+    // Qualquer outro status (ex: processando_autorizacao) não é final — deixa
+    // a linha como 'processando' mesmo (já está assim desde o INSERT acima),
+    // sem dar UPDATE.
+    return res.status(202).json({ status: 'processando', mensagem: resultado.mensagem_sefaz || 'Nota em processamento' });
   } catch (e) {
-    // NÃO apaga a linha 'processando' — ela é o registro durável que permite
-    // reconciliar depois via consultarNfce numa próxima tentativa.
-    return res.status(502).json({ erro: 'Falha ao comunicar com a Focus NFe: ' + e.message });
+    console.error('[nota-fiscal] Erro inesperado:', e.message);
+    return res.status(500).json({ erro: 'Erro interno ao processar nota fiscal' });
   }
-
-  // Erro HTTP da própria Focus NFe (400/401/403/422 — formato
-  // {codigo, mensagem, erros: [...]}, sem campo status). Expõe o motivo real
-  // em vez de gravar silenciosamente como sucesso genérico.
-  if (resultado.httpStatus >= 400) {
-    const mensagemErro = resultado.mensagem
-      || (resultado.erros && resultado.erros.map(e => e.mensagem).join('; '))
-      || 'Erro desconhecido da Focus NFe';
-    db.prepare("UPDATE notas_fiscais SET status = 'rejeitada', mensagem_sefaz = ? WHERE id = ?")
-      .run(mensagemErro, notaId);
-    return res.status(resultado.httpStatus || 422).json({ id: notaId, status: 'rejeitada', mensagem_sefaz: mensagemErro });
-  }
-
-  const linkDanfe = linkCompleto(resultado.caminho_danfe);
-
-  if (resultado.status === 'autorizado') {
-    db.prepare(`
-      UPDATE notas_fiscais SET status = 'autorizada', numero = ?, chave_nfe = ?, link_danfe = ?, qrcode_url = ?, mensagem_sefaz = ?
-      WHERE id = ?
-    `).run(resultado.numero || null, resultado.chave_nfe || null, linkDanfe, resultado.qrcode_url || null, resultado.mensagem_sefaz || null, notaId);
-
-    if (pedido.cliente_telefone) {
-      const { notificarNotaFiscalAutorizada } = require('../services/whatsapp');
-      notificarNotaFiscalAutorizada(pedido, linkDanfe).catch(() => {});
-    }
-
-    return res.status(201).json({ id: notaId, status: 'autorizada', link_danfe: linkDanfe, mensagem_sefaz: resultado.mensagem_sefaz || null });
-  }
-
-  if (resultado.status === 'erro_autorizacao') {
-    db.prepare("UPDATE notas_fiscais SET status = 'rejeitada', mensagem_sefaz = ? WHERE id = ?")
-      .run(resultado.mensagem_sefaz || null, notaId);
-    return res.status(201).json({ id: notaId, status: 'rejeitada', mensagem_sefaz: resultado.mensagem_sefaz || null });
-  }
-
-  // Qualquer outro status (ex: processando_autorizacao) não é final — deixa
-  // a linha como 'processando' mesmo (já está assim desde o INSERT acima),
-  // sem dar UPDATE.
-  return res.status(202).json({ status: 'processando', mensagem: resultado.mensagem_sefaz || 'Nota em processamento' });
 });
 
 // GET /api/pdv/pedidos/:id/nota-fiscal — última nota emitida pra esse pedido (ou null)
