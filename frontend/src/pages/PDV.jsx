@@ -490,135 +490,19 @@ const PGTO_OPTS = [
   { v: 'cartao_deb',  l: 'Débito' },
 ];
 
-function ModalNovoPedido({ onClose, onCriado }) {
-  const [cardapio, setCardapio] = useState([]);
-  const [busca, setBusca] = useState('');
-  const [catAtiva, setCatAtiva] = useState('');
-  const [carrinho, setCarrinho] = useState([]);
-  const [cliente, setCliente] = useState({ nome: '', telefone: '', endereco: '', bairro: '' });
-  const [pgto, setPgto] = useState('pix');
-  const [tipoEntrega, setTipoEntrega] = useState('entrega');
-  const [troco, setTroco] = useState('');
-  const [obs, setObs] = useState('');
-  const [frete, setFrete] = useState('');
-  const [enviando, setEnviando] = useState(false);
-  const [painelAberto, setPainelAberto] = useState(false); // resumo/cliente no mobile
-  const [cashbackSaldo, setCashbackSaldo] = useState(null);
-  const [cashbackDesc, setCashbackDesc] = useState(0);
-  const [sugestoesCliente, setSugestoesCliente] = useState([]);
-  const buscaRef = useRef(null);
-  const buscaClienteTimer = useRef(null);
-
-  useEffect(() => {
-    fetch(`${BASE}/cardapio/itens`, { headers: authH() })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => setCardapio(Array.isArray(data) ? data.filter(i => i.disponivel) : []))
-      .catch(() => {});
-    setTimeout(() => buscaRef.current?.focus(), 100);
-  }, []);
-
-  const categorias = [...new Set(cardapio.map(i => i.categoria_nome || 'Outros'))];
-
-  const itensFiltrados = cardapio.filter(i => {
-    const matchBusca = !busca || i.nome.toLowerCase().includes(busca.toLowerCase());
-    const matchCat = !catAtiva || (i.categoria_nome || 'Outros') === catAtiva;
-    return matchBusca && matchCat;
-  });
-
-  const porCategoria = itensFiltrados.reduce((acc, i) => {
-    const cat = i.categoria_nome || 'Outros';
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(i);
-    return acc;
-  }, {});
-
-  function addItem(item) {
-    setCarrinho(prev => {
-      const existe = prev.find(c => c.item.id === item.id);
-      if (existe) return prev.map(c => c.item.id === item.id ? { ...c, qtd: c.qtd + 1 } : c);
-      return [...prev, { item, qtd: 1 }];
-    });
-  }
-  function setQtd(id, qtd) {
-    if (qtd <= 0) setCarrinho(prev => prev.filter(c => c.item.id !== id));
-    else setCarrinho(prev => prev.map(c => c.item.id === id ? { ...c, qtd } : c));
-  }
-
-  const subtotal = carrinho.reduce((s, c) => s + c.item.preco * c.qtd, 0);
-  const totalFinal = Math.max(0, subtotal + Number(frete || 0) - cashbackDesc);
-
-  async function buscarCashback(tel) {
-    const t = (tel || '').replace(/\D/g, '');
-    if (t.length < 8) { setCashbackSaldo(null); setCashbackDesc(0); return; }
-    try {
-      const r = await fetch(`${BASE}/cashback/saldo/${t}`, { headers: authH() });
-      if (r.ok) { const d = await r.json(); setCashbackSaldo(d); }
-    } catch {}
-  }
-
-  // Autocomplete de cliente — busca por nome OU telefone conforme o
-  // operador digita, com debounce pra não martelar o servidor a cada tecla.
-  function buscarClientes(termo) {
-    clearTimeout(buscaClienteTimer.current);
-    const t = (termo || '').trim();
-    if (t.length < 2) { setSugestoesCliente([]); return; }
-    buscaClienteTimer.current = setTimeout(async () => {
-      try {
-        const r = await fetch(`${BASE}/clientes?busca=${encodeURIComponent(t)}`, { headers: authH() });
-        if (r.ok) setSugestoesCliente(await r.json());
-      } catch {}
-    }, 350);
-  }
-  function selecionarCliente(c) {
-    setCliente({ nome: c.nome || '', telefone: c.telefone || '', endereco: c.endereco || '', bairro: c.bairro || '' });
-    setSugestoesCliente([]);
-    buscarCashback(c.telefone);
-  }
-
-  function aplicarCashback() {
-    if (!cashbackSaldo || cashbackSaldo.saldo < (cashbackSaldo.config?.minimo_resgate || 10)) return;
-    const max = Math.min(cashbackSaldo.saldo, subtotal + Number(frete || 0));
-    setCashbackDesc(Math.round(max * 100) / 100);
-  }
-  const qtdItem = id => carrinho.find(c => c.item.id === id)?.qtd || 0;
-  const totalItens = carrinho.reduce((s, c) => s + c.qtd, 0);
-
-  async function enviar() {
-    if (!cliente.nome.trim()) { toast.error('Informe o nome do cliente'); setPainelAberto(true); return; }
-    if (carrinho.length === 0) { toast.error('Adicione pelo menos um item'); return; }
-    setEnviando(true);
-    try {
-      const r = await fetch(`${BASE}/pdv/pedido`, {
-        method: 'POST', headers: authH(),
-        body: JSON.stringify({
-          cliente_nome: cliente.nome,
-          cliente_telefone: cliente.telefone,
-          cliente_endereco: tipoEntrega === 'retirada' ? 'Retirada no balcão' : cliente.endereco,
-          bairro: cliente.bairro,
-          observacao: obs,
-          forma_pagamento: pgto,
-          tipo_entrega: tipoEntrega,
-          frete: Number(frete || 0),
-          troco_para: Number(troco || 0),
-          desconto: cashbackDesc > 0 ? cashbackDesc : 0,
-          itens: carrinho.map(c => ({ item_id: c.item.id, quantidade: c.qtd })),
-        }),
-      });
-      const data = await r.json();
-      if (!r.ok) { toast.error(data.erro || 'Erro ao criar pedido'); setEnviando(false); return; }
-      // Debita cashback se aplicado
-      if (cashbackDesc > 0 && cliente.telefone) {
-        await fetch(`${BASE}/cashback/usar`, { method: 'POST', headers: authH(), body: JSON.stringify({ telefone: cliente.telefone, valor: cashbackDesc, pedido_id: data.id, descricao: `Desconto no pedido #${data.numero}` }), }).catch(() => {});
-      }
-      toast.success(`Pedido #${data.numero} criado!`);
-      onCriado?.();
-      onClose();
-    } catch { toast.error('Erro de conexão'); }
-    setEnviando(false);
-  }
-
-  // Painel lateral (resumo + dados cliente)
-  const PainelDireito = () => (
+// Painel lateral (resumo + dados cliente) do Novo Pedido — componente de
+// topo, não uma closure interna do ModalNovoPedido. Definir isso dentro do
+// componente pai cria uma função (logo, um "tipo" de componente React) nova
+// a cada render, e o React desmonta/remonta o painel inteiro sempre que
+// qualquer estado muda — inclusive a cada tecla digitada, derrubando o
+// foco dos campos (bug: "preciso clicar de novo a cada letra digitada").
+function PainelDireito({
+  tipoEntrega, setTipoEntrega, carrinho, setQtd, frete, setFrete, totalFinal,
+  cliente, setCliente, sugestoesCliente, setSugestoesCliente, buscarClientes, selecionarCliente, buscarCashback,
+  cashbackSaldo, cashbackDesc, setCashbackDesc, aplicarCashback,
+  pgto, setPgto, troco, setTroco, obs, setObs, enviar, enviando,
+}) {
+  return (
     <div className="flex flex-col h-full">
       {/* Tipo entrega */}
       <div className="px-4 pt-4 pb-3 shrink-0" style={{ borderBottom: '1px solid var(--hairline)' }}>
@@ -781,6 +665,134 @@ function ModalNovoPedido({ onClose, onCriado }) {
       </div>
     </div>
   );
+}
+
+function ModalNovoPedido({ onClose, onCriado }) {
+  const [cardapio, setCardapio] = useState([]);
+  const [busca, setBusca] = useState('');
+  const [catAtiva, setCatAtiva] = useState('');
+  const [carrinho, setCarrinho] = useState([]);
+  const [cliente, setCliente] = useState({ nome: '', telefone: '', endereco: '', bairro: '' });
+  const [pgto, setPgto] = useState('pix');
+  const [tipoEntrega, setTipoEntrega] = useState('entrega');
+  const [troco, setTroco] = useState('');
+  const [obs, setObs] = useState('');
+  const [frete, setFrete] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [painelAberto, setPainelAberto] = useState(false); // resumo/cliente no mobile
+  const [cashbackSaldo, setCashbackSaldo] = useState(null);
+  const [cashbackDesc, setCashbackDesc] = useState(0);
+  const [sugestoesCliente, setSugestoesCliente] = useState([]);
+  const buscaRef = useRef(null);
+  const buscaClienteTimer = useRef(null);
+
+  useEffect(() => {
+    fetch(`${BASE}/cardapio/itens`, { headers: authH() })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setCardapio(Array.isArray(data) ? data.filter(i => i.disponivel) : []))
+      .catch(() => {});
+    setTimeout(() => buscaRef.current?.focus(), 100);
+  }, []);
+
+  const categorias = [...new Set(cardapio.map(i => i.categoria_nome || 'Outros'))];
+
+  const itensFiltrados = cardapio.filter(i => {
+    const matchBusca = !busca || i.nome.toLowerCase().includes(busca.toLowerCase());
+    const matchCat = !catAtiva || (i.categoria_nome || 'Outros') === catAtiva;
+    return matchBusca && matchCat;
+  });
+
+  const porCategoria = itensFiltrados.reduce((acc, i) => {
+    const cat = i.categoria_nome || 'Outros';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(i);
+    return acc;
+  }, {});
+
+  function addItem(item) {
+    setCarrinho(prev => {
+      const existe = prev.find(c => c.item.id === item.id);
+      if (existe) return prev.map(c => c.item.id === item.id ? { ...c, qtd: c.qtd + 1 } : c);
+      return [...prev, { item, qtd: 1 }];
+    });
+  }
+  function setQtd(id, qtd) {
+    if (qtd <= 0) setCarrinho(prev => prev.filter(c => c.item.id !== id));
+    else setCarrinho(prev => prev.map(c => c.item.id === id ? { ...c, qtd } : c));
+  }
+
+  const subtotal = carrinho.reduce((s, c) => s + c.item.preco * c.qtd, 0);
+  const totalFinal = Math.max(0, subtotal + Number(frete || 0) - cashbackDesc);
+
+  async function buscarCashback(tel) {
+    const t = (tel || '').replace(/\D/g, '');
+    if (t.length < 8) { setCashbackSaldo(null); setCashbackDesc(0); return; }
+    try {
+      const r = await fetch(`${BASE}/cashback/saldo/${t}`, { headers: authH() });
+      if (r.ok) { const d = await r.json(); setCashbackSaldo(d); }
+    } catch {}
+  }
+
+  // Autocomplete de cliente — busca por nome OU telefone conforme o
+  // operador digita, com debounce pra não martelar o servidor a cada tecla.
+  function buscarClientes(termo) {
+    clearTimeout(buscaClienteTimer.current);
+    const t = (termo || '').trim();
+    if (t.length < 2) { setSugestoesCliente([]); return; }
+    buscaClienteTimer.current = setTimeout(async () => {
+      try {
+        const r = await fetch(`${BASE}/clientes?busca=${encodeURIComponent(t)}`, { headers: authH() });
+        if (r.ok) setSugestoesCliente(await r.json());
+      } catch {}
+    }, 350);
+  }
+  function selecionarCliente(c) {
+    setCliente({ nome: c.nome || '', telefone: c.telefone || '', endereco: c.endereco || '', bairro: c.bairro || '' });
+    setSugestoesCliente([]);
+    buscarCashback(c.telefone);
+  }
+
+  function aplicarCashback() {
+    if (!cashbackSaldo || cashbackSaldo.saldo < (cashbackSaldo.config?.minimo_resgate || 10)) return;
+    const max = Math.min(cashbackSaldo.saldo, subtotal + Number(frete || 0));
+    setCashbackDesc(Math.round(max * 100) / 100);
+  }
+  const qtdItem = id => carrinho.find(c => c.item.id === id)?.qtd || 0;
+  const totalItens = carrinho.reduce((s, c) => s + c.qtd, 0);
+
+  async function enviar() {
+    if (!cliente.nome.trim()) { toast.error('Informe o nome do cliente'); setPainelAberto(true); return; }
+    if (carrinho.length === 0) { toast.error('Adicione pelo menos um item'); return; }
+    setEnviando(true);
+    try {
+      const r = await fetch(`${BASE}/pdv/pedido`, {
+        method: 'POST', headers: authH(),
+        body: JSON.stringify({
+          cliente_nome: cliente.nome,
+          cliente_telefone: cliente.telefone,
+          cliente_endereco: tipoEntrega === 'retirada' ? 'Retirada no balcão' : cliente.endereco,
+          bairro: cliente.bairro,
+          observacao: obs,
+          forma_pagamento: pgto,
+          tipo_entrega: tipoEntrega,
+          frete: Number(frete || 0),
+          troco_para: Number(troco || 0),
+          desconto: cashbackDesc > 0 ? cashbackDesc : 0,
+          itens: carrinho.map(c => ({ item_id: c.item.id, quantidade: c.qtd })),
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) { toast.error(data.erro || 'Erro ao criar pedido'); setEnviando(false); return; }
+      // Debita cashback se aplicado
+      if (cashbackDesc > 0 && cliente.telefone) {
+        await fetch(`${BASE}/cashback/usar`, { method: 'POST', headers: authH(), body: JSON.stringify({ telefone: cliente.telefone, valor: cashbackDesc, pedido_id: data.id, descricao: `Desconto no pedido #${data.numero}` }), }).catch(() => {});
+      }
+      toast.success(`Pedido #${data.numero} criado!`);
+      onCriado?.();
+      onClose();
+    } catch { toast.error('Erro de conexão'); }
+    setEnviando(false);
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
@@ -893,7 +905,16 @@ function ModalNovoPedido({ onClose, onCriado }) {
 
         {/* ── Coluna direita: resumo + cliente (sempre visível no desktop) ── */}
         <div className="hidden sm:flex flex-col shrink-0" style={{ width: 280 }}>
-          <PainelDireito />
+          <PainelDireito
+            tipoEntrega={tipoEntrega} setTipoEntrega={setTipoEntrega}
+            carrinho={carrinho} setQtd={setQtd}
+            frete={frete} setFrete={setFrete}
+            totalFinal={totalFinal}
+            cliente={cliente} setCliente={setCliente}
+            sugestoesCliente={sugestoesCliente} setSugestoesCliente={setSugestoesCliente} buscarClientes={buscarClientes} selecionarCliente={selecionarCliente} buscarCashback={buscarCashback}
+            cashbackSaldo={cashbackSaldo} cashbackDesc={cashbackDesc} setCashbackDesc={setCashbackDesc} aplicarCashback={aplicarCashback}
+            pgto={pgto} setPgto={setPgto} troco={troco} setTroco={setTroco} obs={obs} setObs={setObs}
+            enviar={enviar} enviando={enviando} />
         </div>
 
         {/* ── Painel mobile: slide-up quando aberto ── */}
@@ -907,7 +928,16 @@ function ModalNovoPedido({ onClose, onCriado }) {
                 <button onClick={() => setPainelAberto(false)} className="w-7 h-7 flex items-center justify-center rounded-xl t-dim" style={{ background: 'var(--space-elev-2)' }}><X size={15} /></button>
               </div>
               <div className="flex-1 overflow-y-auto flex flex-col">
-                <PainelDireito />
+                <PainelDireito
+                  tipoEntrega={tipoEntrega} setTipoEntrega={setTipoEntrega}
+                  carrinho={carrinho} setQtd={setQtd}
+                  frete={frete} setFrete={setFrete}
+                  totalFinal={totalFinal}
+                  cliente={cliente} setCliente={setCliente}
+                  sugestoesCliente={sugestoesCliente} setSugestoesCliente={setSugestoesCliente} buscarClientes={buscarClientes} selecionarCliente={selecionarCliente} buscarCashback={buscarCashback}
+                  cashbackSaldo={cashbackSaldo} cashbackDesc={cashbackDesc} setCashbackDesc={setCashbackDesc} aplicarCashback={aplicarCashback}
+                  pgto={pgto} setPgto={setPgto} troco={troco} setTroco={setTroco} obs={obs} setObs={setObs}
+                  enviar={enviar} enviando={enviando} />
               </div>
             </div>
           </div>
