@@ -1828,6 +1828,14 @@ export default function PDV() {
       });
       const data = await r.json();
       if (!r.ok) { toast.error(data.erro || 'Erro ao emitir nota'); return; }
+      if (data.status === 'processando') {
+        // Nem sucesso nem erro definitivo — a rota resolve sozinha na
+        // próxima tentativa (índice único + consultarNfce). Não fecha o
+        // formulário de CPF: deixa o operador tentar de novo em instantes.
+        toast(data.mensagem || 'Nota em processamento, tente novamente em instantes');
+        carregar(true);
+        return;
+      }
       if (data.status === 'autorizada') toast.success(`Nota fiscal do pedido #${pedido.numero} autorizada ✓`);
       else toast.error(`Nota rejeitada: ${data.mensagem_sefaz || 'erro na SEFAZ'}`);
       setNotaEmCpf(null);
@@ -2174,6 +2182,14 @@ export default function PDV() {
                   className="px-2 py-1.5 rounded-lg text-[11px] font-bold" style={{ color: 'var(--txt-dim)' }}>
                   ✕
                 </button>
+              </div>
+            ) : pedido.nota_fiscal?.status === 'processando' ? (
+              // Estado intermediário (SEFAZ lenta/contingência ou requisição
+              // concorrente ainda rodando) — não clicável, a rota resolve
+              // sozinha na próxima tentativa.
+              <div className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-black"
+                style={{ background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', color: '#a16207' }}>
+                ⏳ Nota em processamento...
               </div>
             ) : (
               <button onClick={() => { setNotaEmCpf(pedido); setCpfDigitado(''); }}
