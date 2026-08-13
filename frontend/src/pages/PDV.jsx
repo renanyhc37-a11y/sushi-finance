@@ -3,6 +3,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import GameHub from '../components/GameHub';
 import { getToken } from '../hooks/useAuth';
 import { getUnidadeId } from '../hooks/useUnidade';
+import { cpfValido, formatarCpf } from '../lib/cpf';
 import {
   Bell, ChefHat, CheckCircle2, Bike, X, Check, Smartphone, Banknote,
   CreditCard, MapPin, Star, Gift, AlertTriangle, ChevronDown, MessageCircle,
@@ -1561,6 +1562,9 @@ export default function PDV() {
   const [loading, setLoading] = useState(true);
   const [pedidoAberto, setPedidoAberto] = useState(null);
   const [pedidoModal, setPedidoModal] = useState(null);
+  const [notaEmCpf, setNotaEmCpf] = useState(null);   // pedido cujo prompt de CPF está aberto
+  const [cpfDigitado, setCpfDigitado] = useState('');
+  const [emitindoNota, setEmitindoNota] = useState(false);
   const [historicoCliente, setHistoricoCliente] = useState([]);
   const [metricasHoje, setMetricasHoje] = useState(null);
   const [pedidosNovosAlerta, setPedidosNovosAlerta] = useState([]);
@@ -1814,6 +1818,26 @@ export default function PDV() {
       toast.success(`PIX do pedido #${pedido.numero} confirmado ✓`);
       carregar(true);
     } catch { toast.error('Erro ao confirmar'); }
+  }
+
+  async function emitirNotaFiscal(pedido, cpf) {
+    setEmitindoNota(true);
+    try {
+      const r = await fetch(`${BASE}/pdv/pedidos/${pedido.id}/nota-fiscal`, {
+        method: 'POST', headers: authH(), body: JSON.stringify({ cpf: cpf.replace(/\D/g, '') }),
+      });
+      const data = await r.json();
+      if (!r.ok) { toast.error(data.erro || 'Erro ao emitir nota'); return; }
+      if (data.status === 'autorizada') toast.success(`Nota fiscal do pedido #${pedido.numero} autorizada ✓`);
+      else toast.error(`Nota rejeitada: ${data.mensagem_sefaz || 'erro na SEFAZ'}`);
+      setNotaEmCpf(null);
+      setCpfDigitado('');
+      carregar(true);
+    } catch {
+      toast.error('Erro ao emitir nota');
+    } finally {
+      setEmitindoNota(false);
+    }
   }
 
   async function cancelar(pedido) {
@@ -2122,6 +2146,42 @@ export default function PDV() {
                 {brl(pedido.troco_para - pedido.total)}
               </span>
             </div>
+          </div>
+        )}
+
+        {/* ── Nota fiscal ── */}
+        {!['cancelado'].includes(pedido.status) && (
+          <div className="px-3 pb-2.5 -mt-1">
+            {pedido.nota_fiscal?.status === 'autorizada' ? (
+              <a href={pedido.nota_fiscal.link_danfe} target="_blank" rel="noreferrer"
+                className="flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-black"
+                style={{ background: 'rgba(22,163,74,0.12)', border: '1px solid rgba(22,163,74,0.3)', color: '#15803d' }}>
+                🧾 Ver nota fiscal
+              </a>
+            ) : notaEmCpf?.id === pedido.id ? (
+              <div className="flex items-center gap-1.5">
+                <input autoFocus type="text" placeholder="CPF do cliente" value={cpfDigitado}
+                  onChange={e => setCpfDigitado(formatarCpf(e.target.value.replace(/\D/g, '').slice(0, 11)))}
+                  className="flex-1 text-xs rounded-lg px-2 py-1.5 outline-none"
+                  style={{ background: 'var(--space-elev)', color: 'var(--txt)', border: '1px solid var(--hairline)' }} />
+                <button disabled={!cpfValido(cpfDigitado) || emitindoNota}
+                  onClick={() => emitirNotaFiscal(pedido, cpfDigitado)}
+                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-black text-white disabled:opacity-40"
+                  style={{ background: '#16a34a' }}>
+                  {emitindoNota ? '...' : 'Emitir'}
+                </button>
+                <button onClick={() => { setNotaEmCpf(null); setCpfDigitado(''); }}
+                  className="px-2 py-1.5 rounded-lg text-[11px] font-bold" style={{ color: 'var(--txt-dim)' }}>
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => { setNotaEmCpf(pedido); setCpfDigitado(''); }}
+                className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-black"
+                style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', color: '#2563eb' }}>
+                🧾 {pedido.nota_fiscal?.status === 'rejeitada' ? 'Nota rejeitada — tentar de novo' : 'Emitir nota'}
+              </button>
+            )}
           </div>
         )}
 
