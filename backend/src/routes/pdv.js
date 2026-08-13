@@ -1,5 +1,7 @@
 const { Router } = require('express');
 const db = require('../db/database');
+const { cpfValido } = require('../utils/cpf');
+const { emitirNfce, linkCompleto, montarPayloadNfce } = require('../services/focusNfe');
 
 const router = Router();
 
@@ -59,7 +61,10 @@ function pedidoComItens(pedido) {
       cliente_total_pedidos = r?.c || 0;
     } catch {}
   }
-  return { ...pedido, itens, cliente_total_pedidos };
+  const nota_fiscal = db.prepare(
+    'SELECT status, link_danfe, mensagem_sefaz FROM notas_fiscais WHERE pedido_id = ? ORDER BY id DESC LIMIT 1'
+  ).get(pedido.id) || null;
+  return { ...pedido, itens, cliente_total_pedidos, nota_fiscal };
 }
 
 // GET /api/pdv/pedidos?status=novo&data=2026-06-06&unidade_id=1
@@ -91,6 +96,61 @@ router.get('/pedidos/:id', (req, res) => {
   const pedido = db.prepare('SELECT * FROM pdv_pedidos WHERE id = ?').get(req.params.id);
   if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado' });
   res.json(pedidoComItens(pedido));
+});
+
+// POST /api/pdv/pedidos/:id/nota-fiscal — emite a NFC-e do pedido (síncrono)
+router.post('/pedidos/:id/nota-fiscal', async (req, res) => {
+  const { cpf } = req.body || {};
+  if (!cpfValido(cpf)) return res.status(400).json({ erro: 'CPF inválido' });
+
+  const pedido = db.prepare('SELECT * FROM pdv_pedidos WHERE id = ?').get(req.params.id);
+  if (!pedido) return res.status(404).json({ erro: 'Pedido não encontrado' });
+
+  const cnpjEmitente = process.env.FOCUS_NFE_CNPJ;
+  if (!process.env.FOCUS_NFE_TOKEN || !cnpjEmitente) {
+    return res.status(500).json({ erro: 'Integração fiscal não configurada (defina FOCUS_NFE_TOKEN e FOCUS_NFE_CNPJ no .env)' });
+  }
+
+  const itensPedido = db.prepare('SELECT * FROM pdv_itens WHERE pedido_id = ?').all(pedido.id);
+  const { NCM_PADRAO } = require('../services/focusNfe');
+  const itens = itensPedido.map(item => {
+    const cItem = db.prepare('SELECT ncm FROM cardapio_itens WHERE nome = ? LIMIT 1').get(item.item_nome);
+    return { ...item, ncm: cItem?.ncm || NCM_PADRAO };
+  });
+
+  const cpfLimpo = String(cpf).replace(/\D/g, '');
+  const ref = `pedido-${pedido.id}-${Date.now()}`;
+  const payload = montarPayloadNfce({ pedido, itens, cpf: cpfLimpo, cnpjEmitente });
+
+  let resultado;
+  try {
+    resultado = await emitirNfce(ref, payload);
+  } catch (e) {
+    return res.status(502).json({ erro: 'Falha ao comunicar com a Focus NFe: ' + e.message });
+  }
+
+  const status = resultado.status === 'autorizado' ? 'autorizada'
+    : resultado.status === 'erro_autorizacao' ? 'rejeitada'
+    : (resultado.status || 'erro_comunicacao');
+  const linkDanfe = linkCompleto(resultado.caminho_danfe);
+
+  const row = db.prepare(`
+    INSERT INTO notas_fiscais (pedido_id, cpf_cliente, status, ref, numero, chave_nfe, link_danfe, qrcode_url, mensagem_sefaz)
+    VALUES (?,?,?,?,?,?,?,?,?)
+  `).run(pedido.id, cpfLimpo, status, ref, resultado.numero || null, resultado.chave_nfe || null, linkDanfe, resultado.qrcode_url || null, resultado.mensagem_sefaz || null);
+
+  if (status === 'autorizada' && pedido.cliente_telefone) {
+    const { notificarNotaFiscalAutorizada } = require('../services/whatsapp');
+    notificarNotaFiscalAutorizada(pedido, linkDanfe).catch(() => {});
+  }
+
+  res.status(201).json({ id: row.lastInsertRowid, status, link_danfe: linkDanfe, mensagem_sefaz: resultado.mensagem_sefaz || null });
+});
+
+// GET /api/pdv/pedidos/:id/nota-fiscal — última nota emitida pra esse pedido (ou null)
+router.get('/pedidos/:id/nota-fiscal', (req, res) => {
+  const nota = db.prepare('SELECT * FROM notas_fiscais WHERE pedido_id = ? ORDER BY id DESC LIMIT 1').get(req.params.id);
+  res.json(nota || null);
 });
 
 // ── Auto-deducao de estoque ───────────────────────────────────

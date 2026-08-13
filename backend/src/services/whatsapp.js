@@ -795,6 +795,15 @@ async function notificarPixConfirmado(pedido) {
   }
 }
 
+async function notificarNotaFiscalAutorizada(pedido, linkDanfe) {
+  if (!pedido.cliente_telefone) return;
+  try {
+    await enviar(pedido.cliente_telefone, `🧾 Sua nota fiscal do pedido #${pedido.numero} foi emitida!\n\n${linkDanfe}`);
+  } catch (err) {
+    console.error('[WhatsApp] Erro em notificarNotaFiscalAutorizada:', err.message);
+  }
+}
+
 module.exports = {
   iniciar: () => {
     console.log('[WhatsApp] Serviço externo na porta 8080 — inicie via watchdog.bat');
@@ -821,6 +830,7 @@ module.exports = {
   notificarCashback,
   notificarPix,
   notificarPixConfirmado,
+  notificarNotaFiscalAutorizada,
   getStatus: () => ({ status: _status, qr: _qr }),
   getStatusLive,
   getNumero: () => _numero,

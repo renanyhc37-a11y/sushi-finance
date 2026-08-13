@@ -101,6 +101,25 @@ const chatTables = `
 `;
 try { raw.exec(chatTables); } catch(e) { console.error('chatTables migration:', e.message); }
 
+// ── Nota fiscal (NFC-e) ────────────────────────────────────────
+const notaFiscalTables = `
+  CREATE TABLE IF NOT EXISTS notas_fiscais (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pedido_id INTEGER NOT NULL REFERENCES pdv_pedidos(id),
+    cpf_cliente TEXT NOT NULL,
+    status TEXT NOT NULL,
+    ref TEXT NOT NULL UNIQUE,
+    numero TEXT,
+    chave_nfe TEXT,
+    link_danfe TEXT,
+    qrcode_url TEXT,
+    mensagem_sefaz TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_notas_fiscais_pedido ON notas_fiscais(pedido_id);
+`;
+try { raw.exec(notaFiscalTables); } catch(e) { console.error('notaFiscalTables migration:', e.message); }
+
 // ── Novas tabelas WhatsApp ────────────────────────────────────
 const waTables2 = `
   CREATE TABLE IF NOT EXISTS wa_respostas_rapidas (
@@ -161,6 +180,7 @@ const migrations = [
   `ALTER TABLE catalogo_compras ADD COLUMN ultimo_preco_em TEXT`,
   `ALTER TABLE cardapio_itens ADD COLUMN is_sugestao INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE faturamento_diario ADD COLUMN quantidade_pedidos INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE cardapio_itens ADD COLUMN ncm TEXT`,
 ];
 for (const sql of migrations) {
   try { raw.exec(sql); } catch (_) { /* coluna já existe */ }
