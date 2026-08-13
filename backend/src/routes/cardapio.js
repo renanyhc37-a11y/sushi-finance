@@ -421,37 +421,46 @@ router.post('/itens/reordenar', requireAuth, (req, res) => {
 // POST /api/cardapio/itens/:id/foto — upload de imagem
 router.post('/itens/:id/foto', requireAuth, (req, res) => {
   if (!upload) return res.status(503).json({ erro: 'Upload não disponível. Instale multer: npm install multer' });
+  // O callback é async: sem try/catch aqui, um erro depois do await (uma
+  // falha no banco, por exemplo) vira promise rejeitada — o multer não
+  // aguarda o retorno do callback — e a requisição fica pendurada até o
+  // cliente desistir, sem resposta nenhuma.
   upload.single('foto')(req, res, async (err) => {
-    if (err) return res.status(400).json({ erro: err.message });
-    if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
+    try {
+      if (err) return res.status(400).json({ erro: err.message });
+      if (!req.file) return res.status(400).json({ erro: 'Nenhum arquivo enviado' });
 
-    const item = db.prepare('SELECT * FROM cardapio_itens WHERE id = ?').get(req.params.id);
-    if (!item) return res.status(404).json({ erro: 'Item não encontrado' });
+      const item = db.prepare('SELECT * FROM cardapio_itens WHERE id = ?').get(req.params.id);
+      if (!item) return res.status(404).json({ erro: 'Item não encontrado' });
 
-    // Remove foto antiga
-    if (item.foto) {
-      const old = path.join(__dirname, '..', '..', '..', 'frontend', 'public', item.foto.replace(/^\//, ''));
-      try { fs.unlinkSync(old); } catch {}
+      // Remove foto antiga
+      if (item.foto) {
+        const old = path.join(__dirname, '..', '..', '..', 'frontend', 'public', item.foto.replace(/^\//, ''));
+        try { fs.unlinkSync(old); } catch {}
+      }
+
+      // ORDEM IMPORTA: preservarAlta precisa rodar antes de otimizar(), que apaga
+      // o arquivo de origem.
+      const alta = await preservarAlta(UPLOAD_DIR, req.file.filename, ORIGINAIS_DIR);
+
+      // Comprime antes de publicar (1,6 MB → ~80 KB). Se o sharp não estiver
+      // instalado, devolve o arquivo original e o upload segue normalmente.
+      const { arquivo, antes, depois } = await otimizar(UPLOAD_DIR, req.file.filename);
+      if (depois < antes) {
+        console.log(`[imagem] ${req.file.filename} ${Math.round(antes / 1024)}KB → ${arquivo} ${Math.round(depois / 1024)}KB`);
+      }
+
+      const fotoUrl = `/cardapio/${arquivo}`;
+      db.prepare('UPDATE cardapio_itens SET foto = ? WHERE id = ?').run(fotoUrl, req.params.id);
+      res.json({
+        foto: fotoUrl,
+        alta: alta ? { arquivo: alta.arquivo, largura: alta.largura, altura: alta.altura } : null,
+        item: db.prepare('SELECT * FROM cardapio_itens WHERE id = ?').get(req.params.id),
+      });
+    } catch (e) {
+      console.error('[cardapio] Erro inesperado no upload de foto:', e.message);
+      res.status(500).json({ erro: 'Erro interno ao processar a foto' });
     }
-
-    // ORDEM IMPORTA: preservarAlta precisa rodar antes de otimizar(), que apaga
-    // o arquivo de origem.
-    const alta = await preservarAlta(UPLOAD_DIR, req.file.filename, ORIGINAIS_DIR);
-
-    // Comprime antes de publicar (1,6 MB → ~80 KB). Se o sharp não estiver
-    // instalado, devolve o arquivo original e o upload segue normalmente.
-    const { arquivo, antes, depois } = await otimizar(UPLOAD_DIR, req.file.filename);
-    if (depois < antes) {
-      console.log(`[imagem] ${req.file.filename} ${Math.round(antes / 1024)}KB → ${arquivo} ${Math.round(depois / 1024)}KB`);
-    }
-
-    const fotoUrl = `/cardapio/${arquivo}`;
-    db.prepare('UPDATE cardapio_itens SET foto = ? WHERE id = ?').run(fotoUrl, req.params.id);
-    res.json({
-      foto: fotoUrl,
-      alta: alta ? { arquivo: alta.arquivo, largura: alta.largura, altura: alta.altura } : null,
-      item: db.prepare('SELECT * FROM cardapio_itens WHERE id = ?').get(req.params.id),
-    });
   });
 });
 
