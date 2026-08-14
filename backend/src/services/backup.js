@@ -14,6 +14,28 @@ const BACKUP_DIR = path.join(path.dirname(DB_PATH), 'backups');
 const MANTER = 14;                       // quantos backups guardar
 const INTERVALO_MS = 24 * 60 * 60 * 1000; // 1 dia
 
+// Fotos em alta são insubstituíveis (o original só existe aqui) e não cabem
+// no .db. Espelha incrementalmente: copia só o que ainda não foi copiado.
+function espelharFotos() {
+  let copiadas = 0;
+  try {
+    const { ALTA_DIR } = require('./bancoFotos');
+    if (!fs.existsSync(ALTA_DIR)) return { copiadas };
+    const destino = path.join(BACKUP_DIR, 'fotos');
+    if (!fs.existsSync(destino)) fs.mkdirSync(destino, { recursive: true });
+
+    for (const nome of fs.readdirSync(ALTA_DIR)) {
+      const alvo = path.join(destino, nome);
+      if (fs.existsSync(alvo)) continue;
+      try { fs.copyFileSync(path.join(ALTA_DIR, nome), alvo); copiadas++; } catch {}
+    }
+    if (copiadas > 0) console.log(`[backup] ${copiadas} foto(s) nova(s) copiada(s)`);
+  } catch (err) {
+    console.error('[backup] Falha ao espelhar fotos:', err.message);
+  }
+  return { copiadas };
+}
+
 function fazerBackup() {
   try {
     if (!fs.existsSync(DB_PATH)) return;
@@ -27,6 +49,8 @@ function fazerBackup() {
     const destino = path.join(BACKUP_DIR, `sushi-${carimbo}.db`);
     fs.copyFileSync(DB_PATH, destino);
     console.log(`[backup] Banco salvo em ${destino}`);
+
+    espelharFotos();
 
     // Remove backups antigos, mantendo os mais recentes
     const arquivos = fs.readdirSync(BACKUP_DIR)
@@ -48,4 +72,4 @@ function iniciarBackupAutomatico() {
   console.log('[backup] Backup automático ativado (diário, mantém últimos', MANTER, 'dias)');
 }
 
-module.exports = { iniciarBackupAutomatico, fazerBackup };
+module.exports = { iniciarBackupAutomatico, fazerBackup, espelharFotos };
