@@ -142,7 +142,7 @@ app.get('/api/whatsapp/sse', (req, res) => {
 // header Authorization. basename() barra path traversal.
 //
 // Procura em DOIS lugares: primeiro a versão em alta, e como reserva a do
-// cardápio. As 51 fotos antigas só existem no diretório do cardápio (o
+// cardápio. As fotos antigas só existem no diretório do cardápio (o
 // original delas foi destruído pelo otimizador antigo) — sem essa reserva
 // elas apareceriam quebradas no banco de fotos.
 app.get('/api/fotos/arquivo/:filename', (req, res) => {

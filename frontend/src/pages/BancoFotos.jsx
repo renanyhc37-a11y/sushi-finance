@@ -39,7 +39,7 @@ export default function BancoFotos() {
       const d = await r.json();
       if (!r.ok) { toast.error(d.erro || 'Erro no upload'); return; }
       const baixas = (d.fotos || []).filter(f => f.largura < MIN_LARGURA_HERO).length;
-      toast.success(`${d.salvas} foto(s) enviada(s)`);
+      if (d.salvas > 0) toast.success(`${d.salvas} foto(s) enviada(s)`);
       if (d.falhas > 0) {
         toast.error(`${d.falhas} arquivo(s) não puderam ser processados.`);
       }
