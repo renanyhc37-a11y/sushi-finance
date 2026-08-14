@@ -140,13 +140,22 @@ app.get('/api/whatsapp/sse', (req, res) => {
 
 // Fotos do banco de imagens — pública de propósito: tag <img> não envia
 // header Authorization. basename() barra path traversal.
+//
+// Procura em DOIS lugares: primeiro a versão em alta, e como reserva a do
+// cardápio. As 51 fotos antigas só existem no diretório do cardápio (o
+// original delas foi destruído pelo otimizador antigo) — sem essa reserva
+// elas apareceriam quebradas no banco de fotos.
 app.get('/api/fotos/arquivo/:filename', (req, res) => {
   const p = require('path');
   const f = require('fs');
   const filename = p.basename(req.params.filename);
-  const filepath = p.join(__dirname, '..', 'uploads', 'fotos', filename);
-  if (!f.existsSync(filepath)) return res.status(404).send('Not found');
-  res.sendFile(filepath);
+  const candidatos = [
+    p.join(__dirname, '..', 'uploads', 'fotos', filename),
+    p.join(__dirname, '..', '..', 'frontend', 'public', 'cardapio', filename),
+  ];
+  const achado = candidatos.find(c => f.existsSync(c));
+  if (!achado) return res.status(404).send('Not found');
+  res.sendFile(achado);
 });
 
 // Todas as rotas de API abaixo exigem autenticação
