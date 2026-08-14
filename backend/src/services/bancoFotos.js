@@ -16,15 +16,33 @@ try { sharp = require('sharp'); } catch { /* sem sharp, catalogação fica indis
 const ALTA_DIR = path.join(__dirname, '..', '..', 'uploads', 'fotos');
 const WEB_DIR = path.join(__dirname, '..', '..', '..', 'frontend', 'public', 'cardapio');
 
+// A coluna largura/altura deve sempre guardar a MAIOR resolução já vista pra
+// esse arquivo, não a última gravada — o catálogo alta-resolução e o web
+// (900px) usam o mesmo nome de arquivo e podem ser catalogados em qualquer
+// ordem, então o upsert compara por área (largura × altura) e mantém a maior,
+// independente de qual passada rodou primeiro. arquivo_web é sempre gravado
+// quando informado, mesmo quando ele não vence a comparação de resolução —
+// é o caminho usado pelo cardápio e precisa sobreviver mesmo que a foto em
+// alta já esteja catalogada.
 function registrarFoto({ arquivo, arquivo_web = null, largura = 0, altura = 0, item_id = null, hero = 0, tags = null }) {
-  const r = db.prepare(`
+  // RETURNING funciona no driver node:sqlite (verificado empiricamente) e
+  // devolve sempre o id da linha realmente afetada — inclusive no ramo
+  // DO UPDATE, onde lastInsertRowid ficaria com o id de outra linha (só é
+  // atualizado em INSERT real).
+  const row = db.prepare(`
     INSERT INTO fotos_banco (arquivo, arquivo_web, largura, altura, item_id, hero, tags)
     VALUES (?,?,?,?,?,?,?)
     ON CONFLICT(arquivo) DO UPDATE SET
-      largura = excluded.largura, altura = excluded.altura,
+      largura = CASE
+        WHEN (excluded.largura * excluded.altura) > (fotos_banco.largura * fotos_banco.altura)
+        THEN excluded.largura ELSE fotos_banco.largura END,
+      altura = CASE
+        WHEN (excluded.largura * excluded.altura) > (fotos_banco.largura * fotos_banco.altura)
+        THEN excluded.altura ELSE fotos_banco.altura END,
       arquivo_web = COALESCE(excluded.arquivo_web, fotos_banco.arquivo_web)
-  `).run(arquivo, arquivo_web, largura, altura, item_id, hero ? 1 : 0, tags);
-  return { id: r.lastInsertRowid };
+    RETURNING id
+  `).get(arquivo, arquivo_web, largura, altura, item_id, hero ? 1 : 0, tags);
+  return { id: row.id };
 }
 
 function listarFotos({ item_id = null, apenasHero = false } = {}) {
