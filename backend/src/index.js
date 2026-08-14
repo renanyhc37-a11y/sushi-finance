@@ -138,6 +138,17 @@ app.get('/api/whatsapp/sse', (req, res) => {
   wa.sseStatus(req, res);
 });
 
+// Fotos do banco de imagens — pública de propósito: tag <img> não envia
+// header Authorization. basename() barra path traversal.
+app.get('/api/fotos/arquivo/:filename', (req, res) => {
+  const p = require('path');
+  const f = require('fs');
+  const filename = p.basename(req.params.filename);
+  const filepath = p.join(__dirname, '..', 'uploads', 'fotos', filename);
+  if (!f.existsSync(filepath)) return res.status(404).send('Not found');
+  res.sendFile(filepath);
+});
+
 // Todas as rotas de API abaixo exigem autenticação
 app.use('/api', requireAuth);
 
@@ -157,6 +168,7 @@ app.use('/api/insumos', insumosRouter);
 app.use('/api/fluxo-caixa', fluxoCaixaRouter);
 app.use('/api/notas', notasRouter);
 app.use('/api/pdv', pdvRouter);
+app.use('/api/fotos', require('./routes/fotos'));
 app.use('/api/whatsapp', whatsappRouter);
 app.use('/api/clientes', clientesRouter);
 app.use('/api/ia', iaRouter);
