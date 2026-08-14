@@ -128,7 +128,25 @@ const notaFiscalIndiceUnico = `
   ON notas_fiscais(pedido_id)
   WHERE status IN ('processando', 'autorizada');
 `;
-try { raw.exec(notaFiscalIndiceUnico); } catch(e) { console.error('notaFiscalIndiceUnico migration:', e.message); }
+try { raw.exec(notaFiscalIndiceUnico); } catch(e) { console.error('notaFiscalIndiceUnico migration:', e.message); }// ── Banco de fotos (Estúdio Criativo) ─────────────────────────
+// largura/altura guardam a resolução REAL do arquivo em alta. É esse dado
+// que permite nunca exibir uma foto ampliada num post.
+const fotosBancoTabela = `
+  CREATE TABLE IF NOT EXISTS fotos_banco (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    arquivo TEXT NOT NULL UNIQUE,
+    arquivo_web TEXT,
+    largura INTEGER NOT NULL DEFAULT 0,
+    altura INTEGER NOT NULL DEFAULT 0,
+    item_id INTEGER REFERENCES cardapio_itens(id) ON DELETE SET NULL,
+    hero INTEGER NOT NULL DEFAULT 0,
+    tags TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_fotos_banco_item ON fotos_banco(item_id);
+`;
+try { raw.exec(fotosBancoTabela); } catch(e) { console.error('fotosBancoTabela migration:', e.message); }
+
 
 // ── Novas tabelas WhatsApp ────────────────────────────────────
 const waTables2 = `
