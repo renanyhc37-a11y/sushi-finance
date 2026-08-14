@@ -6,7 +6,7 @@ import {
   TrendingUp, FileBarChart, ClipboardList, Beef, FileText, Fish, Upload, Boxes,
   Smartphone, ConciergeBell, Bot, StickyNote, Sun, Moon, Palette, KeyRound,
   LogOut, Menu, ChevronDown, Circle, Calculator, ChefHat, Pin, Plus, Check, ArrowDownUp, PieChart, Coins, Sparkles, X, Landmark, Truck,
-  FileSpreadsheet,
+  FileSpreadsheet, Camera,
 } from 'lucide-react';
 import { useTheme } from './hooks/useTheme';
 import { useBoletoAlert } from './hooks/useBoletoAlert';
@@ -51,6 +51,7 @@ const ImportarFaturamento = React.lazy(() => import('./pages/ImportarFaturamento
 const Movimentacoes    = React.lazy(() => import('./pages/Movimentacoes'));
 const Promocoes        = React.lazy(() => import('./pages/Promocoes'));
 const CriativoSocial   = React.lazy(() => import('./pages/CriativoSocial'));
+const BancoFotos       = React.lazy(() => import('./pages/BancoFotos'));
 const RelatorioPedidos = React.lazy(() => import('./pages/RelatorioPedidos'));
 const Chat             = React.lazy(() => import('./pages/Chat'));
 const Campanhas        = React.lazy(() => import('./pages/Campanhas'));
@@ -99,6 +100,7 @@ const NAV_GRUPOS = [
       { to: '/campanhas',       icon: Megaphone,  label: 'Campanhas' },
       { to: '/promocoes',       icon: Percent,    label: 'Promoções' },
       { to: '/criativo-social', icon: ImageIcon,  label: 'Criativo'  },
+      { to: '/banco-fotos',     icon: Camera,     label: 'Banco de Fotos' },
     ],
   },
   {
@@ -623,6 +625,7 @@ function Layout({ logout }) {
               <Route path="/editor-banner/:id" element={<EditorBanner />} />
               <Route path="/promocoes" element={<Promocoes />} />
               <Route path="/criativo-social" element={<CriativoSocial />} />
+              <Route path="/banco-fotos" element={<BancoFotos />} />
               <Route path="/importar-cardapio" element={<ImportarCardapio />} />
               <Route path="/importar-clientes" element={<ImportarClientes />} />
               <Route path="/importar-faturamento" element={<ImportarFaturamento />} />
